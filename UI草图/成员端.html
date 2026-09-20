@@ -1,0 +1,2101 @@
+<!doctype html>
+<html lang="en" data-visualize-standalone>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="referrer" content="no-referrer">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval' blob: data: https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://esm.sh https://fonts.bunny.net https://fonts.googleapis.com https://fonts.gstatic.com https://unpkg.com; style-src 'unsafe-inline' blob: data: https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://esm.sh https://fonts.bunny.net https://fonts.googleapis.com https://fonts.gstatic.com https://unpkg.com; img-src blob: data: https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://esm.sh https://fonts.bunny.net https://fonts.googleapis.com https://fonts.gstatic.com https://unpkg.com; font-src blob: data: https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://esm.sh https://fonts.bunny.net https://fonts.googleapis.com https://fonts.gstatic.com https://unpkg.com; media-src blob: data: https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://esm.sh https://fonts.bunny.net https://fonts.googleapis.com https://fonts.gstatic.com https://unpkg.com; worker-src blob:; connect-src blob: data:; frame-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'">
+<title>Season · 成员手机端UI草图</title>
+<style>:root{color-scheme:light dark;background:light-dark(rgb(255 255 255), rgb(24 24 24))}html,body{margin:0}body{box-sizing:border-box;padding:1rem;background:inherit}iframe{display:block;width:100%;height:calc(100vh - 2rem);margin:0 auto;border:0}</style>
+</head>
+<body>
+<iframe id="codex-visualization" sandbox="allow-scripts" referrerpolicy="no-referrer" title="Season · 成员手机端UI草图" data-srcdoc="&lt;!doctype html&gt;
+&lt;html lang=&quot;en&quot; data-visualize-standalone&gt;
+&lt;head&gt;
+&lt;meta charset=&quot;utf-8&quot;&gt;
+&lt;meta name=&quot;viewport&quot; content=&quot;width=device-width, initial-scale=1&quot;&gt;
+&lt;meta name=&quot;referrer&quot; content=&quot;no-referrer&quot;&gt;
+&lt;meta http-equiv=&quot;Content-Security-Policy&quot; content=&quot;default-src &#x27;none&#x27;; script-src &#x27;unsafe-inline&#x27; &#x27;unsafe-eval&#x27; &#x27;wasm-unsafe-eval&#x27; blob: data: https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://esm.sh https://fonts.bunny.net https://fonts.googleapis.com https://fonts.gstatic.com https://unpkg.com; style-src &#x27;unsafe-inline&#x27; blob: data: https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://esm.sh https://fonts.bunny.net https://fonts.googleapis.com https://fonts.gstatic.com https://unpkg.com; img-src blob: data: https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://esm.sh https://fonts.bunny.net https://fonts.googleapis.com https://fonts.gstatic.com https://unpkg.com; font-src blob: data: https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://esm.sh https://fonts.bunny.net https://fonts.googleapis.com https://fonts.gstatic.com https://unpkg.com; media-src blob: data: https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://esm.sh https://fonts.bunny.net https://fonts.googleapis.com https://fonts.gstatic.com https://unpkg.com; worker-src blob:; connect-src blob: data:; frame-src &#x27;none&#x27;; object-src &#x27;none&#x27;; base-uri &#x27;none&#x27;; form-action &#x27;none&#x27;&quot;&gt;
+&lt;title&gt;Season · 成员手机端UI草图&lt;/title&gt;
+&lt;style&gt;:root {
+  color-scheme: light dark;
+  background-color: var(
+    --background,
+    var(--color-background-primary, light-dark(rgb(255 255 255), rgb(24 24 24)))
+  ) !important;
+
+  /* Agent-facing contract; keep in sync with SKILL.md. */
+  --background: var(
+    --color-background-primary,
+    light-dark(rgb(255 255 255), rgb(24 24 24))
+  );
+  --foreground: var(
+    --color-text-primary,
+    light-dark(rgb(26 28 31), rgb(255 255 255))
+  );
+  --card: color-mix(in oklab, var(--foreground) 5%, var(--background));
+  --card-foreground: var(
+    --color-text-primary,
+    light-dark(rgb(26 28 31), rgb(255 255 255))
+  );
+  --popover: var(
+    --color-background-secondary,
+    light-dark(rgb(255 255 255), rgb(45 45 45))
+  );
+  --popover-foreground: var(
+    --color-text-primary,
+    light-dark(rgb(26 28 31), rgb(255 255 255))
+  );
+  --primary: var(
+    --color-text-info,
+    light-dark(rgb(51 156 255), rgb(131 195 255))
+  );
+  --primary-foreground: var(
+    --color-text-inverse,
+    light-dark(rgb(255 255 255), rgb(13 13 13))
+  );
+  --secondary: var(
+    --color-background-secondary,
+    light-dark(rgb(255 255 255 / 96%), rgb(54 54 54 / 96%))
+  );
+  --secondary-foreground: var(
+    --color-text-primary,
+    light-dark(rgb(26 28 31), rgb(255 255 255))
+  );
+  --muted: color-mix(in srgb, var(--foreground) 10%, transparent);
+  --muted-foreground: var(
+    --color-text-secondary,
+    light-dark(rgb(26 28 31 / 49.4%), rgb(255 255 255 / 49.8%))
+  );
+  --accent: var(
+    --color-background-info,
+    light-dark(rgb(229 242 255), rgb(13 39 63))
+  );
+  --accent-foreground: var(
+    --color-text-info,
+    light-dark(rgb(51 156 255), rgb(131 195 255))
+  );
+  --destructive: var(
+    --color-text-warning,
+    light-dark(rgb(226 85 7), rgb(255 133 73))
+  );
+  --border: var(
+    --color-border-secondary,
+    light-dark(rgb(26 28 31 / 8%), rgb(255 255 255 / 8.2%))
+  );
+  --input: var(
+    --color-border-primary,
+    light-dark(
+      rgb(26 28 31 / 11.8%),
+      color-mix(in oklab, rgb(0 0 0) 10%, transparent)
+    )
+  );
+  --ring: var(
+    --color-ring-primary,
+    light-dark(rgb(51 156 255), rgb(131 195 255 / 76%))
+  );
+  --font-size-base: var(--font-text-md-size, 14px);
+  --blue: light-dark(rgb(51 156 255), rgb(51 156 255));
+  --orange: light-dark(rgb(226 85 7), rgb(251 106 34));
+  --green: light-dark(rgb(0 162 64), rgb(64 201 119));
+  --red: light-dark(rgb(224 46 42), rgb(255 103 100));
+  --purple: light-dark(rgb(146 79 247), rgb(173 123 249));
+  --yellow: light-dark(rgb(255 195 0), rgb(255 210 64));
+  --viz-series-1: var(--primary);
+  --viz-series-2: light-dark(rgb(243 136 59), rgb(245 154 86));
+  --viz-series-3: light-dark(rgb(93 201 119), rgb(116 213 139));
+  --viz-series-4: light-dark(rgb(235 119 177), rgb(240 143 192));
+  --viz-series-5: light-dark(rgb(155 121 236), rgb(170 145 239));
+  --viz-series-6: light-dark(rgb(58 185 177), rgb(90 203 194));
+
+  /* Internal implementation variables; not part of the agent contract. */
+  --font-sans: -apple-system, system-ui, &quot;Segoe UI&quot;, sans-serif;
+  --font-mono:
+    ui-monospace, SFMono-Regular, &quot;SF Mono&quot;, Menlo, Consolas, &quot;Liberation Mono&quot;,
+    monospace;
+  --font-size-normal: max(11px, var(--font-size-base));
+  --font-size-tooltip: calc(var(--font-size-base) - 1px);
+  --font-size-small: max(11px, calc(var(--font-size-base) - 2px));
+  --font-size-h1: calc(var(--font-size-normal) * 1.7142857143);
+  --font-size-h2: calc(var(--font-size-normal) * 1.4285714286);
+  --font-size-h3: calc(var(--font-size-normal) * 1.2857142857);
+  --font-weight-normal: 430;
+  --font-weight-medium: 500;
+  --icon-size: 16px;
+  --line-height-normal: calc(var(--font-size-normal) * 1.5);
+  --line-height-tooltip: calc(var(--font-size-tooltip) * 1.4285714286);
+  --line-height-small: calc(var(--font-size-small) + 4px);
+  --corner-shape: round;
+  --radius: var(--border-radius-lg, 10px);
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-2xl: calc(var(--radius) * 1.6);
+  --radius-full: 9999px;
+  --shadow-sm: 0 1px 2px -1px rgb(0 0 0 / 8%);
+  --checkmark-image: url(&quot;data:image/svg+xml,%3Csvg xmlns=&#x27;http://www.w3.org/2000/svg&#x27; viewBox=&#x27;0 0 17 17&#x27;%3E%3Cpath d=&#x27;M12.8961 3.64101C13.1297 3.41418 13.4984 3.37523 13.7779 3.56581C14.0571 3.75635 14.1554 4.11331 14.0299 4.41347L13.9615 4.53847L7.71151 13.7045C7.59411 13.8767 7.4063 13.9877 7.19881 14.0072C6.99136 14.0267 6.78564 13.9533 6.63826 13.806L2.88826 10.056L2.79842 9.9457C2.6192 9.67407 2.64927 9.30496 2.88826 9.06581C3.12738 8.82669 3.49647 8.79676 3.76815 8.97597L3.8785 9.06581L7.03084 12.2182L12.8053 3.74941L12.8961 3.64101Z&#x27;/%3E%3C/svg%3E&quot;);
+
+  /* Legacy aliases; not part of the current agent contract. */
+  --viz-bg: transparent;
+  --viz-panel: var(--card);
+  --viz-border: var(--border);
+  --viz-text: var(--foreground);
+  --viz-muted: var(--muted-foreground);
+  --viz-accent: var(--primary);
+  --viz-accent-text: var(--primary-foreground);
+  --viz-accent-bg: var(--accent);
+  --viz-font-size: var(--font-size-base);
+  --viz-warning: var(--destructive);
+}
+
+:root[data-theme=&quot;light&quot;] {
+  color-scheme: light;
+}
+
+:root[data-theme=&quot;dark&quot;] {
+  color-scheme: dark;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html &gt; body {
+  /* Preserve MCP aliases for older inline renderers without creating :root cycles. */
+  --color-background-primary: var(
+    --background,
+    light-dark(rgb(255 255 255), rgb(24 24 24))
+  );
+  --color-text-primary: var(
+    --foreground,
+    light-dark(rgb(26 28 31), rgb(255 255 255))
+  );
+  --color-border-secondary: var(
+    --border,
+    light-dark(rgb(26 28 31 / 8%), rgb(255 255 255 / 8.2%))
+  );
+
+  margin: 0;
+  padding: var(--visualize-paint-gutter, 0px);
+  color: var(--foreground);
+  background: transparent !important;
+  font-family: var(--font-sans) !important;
+  font-size: var(--font-size-normal);
+  font-weight: var(--font-weight-normal);
+  line-height: var(--line-height-normal);
+}
+
+a {
+  color: color-mix(in srgb, var(--viz-accent) 80%, var(--viz-text) 20%);
+  cursor: pointer;
+  font-weight: var(--font-weight-medium, 500);
+  text-decoration: none;
+  text-underline-offset: 2px;
+}
+
+a:is(:hover, :focus-visible) {
+  text-decoration-line: underline;
+  text-decoration-style: dashed;
+  text-decoration-thickness: 0.5px;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6,
+p {
+  margin-block: 0;
+}
+
+h1 {
+  font-size: var(--font-size-h1);
+  font-weight: var(--font-weight-medium);
+  line-height: 1.25;
+}
+
+h2 {
+  font-size: var(--font-size-h2);
+  font-weight: var(--font-weight-medium);
+  line-height: 1.25;
+}
+
+h3,
+h4,
+h5,
+h6 {
+  font-size: var(--font-size-h3);
+  font-weight: var(--font-weight-medium);
+  line-height: 1.3;
+}
+
+b,
+strong,
+th {
+  font-weight: var(--font-weight-medium);
+}
+
+code:not(pre code) {
+  display: inline;
+  padding: 1px 6px;
+  border-radius: var(--radius-sm);
+  corner-shape: var(--corner-shape);
+  background: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 0.92em;
+  overflow-wrap: anywhere;
+  -webkit-box-decoration-break: clone;
+  box-decoration-break: clone;
+  word-break: break-word;
+}
+
+.table-responsive {
+  width: 100%;
+  overflow-x: auto;
+  scrollbar-width: thin;
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  color: var(--foreground);
+  font: inherit;
+  text-align: start;
+}
+
+.table :is(th, td) {
+  padding-block: 10px;
+  padding-inline: 0 24px;
+  overflow-wrap: anywhere;
+  border-bottom: 1px solid var(--border);
+  text-align: start;
+  vertical-align: top;
+}
+
+.table-responsive &gt; .table :is(th, td) {
+  overflow-wrap: break-word;
+}
+
+.table :is(th, td):last-child {
+  padding-inline-end: 0;
+}
+
+.table :is(caption, thead th) {
+  font-weight: 600;
+}
+
+.table thead th {
+  padding-block: 8px;
+  border-bottom-color: color-mix(in srgb, var(--foreground) 16%, transparent);
+}
+
+.table tbody tr:last-child :is(th, td) {
+  border-bottom: 0;
+}
+
+.table.table-sm :is(th, td) {
+  padding-block: 6px;
+}
+
+.table.table-sm :is(th, td):not(:last-child) {
+  padding-inline-end: 16px;
+}
+
+.table :is(.text-end, [align=&quot;right&quot;]) {
+  text-align: end;
+  font-variant-numeric: tabular-nums;
+}
+
+.table :is(.text-center, [align=&quot;center&quot;]) {
+  text-align: center;
+}
+
+.table .text-nowrap {
+  white-space: nowrap;
+}
+
+#widget {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: 100%;
+  padding: 0;
+  background: transparent !important;
+}
+
+.card {
+  min-width: 0;
+  padding: 12px;
+  overflow: hidden;
+  overflow-wrap: break-word;
+  border-radius: var(--radius-2xl);
+  corner-shape: var(--corner-shape);
+  color: var(--card-foreground);
+  background: var(--card);
+}
+
+#widget &gt; :not(.card, .progress) {
+  width: 100% !important;
+  max-width: none !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+
+.tooltip {
+  position: fixed;
+  z-index: 50;
+  top: 0;
+  left: 0;
+  width: max-content;
+  max-width: min(
+    20rem,
+    var(--tooltip-available-width, calc(100vw - 10px)),
+    calc(100vw - 10px)
+  );
+  max-height: min(
+    var(--tooltip-available-height, calc(100vh - 10px)),
+    calc(100vh - 10px)
+  );
+  padding: 4px 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  corner-shape: var(--corner-shape);
+  color: var(--popover-foreground);
+  background: var(--popover);
+  box-shadow: none;
+  font-size: var(--font-size-tooltip);
+  line-height: var(--line-height-tooltip);
+  overflow-wrap: break-word;
+  white-space: normal;
+  pointer-events: none;
+  user-select: none;
+}
+
+.viz-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(max(180px, 24%), 1fr));
+  gap: 10px;
+}
+
+.viz-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.viz-stat-value {
+  font-size: var(--font-size-h2);
+  font-weight: var(--font-weight-medium);
+  line-height: 1.25;
+}
+
+.viz-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+hr {
+  width: 100%;
+  height: 1px;
+  margin-block: 6px;
+  border: 0;
+  background: var(--border);
+}
+
+.nav {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 4px;
+}
+
+.progress {
+  display: flex;
+  height: 8px;
+  margin-block: calc((var(--line-height-normal, 1.5em) - 8px) / 2);
+  overflow: hidden;
+  border: 0;
+  border-radius: var(--radius-full);
+  background: var(--muted);
+}
+
+.progress-bar:only-child {
+  border-radius: var(--radius-full);
+}
+
+.progress-bar {
+  height: 100%;
+  flex-shrink: 0;
+  border: 0;
+  background: var(--viz-series-1);
+}
+
+.viz-badge {
+  padding: 3px 8px;
+  border-radius: var(--radius-full);
+  color: var(--accent-foreground);
+  background: var(--accent);
+  font-weight: var(--font-weight-medium);
+}
+
+small,
+.text-small,
+.viz-badge {
+  font-size: var(--font-size-small);
+  line-height: var(--line-height-small);
+}
+
+.text-muted {
+  color: var(--muted-foreground);
+}
+
+.tabular-nums {
+  font-variant-numeric: tabular-nums;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.viz-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.viz-controls &gt; .form-label {
+  display: grid;
+  min-width: min(100%, 260px);
+  flex: 1 1 280px;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: baseline;
+  gap: 2px 12px;
+  margin-bottom: 0;
+}
+
+.viz-controls &gt; .form-label &gt; :is(.form-control, .form-range, .form-select) {
+  grid-column: 1 / -1;
+}
+
+.btn,
+.nav-link,
+.form-check-input,
+.form-control,
+.form-range,
+.form-select {
+  font: inherit;
+}
+
+.btn,
+.nav-link {
+  appearance: button;
+  display: inline-flex;
+  inline-size: fit-content;
+  max-inline-size: 100%;
+  min-height: 28px;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  margin: 0;
+  padding: 0 8px;
+  -webkit-app-region: no-drag;
+  border: 1px solid var(--input);
+  border-radius: var(--radius-lg);
+  corner-shape: var(--corner-shape);
+  color: var(--secondary-foreground);
+  background: var(--secondary);
+  cursor: var(--cursor-interaction, pointer);
+  text-align: center;
+  text-decoration: none;
+  white-space: nowrap;
+  user-select: none;
+  -webkit-font-smoothing: antialiased;
+}
+
+.btn:is(.btn-block, .viz-tile) {
+  inline-size: 100%;
+}
+
+.btn.viz-tile {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+
+a.btn {
+  cursor: pointer;
+  text-decoration: none;
+}
+
+.btn:not(:disabled):hover,
+.nav-link:not(:disabled):not([aria-disabled=&quot;true&quot;]):hover {
+  background: color-mix(in srgb, var(--foreground) 6%, var(--secondary));
+}
+
+.btn-primary {
+  border-color: transparent;
+  color: var(--primary-foreground);
+  background: var(--foreground);
+  background-clip: padding-box;
+}
+
+.btn-primary .text-muted {
+  color: color-mix(in srgb, var(--primary-foreground) 50%, transparent);
+}
+
+.btn-primary:not(:disabled):hover {
+  background: color-mix(in srgb, var(--foreground) 80%, transparent);
+  background-clip: padding-box;
+}
+
+.btn-ghost {
+  border-color: transparent;
+  color: var(--muted-foreground);
+  background: transparent;
+}
+
+.btn-ghost:not(:disabled):hover {
+  color: var(--foreground);
+  background: color-mix(in srgb, var(--foreground) 6%, var(--secondary));
+}
+
+.nav-pills .nav-link {
+  min-width: 0;
+  border-color: transparent;
+  color: var(--muted-foreground);
+  background: transparent;
+}
+
+.nav-justified .nav-link {
+  flex: 1 1 0;
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+
+.nav-pills .nav-link.active {
+  color: var(--foreground);
+  background: var(--muted);
+}
+
+.btn:disabled,
+.nav-link:disabled,
+.nav-link[aria-disabled=&quot;true&quot;] {
+  cursor: not-allowed;
+  opacity: 0.4;
+}
+
+[data-lucide] {
+  stroke-width: 1.6;
+}
+
+.form-label {
+  display: block;
+  margin-bottom: 6px;
+  color: var(--foreground);
+}
+
+.form-control {
+  display: block;
+  width: 100%;
+  min-height: 28px;
+  padding: 0 8px;
+  outline: none;
+  border: 1px solid var(--input);
+  border-radius: var(--radius-lg);
+  corner-shape: var(--corner-shape);
+  color: var(--foreground);
+  background: var(--secondary);
+}
+
+.form-control::placeholder {
+  color: var(--muted-foreground);
+}
+
+.form-control[type=&quot;file&quot;] {
+  padding: 0;
+  overflow: hidden;
+  cursor: var(--cursor-interaction, pointer);
+}
+
+.form-control[type=&quot;file&quot;]::file-selector-button {
+  min-height: 26px;
+  margin-right: 8px;
+  padding: 0 8px;
+  border: 0;
+  border-right: 1px solid var(--input);
+  color: var(--secondary-foreground);
+  background: var(--secondary);
+  cursor: inherit;
+  font: inherit;
+}
+
+.form-control[type=&quot;file&quot;]:not(:disabled):hover::file-selector-button {
+  background: color-mix(in srgb, var(--foreground) 6%, var(--secondary));
+}
+
+.form-control-color[type=&quot;color&quot;] {
+  width: 40px;
+  height: 28px;
+  padding: 3px;
+  cursor: var(--cursor-interaction, pointer);
+}
+
+.form-control-color[type=&quot;color&quot;]::-webkit-color-swatch-wrapper {
+  padding: 0;
+}
+
+.form-control-color[type=&quot;color&quot;]::-webkit-color-swatch {
+  border: 0;
+  border-radius: calc(var(--radius-lg) - 4px);
+  corner-shape: var(--corner-shape);
+}
+
+textarea.form-control {
+  height: auto;
+  min-height: 72px;
+  padding: 8px 10px;
+  resize: vertical;
+}
+
+.form-control:focus-visible {
+  border-color: var(--ring);
+  box-shadow: inset 0 0 0 1px var(--ring);
+}
+
+.form-control:disabled,
+.form-select:disabled {
+  cursor: not-allowed;
+  opacity: 0.4;
+}
+
+.form-select {
+  appearance: none;
+  display: block;
+  width: 100%;
+  min-height: 28px;
+  margin: 0;
+  padding: 0 32px 0 8px;
+  outline: none;
+  border: 1px solid var(--input);
+  border-radius: var(--radius-lg);
+  corner-shape: var(--corner-shape);
+  color: var(--foreground);
+  background-color: var(--secondary);
+  background-image:
+    linear-gradient(45deg, transparent 50%, var(--muted-foreground) 50%),
+    linear-gradient(135deg, var(--muted-foreground) 50%, transparent 50%);
+  background-position:
+    calc(100% - 14px) 50%,
+    calc(100% - 10px) 50%;
+  background-repeat: no-repeat;
+  background-size: 4px 4px;
+  cursor: var(--cursor-interaction, default);
+}
+
+.form-select:not(:disabled):hover {
+  background-color: color-mix(in srgb, var(--foreground) 6%, var(--secondary));
+}
+
+.form-select:focus-visible {
+  border-color: var(--ring);
+  box-shadow: inset 0 0 0 1px var(--ring);
+}
+
+.form-check {
+  display: flex;
+  min-height: 20px;
+  align-items: center;
+  gap: 6px;
+}
+
+.form-check-input {
+  appearance: none;
+  width: 14px;
+  height: 14px;
+  flex: 0 0 auto;
+  margin: 0;
+  border: 1px solid var(--input);
+  color: var(--primary-foreground);
+  background-color: transparent;
+  cursor: var(--cursor-interaction, default);
+  transition:
+    background-color 150ms,
+    border-color 150ms,
+    box-shadow 150ms;
+}
+
+.form-check:not(.form-switch) .form-check-input[type=&quot;checkbox&quot;] {
+  border-color: var(--input);
+  border-radius: var(--radius-sm);
+  corner-shape: var(--corner-shape);
+  background-color: var(--secondary);
+  box-shadow: var(--shadow-sm);
+}
+
+.form-check:not(.form-switch)
+  .form-check-input:not(:disabled):not(:checked):hover {
+  background-color: var(--card);
+}
+
+.form-check:not(.form-switch) .form-check-input[type=&quot;checkbox&quot;]:checked {
+  border-color: var(--primary);
+  background-color: var(--primary);
+}
+
+.form-check:not(.form-switch)
+  .form-check-input[type=&quot;checkbox&quot;]:checked::before {
+  display: block;
+  width: 100%;
+  height: 100%;
+  background: var(--primary-foreground);
+  content: &quot;&quot;;
+  mask: var(--checkmark-image) center / 12px 12px no-repeat;
+}
+
+.form-check-input[type=&quot;radio&quot;] {
+  width: 14px;
+  height: 14px;
+  border-radius: var(--radius-full);
+}
+
+.form-check-input[type=&quot;radio&quot;]:checked {
+  border: 2px solid var(--primary);
+  background:
+    radial-gradient(circle, var(--primary-foreground) 0 2.5px, transparent 3px),
+    var(--primary);
+}
+
+.form-check:not(.form-switch) .form-check-input:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+
+.form-check:not(.form-switch) .form-check-input:disabled {
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+.form-check:not(.form-switch) .form-check-input:disabled + .form-check-label {
+  cursor: not-allowed;
+}
+
+.form-switch .form-check-input:disabled,
+.form-switch .form-check-input:disabled + .form-check-label {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.form-check-label {
+  color: var(--foreground);
+  cursor: var(--cursor-interaction, default);
+}
+
+.form-switch .form-check-input {
+  position: relative;
+  width: 32px;
+  height: 20px;
+  border: 0;
+  border-radius: var(--radius-full);
+  background: var(--muted);
+  box-shadow: none;
+  transition: background-color 200ms cubic-bezier(0, 0, 0.2, 1);
+}
+
+.form-switch .form-check-input::before {
+  position: absolute;
+  top: 50%;
+  left: 0;
+  width: 16px;
+  height: 16px;
+  box-sizing: border-box;
+  border: 1px solid light-dark(var(--primary-foreground), var(--foreground));
+  border-radius: var(--radius-full);
+  background: light-dark(var(--primary-foreground), var(--foreground));
+  box-shadow: var(--shadow-sm);
+  content: &quot;&quot;;
+  transform: translate(2px, -50%);
+  transition: transform 200ms cubic-bezier(0, 0, 0.2, 1);
+}
+
+.form-switch .form-check-input:checked {
+  background: var(--primary);
+}
+
+.form-switch .form-check-input:checked::before {
+  transform: translate(14px, -50%);
+}
+
+.form-switch .form-check-input:focus-visible {
+  box-shadow: 0 0 0 2px var(--ring);
+}
+
+.form-range {
+  appearance: none;
+  display: block;
+  width: 100%;
+  height: 28px;
+  flex: 1;
+  margin: 0;
+  padding: 0;
+  outline: none;
+  border: 0;
+  accent-color: var(--primary);
+  background: linear-gradient(
+      color-mix(in srgb, var(--foreground) 7%, transparent),
+      color-mix(in srgb, var(--foreground) 7%, transparent)
+    )
+    center / 100% 2px no-repeat;
+}
+
+.form-range::-webkit-slider-runnable-track {
+  height: 28px;
+  background: transparent;
+}
+
+.form-range::-webkit-slider-thumb {
+  appearance: none;
+  width: 20px;
+  height: 20px;
+  margin-top: 4px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-full);
+  background: light-dark(var(--primary-foreground), var(--foreground));
+}
+
+.form-range:focus-visible::-webkit-slider-thumb {
+  border-color: var(--ring);
+  box-shadow: inset 0 0 0 1px var(--ring);
+}
+
+.form-range::-moz-range-track {
+  height: 28px;
+  background: transparent;
+}
+
+.form-range::-moz-range-thumb {
+  width: 20px;
+  height: 20px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-full);
+  background: light-dark(var(--primary-foreground), var(--foreground));
+}
+
+.form-range:focus-visible::-moz-range-thumb {
+  border-color: var(--ring);
+  box-shadow: inset 0 0 0 1px var(--ring);
+}
+
+.form-range:disabled {
+  cursor: not-allowed;
+  opacity: 0.4;
+}
+
+.btn:not(.btn-primary, .viz-tile):is(
+  [aria-pressed=&quot;true&quot;],
+  [aria-selected=&quot;true&quot;],
+  .is-selected
+) {
+  border-color: var(--primary);
+  color: var(--primary-foreground);
+  background: var(--primary);
+}
+
+.btn.viz-tile:is([aria-pressed=&quot;true&quot;], [aria-selected=&quot;true&quot;], .is-selected) {
+  border-color: var(--primary);
+  box-shadow: inset 0 0 0 1px var(--primary);
+}
+
+.btn:focus-visible,
+.nav-link:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+
+@media (pointer: coarse) {
+  .btn,
+  .nav-link,
+  .form-control,
+  .form-select {
+    min-width: 44px;
+    min-height: 44px;
+  }
+
+  /* Keep small-screen WebKit from zooming when a text field receives focus. */
+  .form-control,
+  .form-select {
+    font-size: max(16px, var(--font-size-normal));
+  }
+
+  .form-control[type=&quot;file&quot;]::file-selector-button {
+    min-width: 44px;
+    min-height: 44px;
+  }
+
+  .form-control-color[type=&quot;color&quot;] {
+    width: 44px;
+    height: 44px;
+  }
+
+  .form-control:is(
+    [type=&quot;date&quot;],
+    [type=&quot;datetime-local&quot;],
+    [type=&quot;month&quot;],
+    [type=&quot;time&quot;],
+    [type=&quot;week&quot;]
+  ) {
+    min-width: 0;
+    max-width: 100%;
+    padding-block: 8px;
+  }
+
+  .form-check {
+    min-height: 44px;
+    padding-inline: 15px;
+  }
+
+  .form-check-input {
+    position: relative;
+  }
+
+  .form-check-input::after {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 44px;
+    height: 44px;
+    content: &quot;&quot;;
+    transform: translate(-50%, -50%);
+  }
+
+  .form-check-label {
+    display: inline-flex;
+    min-width: 44px;
+    min-height: 44px;
+    align-items: center;
+  }
+
+  .form-range {
+    height: 44px;
+    touch-action: pan-y;
+  }
+
+  .form-range::-webkit-slider-runnable-track {
+    height: 44px;
+  }
+
+  .form-range::-moz-range-track {
+    height: 44px;
+  }
+
+  .form-range::-webkit-slider-thumb {
+    margin-top: 12px;
+  }
+}
+
+svg {
+  display: block;
+  max-width: 100%;
+  height: auto;
+}
+
+#widget &gt; svg {
+  width: 100%;
+}
+
+/* Model-authored chart rules can otherwise stretch icons after these styles load. */
+svg.lucide {
+  display: block;
+  width: var(--icon-size) !important;
+  height: var(--icon-size) !important;
+  flex: none;
+  margin: 0 !important;
+  stroke-width: 1.6;
+}
+
+.text-warning,
+.text-destructive {
+  color: var(--destructive);
+}
+
+html&gt;body{padding:0}&lt;/style&gt;
+&lt;/head&gt;
+&lt;body&gt;
+&lt;script type=&quot;application/json&quot; id=&quot;codex-visualization-widget-state&quot;&gt;__CODEX_VISUALIZATION_WIDGET_STATE__&lt;/script&gt;
+&lt;script&gt;(() =&gt; {
+  const root = document.documentElement;
+  const mediaQuery = globalThis.matchMedia(&quot;(prefers-color-scheme: dark)&quot;);
+  const apply = Reflect.apply;
+  const isArray = Array.isArray;
+  const hasOwn = Object.hasOwn;
+  const parentWindow = globalThis.parent;
+  const stringify = JSON.stringify;
+  const parse = JSON.parse;
+  const encode = TextEncoder.prototype.encode.bind(new TextEncoder());
+  const initialStateElement = document.getElementById(
+    &quot;codex-visualization-widget-state&quot;,
+  );
+  const initialGlobals = parse(initialStateElement?.textContent ?? &quot;{}&quot;);
+  initialStateElement?.remove();
+  /** @type {Record&lt;string, unknown&gt; | null} */
+  let state = initialGlobals.widgetState ?? null;
+  const statePersistence = initialGlobals.statePersistence ?? &quot;none&quot;;
+  let nextStateRequestId = 0;
+  /** @type {Map&lt;number, { resolve: () =&gt; void; reject: (error: Error) =&gt; void; timeout: ReturnType&lt;typeof globalThis.setTimeout&gt;; serializedState: string }&gt;} */
+  const pendingStateWrites = new Map();
+  const persistenceError = () =&gt;
+    Object.assign(
+      new Error(&quot;The host could not persist the widget state update&quot;),
+      {
+        code: -32000,
+        data: { code: &quot;widget_state_persistence_failed&quot;, retryable: false },
+      },
+    );
+  /**
+   * @param {object} prototype
+   * @param {string} property
+   */
+  const getPrototypeGetter = (prototype, property) =&gt; {
+    // oxlint-disable-next-line typescript/unbound-method -- invoked through captured Reflect.apply
+    const getter = Object.getOwnPropertyDescriptor(prototype, property)?.get;
+    if (getter == null) {
+      throw new Error(`Missing ${property} getter`);
+    }
+    return getter;
+  };
+  const getMessageData = getPrototypeGetter(MessageEvent.prototype, &quot;data&quot;);
+  const getMessagePorts = getPrototypeGetter(MessageEvent.prototype, &quot;ports&quot;);
+  const getMessageSource = getPrototypeGetter(MessageEvent.prototype, &quot;source&quot;);
+  // oxlint-disable-next-line typescript/unbound-method -- captured before the untrusted fragment runs
+  const addHostMessageListener = MessagePort.prototype.addEventListener;
+  // oxlint-disable-next-line typescript/unbound-method -- captured before the untrusted fragment runs
+  const postHostMessage = MessagePort.prototype.postMessage;
+  // oxlint-disable-next-line typescript/unbound-method -- captured before the untrusted fragment runs
+  const startHostPort = MessagePort.prototype.start;
+  // oxlint-disable-next-line typescript/unbound-method -- captured before the untrusted fragment runs
+  const stopMessagePropagation = Event.prototype.stopImmediatePropagation;
+  /** @type {MessagePort | null} */
+  let hostPort = null;
+  const postToHost = (type, payload) =&gt; {
+    if (hostPort != null) {
+      apply(postHostMessage, hostPort, [{ type, ...payload }]);
+    }
+  };
+  const openExternal = ({ href }) =&gt; {
+    if (globalThis.navigator.userActivation?.isActive === true) {
+      postToHost(&quot;open-external&quot;, { href });
+    }
+  };
+  const sendFollowUpMessage = ({ context, prompt, title }) =&gt; {
+    if (globalThis.navigator.userActivation?.isActive === true) {
+      postToHost(&quot;follow-up&quot;, { context, prompt, title });
+    }
+    return Promise.resolve();
+  };
+  /**
+   * @param {Record&lt;string, unknown&gt; | ((previous: Record&lt;string, unknown&gt; | null) =&gt; Record&lt;string, unknown&gt;)} next
+   * @returns {Promise&lt;void&gt;}
+   */
+  const setWidgetState = async (next) =&gt; {
+    const nextState = typeof next === &quot;function&quot; ? next(state) : next;
+    if (
+      nextState == null ||
+      typeof nextState !== &quot;object&quot; ||
+      isArray(nextState)
+    ) {
+      throw new TypeError(&quot;Widget state must be a JSON object&quot;);
+    }
+    const inputState = stringify(
+      nextState,
+      (_key, /** @type {unknown} */ value) =&gt; {
+        if (
+          typeof value === &quot;undefined&quot; ||
+          typeof value === &quot;function&quot; ||
+          typeof value === &quot;symbol&quot; ||
+          (typeof value === &quot;number&quot; &amp;&amp; !Number.isFinite(value))
+        ) {
+          throw new TypeError(&quot;Widget state must be a JSON object&quot;);
+        }
+        return value;
+      },
+    );
+    const parsedState = parse(inputState);
+    if (
+      parsedState == null ||
+      typeof parsedState !== &quot;object&quot; ||
+      isArray(parsedState)
+    ) {
+      throw new TypeError(&quot;Widget state must be a JSON object&quot;);
+    }
+    const storedState = {
+      modelContent: null,
+      privateContent: null,
+      ...parsedState,
+    };
+    const serializedState = stringify(storedState);
+    if (encode(serializedState).length &gt; 16 * 1024) {
+      throw new TypeError(
+        &quot;Widget state must be a JSON object of at most 16 KiB&quot;,
+      );
+    }
+    if (
+      hasOwn(storedState, &quot;imageIds&quot;) &amp;&amp;
+      (!isArray(storedState.imageIds) ||
+        storedState.imageIds.some(
+          (/** @type {unknown} */ id) =&gt; typeof id !== &quot;string&quot;,
+        ))
+    ) {
+      throw new TypeError(&quot;Widget state imageIds must be an array of strings&quot;);
+    }
+    if (storedState.imageIds?.length &gt; 0) {
+      throw Object.assign(
+        new TypeError(&quot;Visualization state does not support image attachments&quot;),
+        { code: -32602, data: { code: &quot;images_unsupported&quot; } },
+      );
+    }
+    state = storedState;
+    globalThis.openai.widgetState = state;
+    globalThis.dispatchEvent(
+      new CustomEvent(&quot;openai:set_globals&quot;, {
+        detail: { globals: { widgetState: state } },
+      }),
+    );
+    if (statePersistence === &quot;none&quot;) {
+      throw persistenceError();
+    }
+    const id = ++nextStateRequestId;
+    return new Promise((resolve, reject) =&gt; {
+      const timeout = globalThis.setTimeout(() =&gt; {
+        pendingStateWrites.delete(id);
+        reject(persistenceError());
+      }, 30_000);
+      pendingStateWrites.set(id, { resolve, reject, timeout, serializedState });
+      postToHost(&quot;widget-state-write&quot;, { id, state: serializedState });
+    });
+  };
+  const syncTheme = () =&gt; {
+    const theme = mediaQuery.matches ? &quot;dark&quot; : &quot;light&quot;;
+    root.dataset.theme = theme;
+    globalThis.openai = {
+      ...globalThis.openai,
+      openExternal,
+      sendFollowUpMessage,
+      setWidgetState,
+      theme,
+      visualizationStyleVariables: {},
+      visualizationTheme: theme,
+      widgetState: state,
+      statePersistence,
+      stateModelContext: &quot;none&quot;,
+    };
+    globalThis.dispatchEvent(
+      new CustomEvent(&quot;openai:set_globals&quot;, {
+        detail: { globals: globalThis.openai },
+      }),
+    );
+  };
+  const sendHeight = () =&gt; {
+    postToHost(&quot;height&quot;, {
+      height: Math.ceil(
+        Math.max(
+          document.body.scrollHeight,
+          document.body.getBoundingClientRect().height,
+        ),
+      ),
+    });
+  };
+
+  globalThis.addEventListener(
+    &quot;message&quot;,
+    (event) =&gt; {
+      const data = apply(getMessageData, event, []);
+      const ports = apply(getMessagePorts, event, []);
+      const source = apply(getMessageSource, event, []);
+      if (
+        hostPort != null ||
+        source !== parentWindow ||
+        typeof data !== &quot;object&quot; ||
+        data?.type !== &quot;codex-visualization-initialize&quot; ||
+        !isArray(ports) ||
+        ports.length !== 1
+      ) {
+        return;
+      }
+      apply(stopMessagePropagation, event, []);
+      const nextHostPort = ports[0];
+      try {
+        apply(addHostMessageListener, nextHostPort, [
+          &quot;message&quot;,
+          (event) =&gt; {
+            const data = apply(getMessageData, event, []);
+            if (typeof data === &quot;object&quot; &amp;&amp; data?.type === &quot;measure&quot;) {
+              sendHeight();
+            } else if (
+              typeof data === &quot;object&quot; &amp;&amp;
+              data?.type === &quot;widget-state-result&quot;
+            ) {
+              /** @type {unknown} */
+              const id = data.id;
+              if (typeof id !== &quot;number&quot;) {
+                return;
+              }
+              const pending = pendingStateWrites.get(id);
+              if (pending != null) {
+                pendingStateWrites.delete(id);
+                globalThis.clearTimeout(pending.timeout);
+                if (data.ok === true) {
+                  pending.resolve();
+                } else {
+                  pending.reject(persistenceError());
+                }
+              }
+            }
+          },
+        ]);
+        apply(startHostPort, nextHostPort, []);
+      } catch {
+        return;
+      }
+      hostPort = nextHostPort;
+      for (const [id, { serializedState }] of pendingStateWrites) {
+        postToHost(&quot;widget-state-write&quot;, { id, state: serializedState });
+      }
+      sendHeight();
+    },
+    { capture: true },
+  );
+  document.currentScript?.remove();
+  mediaQuery.addEventListener(&quot;change&quot;, syncTheme);
+  globalThis.addEventListener(&quot;click&quot;, (event) =&gt; {
+    if (event.defaultPrevented) {
+      return;
+    }
+    let element = null;
+    if (event.target instanceof globalThis.Element) {
+      element = event.target;
+    } else if (event.target instanceof globalThis.Node) {
+      element = event.target.parentElement;
+    }
+    const link = element?.closest(&quot;a[href]&quot;);
+    const href = link?.getAttribute(&quot;href&quot;);
+    if (href == null) {
+      return;
+    }
+    if (href.startsWith(&quot;#&quot;)) {
+      let id;
+      try {
+        id = decodeURIComponent(href.slice(1));
+      } catch {
+        return;
+      }
+      const target = id.length === 0 ? root : document.getElementById(id);
+      if (
+        target == null ||
+        globalThis.navigator.userActivation?.isActive !== true
+      ) {
+        return;
+      }
+      event.preventDefault();
+      postToHost(&quot;scroll-to&quot;, {
+        top: target.getBoundingClientRect().top + globalThis.scrollY,
+      });
+      return;
+    }
+    event.preventDefault();
+    openExternal({ href });
+  });
+  new ResizeObserver(sendHeight).observe(document.body);
+  syncTheme();
+})();
+&lt;/script&gt;
+&lt;style&gt;
+#rehearsal-member-v2{--rm-bg:light-dark(#fcd5f4,#23264a);--rm-paper:light-dark(#ffffff,#2f3468);--rm-text:light-dark(#2f3f78,#fef0fb);--rm-muted:light-dark(#6b6f8a,#c7c4dd);--rm-line:light-dark(#5369af,#f7a0d1);--rm-green:light-dark(#5369af,#f7a0d1);--rm-on-green:light-dark(#2f3f78,#2f3f78);--rm-green-soft:light-dark(#fef0fb,#23264a);--rm-yellow:light-dark(#2f3f78,#fef0fb);--rm-yellow-soft:light-dark(#fef0fb,#23264a);--rm-shadow:light-dark(#5369af,#5369af);--rm-pink:light-dark(#f7a0d1,#f7a0d1);--rm-pink-soft:light-dark(#fcd5f4,#fcd5f4);--rm-navy:light-dark(#2f3f78,#2f3f78);--rm-unavailable:light-dark(#ecebf3,#3a3f6e);--rm-highlight:light-dark(#ffffffd9,#ffffff40);color:var(--rm-text);font:14px/1.5 &quot;Noto Sans SC&quot;,&quot;PingFang SC&quot;,-apple-system,BlinkMacSystemFont,&quot;Microsoft YaHei&quot;,sans-serif;background:transparent;width:100%;padding:6px 4px 18px;box-sizing:border-box}
+#rehearsal-member-v2 *{box-sizing:border-box}
+#rehearsal-member-v2 button,#rehearsal-member-v2 input,#rehearsal-member-v2 select{font:inherit;color:inherit}
+#rehearsal-member-v2 button{cursor:pointer}
+#rehearsal-member-v2 button:disabled{cursor:default;opacity:.43}
+#rehearsal-member-v2 .rm-preview{display:flex;flex-wrap:wrap;justify-content:center;align-items:center;gap:9px 15px;padding:0 10px 15px;color:var(--rm-muted);font-size:12px}
+#rehearsal-member-v2 .rm-preview label{display:flex;align-items:center;gap:7px}
+#rehearsal-member-v2 .rm-preview select{border:1px solid var(--rm-line);border-radius:8px;padding:6px 22px 6px 9px;background:var(--rm-paper);color:var(--rm-text);max-width:140px}
+#rehearsal-member-v2 .rm-phone{width:min(100%,390px);margin:auto;min-height:600px;border:2px solid var(--rm-line);border-radius:28px;background:var(--rm-bg);overflow:clip;box-shadow:3px 3px 0 var(--rm-shadow)}
+#rehearsal-member-v2 .rm-top{padding:13px 20px 12px;display:flex;align-items:center;justify-content:space-between;background:var(--rm-paper);border-bottom:1px solid var(--rm-line);gap:8px}
+#rehearsal-member-v2 .rm-wordmark{font-family:&quot;Arial Rounded MT Bold&quot;,&quot;Baloo 2&quot;,&quot;Fredoka&quot;,system-ui,sans-serif;font-weight:800;font-size:29px;letter-spacing:-1.2px;display:flex;align-items:center;gap:6px;color:var(--rm-pink);-webkit-text-stroke:1.2px light-dark(#5369af,#5369af);text-shadow:2px 2px 0 var(--rm-shadow);line-height:1.1;transform:rotate(-3deg)}
+#rehearsal-member-v2 .rm-mark{color:var(--rm-pink);font-size:14px;line-height:1;letter-spacing:0}
+#rehearsal-member-v2 .rm-small{font-size:12px;color:var(--rm-muted)}
+#rehearsal-member-v2 .rm-content{padding:25px 20px 22px;min-height:450px}
+#rehearsal-member-v2 h2,#rehearsal-member-v2 h3,#rehearsal-member-v2 p{margin:0}
+#rehearsal-member-v2 h2{font-family:&quot;Arial Rounded MT Bold&quot;,&quot;PingFang SC&quot;,system-ui,sans-serif;font-size:25px;line-height:1.3;font-weight:600;letter-spacing:-.5px}
+#rehearsal-member-v2 h3{font-family:&quot;Arial Rounded MT Bold&quot;,&quot;PingFang SC&quot;,system-ui,sans-serif;font-size:18px;line-height:1.4;font-weight:600}
+#rehearsal-member-v2 .rm-lead{margin-top:8px;color:var(--rm-muted);font-size:13px}
+#rehearsal-member-v2 .rm-kicker{font-size:12px;letter-spacing:1.2px;color:var(--rm-muted);margin-bottom:8px}
+#rehearsal-member-v2 .rm-card{background:var(--rm-paper);border:2px solid var(--rm-line);border-radius:20px;padding:21px;margin-top:25px;box-shadow:3px 3px 0 var(--rm-shadow),inset 3px 3px 0 var(--rm-highlight)}
+#rehearsal-member-v2 .rm-card-top{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:21px}
+#rehearsal-member-v2 .rm-tag{display:inline-flex;align-items:center;gap:5px;border-radius:7px;padding:4px 8px;color:var(--rm-green);background:var(--rm-green-soft);font-size:11px;white-space:nowrap}
+#rehearsal-member-v2 .rm-tag.rm-warm{background:var(--rm-yellow-soft);color:var(--rm-yellow)}
+#rehearsal-member-v2 .rm-card-copy{color:var(--rm-muted);margin:11px 0 24px;font-size:13px;line-height:1.8}
+#rehearsal-member-v2 .rm-meta{font-size:12px;color:var(--rm-muted);margin-top:18px;line-height:1.8}
+#rehearsal-member-v2 .rm-button{background:var(--rm-paper);border:2px solid var(--rm-line);border-radius:20px;padding:11px 14px;min-height:46px;display:inline-flex;justify-content:center;align-items:center;gap:7px;line-height:1.4;box-shadow:3px 3px 0 var(--rm-shadow),inset 2px 2px 0 var(--rm-highlight)}
+#rehearsal-member-v2 .rm-primary{background:var(--rm-pink);color:var(--rm-on-green);border-color:light-dark(#5369af,#f7a0d1);font-weight:600}
+#rehearsal-member-v2 .rm-full{width:100%}
+#rehearsal-member-v2 .rm-link{background:transparent;border:0;color:var(--rm-green);padding:10px 0;min-height:44px;display:inline-flex;align-items:center;gap:6px;text-align:left}
+#rehearsal-member-v2 .rm-back{font-size:12px;padding-top:0;margin-bottom:10px;min-height:32px}
+#rehearsal-member-v2 .rm-nav{position:sticky;bottom:0;z-index:3;display:grid;grid-template-columns:1fr 1fr;background:var(--rm-paper);border-top:1px solid var(--rm-line);padding:5px 12px 10px}
+#rehearsal-member-v2 .rm-nav button{display:flex;align-items:center;justify-content:center;gap:9px;background:transparent;border:0;min-height:49px;font-size:13px;color:var(--rm-muted)}
+#rehearsal-member-v2 .rm-nav button[aria-current=&quot;page&quot;]{color:var(--rm-green);font-weight:600}
+#rehearsal-member-v2 .rm-footer{position:sticky;bottom:0;z-index:2;background:var(--rm-paper);border-top:1px solid var(--rm-line);padding:14px 20px 18px}
+#rehearsal-member-v2 .rm-phone:has(.rm-nav) .rm-footer{bottom:65px}
+#rehearsal-member-v2 .rm-footer p{font-size:11px;color:var(--rm-muted);margin-bottom:9px;line-height:1.7}
+#rehearsal-member-v2 .rm-heading-row{display:flex;align-items:center;justify-content:space-between;gap:8px}
+#rehearsal-member-v2 .rm-count{font-size:12px;color:var(--rm-green);white-space:nowrap;font-variant-numeric:tabular-nums}
+#rehearsal-member-v2 .rm-dates{display:grid;grid-template-columns:23px repeat(5,minmax(0,1fr)) 23px;gap:4px;margin:21px -6px 18px;touch-action:pan-y}
+#rehearsal-member-v2 .rm-dates button{background:transparent;border:0;border-radius:10px;padding:8px 1px;min-height:52px;line-height:1.5;white-space:nowrap}
+#rehearsal-member-v2 .rm-dates button strong{display:block;font-size:14px;font-weight:500}
+#rehearsal-member-v2 .rm-dates button span{font-size:11px;color:var(--rm-muted)}
+#rehearsal-member-v2 .rm-dates button[aria-pressed=&quot;true&quot;]{background:var(--rm-pink);color:var(--rm-on-green);box-shadow:2px 2px 0 var(--rm-shadow);border:1px solid var(--rm-line)}
+#rehearsal-member-v2 .rm-dates button[aria-pressed=&quot;true&quot;] span{color:var(--rm-on-green)}
+#rehearsal-member-v2 .rm-brushes{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
+#rehearsal-member-v2 .rm-brushes button{font-size:12px;padding:10px 3px;border-radius:15px;border:1px solid var(--rm-line);background:var(--rm-paper);min-height:44px}
+#rehearsal-member-v2 .rm-brushes button[aria-pressed=&quot;true&quot;]{border:2px solid var(--rm-line);box-shadow:2px 2px 0 var(--rm-shadow)}
+#rehearsal-member-v2 .rm-dot{display:inline-block;width:7px;height:7px;border-radius:50%;margin-right:5px;background:var(--rm-muted)}
+#rehearsal-member-v2 .rm-dot.free{background:var(--rm-pink);box-shadow:0 0 0 1px var(--rm-line)}
+#rehearsal-member-v2 .rm-dot.avoid{background:var(--rm-pink-soft);box-shadow:0 0 0 1px var(--rm-line)}
+#rehearsal-member-v2 .rm-quick{display:flex;flex-wrap:wrap;gap:4px 10px;margin:6px 0 5px}
+#rehearsal-member-v2 .rm-quick button{font-size:11px;padding:6px 0;min-height:34px}
+#rehearsal-member-v2 .rm-hours{display:grid;gap:4px;touch-action:none;margin-top:11px}
+#rehearsal-member-v2 .rm-hour{display:grid;grid-template-columns:90px 1fr;gap:13px;align-items:center}
+#rehearsal-member-v2 .rm-time{font-size:11px;color:var(--rm-muted);font-variant-numeric:tabular-nums;text-align:right}
+#rehearsal-member-v2 .rm-slot{min-height:35px;border:1px solid var(--rm-line);border-radius:9px;text-align:left;padding:6px 12px;font-size:12px;user-select:none;background:var(--rm-unavailable);color:var(--rm-text)}
+#rehearsal-member-v2 .rm-slot[data-value=&quot;free&quot;]{color:var(--rm-navy);background:var(--rm-pink);border-color:light-dark(#5369af,#5369af)}
+#rehearsal-member-v2 .rm-slot[data-value=&quot;avoid&quot;]{color:var(--rm-navy);background:repeating-linear-gradient(135deg,transparent 0,transparent 5px,light-dark(#e59cc880,#e59cc880) 5px,light-dark(#e59cc880,#e59cc880) 8px),var(--rm-pink-soft);border-color:light-dark(#5369af,#5369af)}
+#rehearsal-member-v2 .rm-notice{padding:11px 13px;border-radius:9px;background:var(--rm-yellow-soft);color:var(--rm-yellow);font-size:12px;line-height:1.7;margin:12px 0}
+#rehearsal-member-v2 .rm-notice.rm-calm{color:var(--rm-green);background:var(--rm-green-soft)}
+#rehearsal-member-v2 .rm-evaluation{margin:22px 0;padding:15px 17px;background:light-dark(#5369af,#5369af);color:light-dark(#fef0fb,#fef0fb);border-radius:20px;border:2px solid var(--rm-line);box-shadow:3px 3px 0 var(--rm-shadow)}
+#rehearsal-member-v2 .rm-evaluation strong{display:block;color:light-dark(#fef0fb,#fef0fb);font-size:13px;font-weight:600;margin-bottom:7px}
+#rehearsal-member-v2 .rm-evaluation .rm-small{color:light-dark(#fef0fb,#fef0fb)}
+#rehearsal-member-v2 .rm-evaluation p{font-size:13px;line-height:1.8}
+#rehearsal-member-v2 .rm-date-title{display:flex;justify-content:space-between;align-items:center;font-size:12px;color:var(--rm-muted);margin:22px 0 7px}
+#rehearsal-member-v2 .rm-session{padding:13px 0;border-bottom:1px solid var(--rm-line);display:grid;grid-template-columns:46px 1fr;gap:11px}
+#rehearsal-member-v2 .rm-session.rm-changed{padding:12px;background:var(--rm-yellow-soft);border-bottom:0;border-radius:10px;margin-top:7px;grid-template-columns:46px 1fr}
+#rehearsal-member-v2 .rm-session-time{font-size:12px;font-weight:500;font-variant-numeric:tabular-nums;line-height:1.65}
+#rehearsal-member-v2 .rm-session-time span{font-size:11px;color:var(--rm-muted);font-weight:400}
+#rehearsal-member-v2 .rm-session-title{font-size:13px;font-weight:500;margin:1px 0 5px}
+#rehearsal-member-v2 .rm-session p{font-size:11px;color:var(--rm-muted)}
+#rehearsal-member-v2 .rm-session .rm-change-note{color:var(--rm-yellow);margin-top:6px}
+#rehearsal-member-v2 .rm-form{margin-top:28px;display:grid;gap:18px}
+#rehearsal-member-v2 .rm-form label{display:grid;gap:8px;font-size:12px;color:var(--rm-muted)}
+#rehearsal-member-v2 .rm-form input{display:block;width:100%;padding:12px 13px;min-height:46px;border:2px solid var(--rm-line);border-radius:16px;background:var(--rm-paper);color:var(--rm-text);font-size:16px}
+#rehearsal-member-v2 .rm-error{color:var(--rm-yellow);font-size:12px;margin-top:8px}
+#rehearsal-member-v2 .rm-profile{display:flex;align-items:center;gap:15px;margin-top:27px}
+#rehearsal-member-v2 .rm-avatar{width:56px;height:56px;display:grid;place-items:center;background:var(--rm-green-soft);color:var(--rm-green);border-radius:18px;font-size:22px}
+#rehearsal-member-v2 .rm-setting{padding:18px 0;border-bottom:1px solid var(--rm-line);display:flex;justify-content:space-between;gap:14px;font-size:13px}
+#rehearsal-member-v2 .rm-setting span{color:var(--rm-muted)}
+#rehearsal-member-v2 .rm-subscribe{margin-top:25px}
+#rehearsal-member-v2 .rm-subscribe section{border-bottom:1px solid var(--rm-line);padding:17px 0}
+#rehearsal-member-v2 .rm-subscribe h3{font-size:15px;margin-bottom:8px}
+#rehearsal-member-v2 .rm-subscribe p{font-size:13px;color:var(--rm-muted);line-height:1.8}
+#rehearsal-member-v2 .rm-demo-note{font-size:11px;color:var(--rm-muted);text-align:center;margin-top:12px}
+@media(pointer:coarse){#rehearsal-member-v2 .rm-slot{min-height:44px}#rehearsal-member-v2 .rm-quick button{min-height:44px}#rehearsal-member-v2 .rm-preview select{min-height:44px}}
+@media(max-width:350px){#rehearsal-member-v2 .rm-content{padding:22px 15px}#rehearsal-member-v2 .rm-card{padding:17px}#rehearsal-member-v2 .rm-preview{padding-inline:0;gap:8px}#rehearsal-member-v2 h2{font-size:23px}#rehearsal-member-v2 .rm-preview select{max-width:110px}}
+&lt;/style&gt;
+&lt;div id=&quot;rehearsal-member-v2&quot;&gt;
+  &lt;div class=&quot;rm-preview&quot; aria-label=&quot;草图预览控制&quot;&gt;
+    &lt;label&gt;页面 &lt;select id=&quot;rm-view&quot;&gt;&lt;option value=&quot;home&quot;&gt;我的首页&lt;/option&gt;&lt;option value=&quot;availability&quot;&gt;填空闲时间&lt;/option&gt;&lt;option value=&quot;schedule&quot;&gt;我的排练表&lt;/option&gt;&lt;option value=&quot;invite&quot;&gt;公开 · 邀请&lt;/option&gt;&lt;option value=&quot;login&quot;&gt;公开 · 登录&lt;/option&gt;&lt;option value=&quot;account&quot;&gt;账号&lt;/option&gt;&lt;/select&gt;&lt;/label&gt;
+    &lt;label&gt;待办状态 &lt;select id=&quot;rm-status&quot;&gt;&lt;option value=&quot;pending&quot;&gt;待填写&lt;/option&gt;&lt;option value=&quot;submitted&quot;&gt;已提交&lt;/option&gt;&lt;option value=&quot;published&quot;&gt;已发布&lt;/option&gt;&lt;option value=&quot;changed&quot;&gt;有 2 场变动&lt;/option&gt;&lt;/select&gt;&lt;/label&gt;
+  &lt;/div&gt;
+  &lt;div class=&quot;rm-phone&quot; id=&quot;rm-phone&quot; aria-label=&quot;成员端手机草图&quot;&gt;
+    &lt;header class=&quot;rm-top&quot;&gt;&lt;div class=&quot;rm-wordmark&quot; aria-label=&quot;Season&quot;&gt;Season&lt;span class=&quot;rm-mark&quot; aria-hidden=&quot;true&quot;&gt;✦&lt;/span&gt;&lt;/div&gt;&lt;span class=&quot;rm-small&quot;&gt;秋日舞台公演 · 2026&lt;/span&gt;&lt;/header&gt;
+    &lt;div id=&quot;rm-screen&quot;&gt;&lt;/div&gt;
+  &lt;/div&gt;
+  &lt;p class=&quot;rm-demo-note&quot;&gt;成员端 · 点击探索 · 所有账号和操作均为本地演示&lt;/p&gt;
+&lt;/div&gt;
+&lt;script&gt;
+(() =&gt; {
+  const root = document.getElementById(&#x27;rehearsal-member-v2&#x27;);
+  const phone = root.querySelector(&#x27;#rm-phone&#x27;);
+  const screen = root.querySelector(&#x27;#rm-screen&#x27;);
+  const viewSelect = root.querySelector(&#x27;#rm-view&#x27;);
+  const statusSelect = root.querySelector(&#x27;#rm-status&#x27;);
+  const allowedViews = [&#x27;home&#x27;,&#x27;availability&#x27;,&#x27;schedule&#x27;,&#x27;invite&#x27;,&#x27;login&#x27;,&#x27;account&#x27;,&#x27;subscribe&#x27;];
+  const allowedStatus = [&#x27;pending&#x27;,&#x27;submitted&#x27;,&#x27;published&#x27;,&#x27;changed&#x27;];
+  const names = { free:&#x27;可排&#x27;, avoid:&#x27;尽量避开&#x27;, busy:&#x27;不可排&#x27; };
+  const weekdays = [&#x27;五&#x27;,&#x27;六&#x27;,&#x27;日&#x27;,&#x27;一&#x27;,&#x27;二&#x27;,&#x27;三&#x27;,&#x27;四&#x27;];
+  const state = {view:&#x27;home&#x27;,status:&#x27;pending&#x27;,day:0,brush:&#x27;free&#x27;,defaultMode:&#x27;busy&#x27;,radius:28,days:Array.from({length:16},()=&gt;Array(13).fill(&#x27;busy&#x27;)),filled:[],publishedVersion:0,hasChanges:false,awaitingConfirmation:false};
+  let notice = &#x27;&#x27;, error = &#x27;&#x27;, drawing = false, lastSlot = -1, swipeStart = null;
+  const sessions = [
+    {date:&#x27;9/6&#x27;,day:&#x27;周日&#x27;,start:&#x27;13:00&#x27;,end:&#x27;15:00&#x27;,name:&#x27;k · blackpink-玩火&#x27;,people:&#x27;菁、Siri、嘎&#x27;,change:true,old:&#x27;原定 12:00–14:00&#x27;},
+    {date:&#x27;9/6&#x27;,day:&#x27;周日&#x27;,start:&#x27;16:00&#x27;,end:&#x27;18:00&#x27;,name:&#x27;a · aespa-lemonadeB&#x27;,people:&#x27;菁、若、思&#x27;},
+    {date:&#x27;9/9&#x27;,day:&#x27;周三&#x27;,start:&#x27;18:00&#x27;,end:&#x27;20:00&#x27;,name:&#x27;k · blackpink-玩火&#x27;,people:&#x27;菁、Siri、嘎&#x27;},
+    {date:&#x27;9/12&#x27;,day:&#x27;周六&#x27;,start:&#x27;13:00&#x27;,end:&#x27;16:00&#x27;,name:&#x27;a · aespa-lemonadeB&#x27;,people:&#x27;菁、若、思&#x27;,change:true,old:&#x27;由 9/11 周五移至周六&#x27;},
+    {date:&#x27;9/12&#x27;,day:&#x27;周六&#x27;,start:&#x27;17:00&#x27;,end:&#x27;19:00&#x27;,name:&#x27;d · NewJeans-Super Shy&#x27;,people:&#x27;幸、Siri、若&#x27;},
+    {date:&#x27;9/16&#x27;,day:&#x27;周三&#x27;,start:&#x27;18:00&#x27;,end:&#x27;20:00&#x27;,name:&#x27;d · NewJeans-Super Shy&#x27;,people:&#x27;幸、Siri、若&#x27;},
+    {date:&#x27;9/18&#x27;,day:&#x27;周五&#x27;,start:&#x27;18:00&#x27;,end:&#x27;21:00&#x27;,name:&#x27;a · aespa-lemonadeB&#x27;,people:&#x27;菁、若、思&#x27;}
+  ];
+  function restore(saved) {
+    if (!saved || ![2,3].includes(saved.version)) return;
+    if (allowedViews.includes(saved.view)) state.view = saved.view;
+    if (allowedStatus.includes(saved.status)) state.status = saved.status;
+    if (Number.isInteger(saved.day) &amp;&amp; saved.day &gt;= 0 &amp;&amp; saved.day &lt; 16) state.day = saved.day;
+    if ([&#x27;busy&#x27;,&#x27;free&#x27;].includes(saved.defaultMode)) state.defaultMode = saved.defaultMode;
+    if (Array.isArray(saved.days) &amp;&amp; saved.days.length === 16 &amp;&amp; saved.days.every(d=&gt;Array.isArray(d)&amp;&amp;d.length===13&amp;&amp;d.every(v=&gt;v in names))) state.days = saved.days;
+    if (Array.isArray(saved.filled)) state.filled = [...new Set(saved.filled.filter(v=&gt;Number.isInteger(v)&amp;&amp;v&gt;=0&amp;&amp;v&lt;16))];
+    state.publishedVersion = Number.isInteger(saved.publishedVersion) &amp;&amp; saved.publishedVersion &gt;= 0 ? saved.publishedVersion : state.status === &#x27;changed&#x27; ? 2 : saved.wasPublished || state.status === &#x27;published&#x27; ? 1 : 0;
+    state.hasChanges = typeof saved.hasChanges === &#x27;boolean&#x27; ? saved.hasChanges : state.status === &#x27;changed&#x27;;
+    state.awaitingConfirmation = typeof saved.awaitingConfirmation === &#x27;boolean&#x27; ? saved.awaitingConfirmation : state.status === &#x27;submitted&#x27; &amp;&amp; state.publishedVersion &gt; 0;
+  }
+  restore(globalThis.openai?.widgetState?.privateContent);
+  function save() {
+    const setter = globalThis.openai?.setWidgetState;
+    if (!setter) return;
+    Promise.resolve(setter({modelContent:{preview:&#x27;成员端&#x27;,page:state.view,status:state.status,publishedVersion:state.publishedVersion,hasChanges:state.hasChanges,awaitingConfirmation:state.awaitingConfirmation,filledDays:state.filled.length,defaultAvailability:state.defaultMode},privateContent:{version:3,view:state.view,status:state.status,day:state.day,days:state.days,filled:state.filled,defaultMode:state.defaultMode,publishedVersion:state.publishedVersion,hasChanges:state.hasChanges,awaitingConfirmation:state.awaitingConfirmation}})).catch(()=&gt;{});
+  }
+  window.addEventListener(&#x27;openai:set_globals&#x27;,event=&gt;{ const snapshot=event.detail?.globals?.widgetState?.privateContent; if(snapshot){restore(snapshot);render();} });
+  function button(label,action,primary=false,extra=&#x27;&#x27;) { return `&lt;button type=&quot;button&quot; class=&quot;rm-button ${primary?&#x27;rm-primary &#x27;:&#x27;&#x27;}${extra}&quot; data-action=&quot;${action}&quot;&gt;${label}&lt;/button&gt;`; }
+  function back(label=&#x27;返回首页&#x27;,action=&#x27;home&#x27;) { return `&lt;button type=&quot;button&quot; class=&quot;rm-link rm-back&quot; data-action=&quot;${action}&quot;&gt;← ${label}&lt;/button&gt;`; }
+  function footer(label,action,note=&#x27;&#x27;,disabled=false) {return `&lt;div class=&quot;rm-footer&quot;&gt;${note?`&lt;p&gt;${note}&lt;/p&gt;`:&#x27;&#x27;}&lt;button type=&quot;button&quot; class=&quot;rm-button rm-primary rm-full&quot; data-action=&quot;${action}&quot; ${disabled?&#x27;disabled&#x27;:&#x27;&#x27;}&gt;${label}&lt;/button&gt;&lt;/div&gt;`;}
+  function nav() {return `&lt;nav class=&quot;rm-nav&quot; aria-label=&quot;成员导航&quot;&gt;&lt;button type=&quot;button&quot; data-action=&quot;schedule&quot; ${state.view===&#x27;schedule&#x27;?&#x27;aria-current=&quot;page&quot;&#x27;:&#x27;&#x27;}&gt;▦ &lt;span&gt;排练表&lt;/span&gt;&lt;/button&gt;&lt;button type=&quot;button&quot; data-action=&quot;account&quot; ${state.view===&#x27;account&#x27;?&#x27;aria-current=&quot;page&quot;&#x27;:&#x27;&#x27;}&gt;○ &lt;span&gt;账号&lt;/span&gt;&lt;/button&gt;&lt;/nav&gt;`;}
+  function notification() {return notice?`&lt;div class=&quot;rm-notice rm-calm&quot; role=&quot;status&quot;&gt;${notice}&lt;/div&gt;`:&#x27;&#x27;;}
+  function oneSession(s) {const changed=state.hasChanges&amp;&amp;s.change;return `&lt;article class=&quot;rm-session ${changed?&#x27;rm-changed&#x27;:&#x27;&#x27;}&quot;&gt;&lt;div class=&quot;rm-session-time&quot;&gt;${s.start}&lt;br&gt;&lt;span&gt;${s.end}&lt;/span&gt;&lt;/div&gt;&lt;div&gt;&lt;div class=&quot;rm-session-title&quot;&gt;${s.name}&lt;/div&gt;&lt;p&gt;和 ${s.people}&lt;/p&gt;${changed?`&lt;p class=&quot;rm-change-note&quot;&gt;时间变动 · ${s.old}&lt;/p&gt;`:&#x27;&#x27;}&lt;/div&gt;&lt;/article&gt;`;}
+  function home() {
+    const published=state.publishedVersion&gt;0, waiting=state.status===&#x27;submitted&#x27;;
+    const heading = state.awaitingConfirmation?&#x27;空闲已更新，等待管理员确认&#x27;:published?&#x27;你的排练表出来了&#x27;:waiting?&#x27;时间收到，等排练表吧&#x27;:&#x27;一起，把时间排好&#x27;;
+    const status = state.awaitingConfirmation?&#x27;等待确认&#x27;:published?(state.hasChanges?&#x27;有 2 场变动&#x27;:`已发布 v${state.publishedVersion}`):waiting?&#x27;已提交&#x27;:&#x27;待填写&#x27;;
+    let inside=&#x27;&#x27;;
+    if(published){inside=`&lt;p class=&quot;rm-card-copy&quot;&gt;${state.awaitingConfirmation?`当前仍显示已发布 v${state.publishedVersion}。管理员确认并重新发布后，新的时间安排才会生效。`:`你有 8 场排练，最近一场在 9 月 6 日。${state.hasChanges?&#x27;请留意以下变动。&#x27;:&#x27;&#x27;}`}&lt;/p&gt;&lt;div class=&quot;rm-date-title&quot;&gt;9 月 6 日 · 周日&lt;/div&gt;${sessions.slice(0,2).map(oneSession).join(&#x27;&#x27;)}&lt;button type=&quot;button&quot; class=&quot;rm-link&quot; data-action=&quot;schedule&quot;&gt;查看完整排练表 →&lt;/button&gt;`;}
+    else inside=`&lt;p class=&quot;rm-card-copy&quot;&gt;${waiting?&#x27;还有 3 位成员未填。排练表发布后，你会在这里看到自己的安排。&#x27;:&#x27;请在 9 月 3 日前填写空闲时间。&lt;br&gt;涂出你能来的时段，我们来安排排练。&#x27;}&lt;/p&gt;&lt;div class=&quot;rm-meta&quot;&gt;正规排练 9/4–9/18 · 全员评估 9/19&lt;br&gt;每天 10:00–23:00&lt;/div&gt;`;
+    let main=published?footer(state.awaitingConfirmation?&#x27;查看当前排练表&#x27;:state.hasChanges?&#x27;查看 2 场变动&#x27;:&#x27;订阅到手机日历&#x27;,state.awaitingConfirmation||state.hasChanges?&#x27;schedule&#x27;:&#x27;subscribe&#x27;,&#x27;有临时安排？仍可修改已提交的空闲时间。&#x27;):footer(waiting?&#x27;修改空闲时间&#x27;:&#x27;去填写空闲时间&#x27;,&#x27;availability&#x27;,waiting?&#x27;提交后仍可修改。&#x27;:&#x27;大约 2 分钟 · 支持连续涂格、复制上一天&#x27;);
+    return `&lt;main class=&quot;rm-content&quot;&gt;&lt;div class=&quot;rm-kicker&quot;&gt;你好，衿&lt;/div&gt;&lt;h2&gt;我的首页&lt;/h2&gt;&lt;p class=&quot;rm-lead&quot;&gt;今天，只要处理这一件事。&lt;/p&gt;${notification()}&lt;article class=&quot;rm-card&quot;&gt;&lt;div class=&quot;rm-card-top&quot;&gt;&lt;span class=&quot;rm-small&quot;&gt;秋日舞台公演&lt;/span&gt;&lt;span class=&quot;rm-tag ${state.hasChanges||state.awaitingConfirmation?&#x27;rm-warm&#x27;:&#x27;&#x27;}&quot;&gt;${status}&lt;/span&gt;&lt;/div&gt;&lt;h3&gt;${heading}&lt;/h3&gt;${inside}&lt;/article&gt;${published?&#x27;&lt;button type=&quot;button&quot; class=&quot;rm-link&quot; data-action=&quot;availability&quot;&gt;修改空闲时间&lt;/button&gt;&#x27;:&#x27;&#x27;}&lt;/main&gt;${main}${nav()}`;
+  }
+  function dates() {const start=Math.min(Math.max(state.day-2,0),11);return `&lt;div class=&quot;rm-dates&quot; aria-label=&quot;日期选择，可横向滑动&quot;&gt;&lt;button type=&quot;button&quot; data-action=&quot;day-prev&quot; aria-label=&quot;前一天&quot; ${state.day===0?&#x27;disabled&#x27;:&#x27;&#x27;}&gt;‹&lt;/button&gt;${Array.from({length:5},(_,i)=&gt;{const d=start+i;return `&lt;button type=&quot;button&quot; data-day=&quot;${d}&quot; aria-pressed=&quot;${d===state.day}&quot;&gt;&lt;span&gt;${d===15?&#x27;评估&#x27;:`周${weekdays[d%7]}`}&lt;/span&gt;&lt;strong&gt;9/${d+4}&lt;/strong&gt;&lt;span&gt;${state.filled.includes(d)?&#x27;已填&#x27;:&#x27;·&#x27;}&lt;/span&gt;&lt;/button&gt;`;}).join(&#x27;&#x27;)}&lt;button type=&quot;button&quot; data-action=&quot;day-next&quot; aria-label=&quot;后一天&quot; ${state.day===15?&#x27;disabled&#x27;:&#x27;&#x27;}&gt;›&lt;/button&gt;&lt;/div&gt;`;}
+  function availability() {
+    const editing=state.status!==&#x27;pending&#x27;;
+    return `&lt;main class=&quot;rm-content&quot;&gt;${back()}&lt;div class=&quot;rm-heading-row&quot;&gt;&lt;h2&gt;填空闲时间&lt;/h2&gt;&lt;span class=&quot;rm-count&quot; id=&quot;rm-filled&quot;&gt;已填 ${state.filled.length} / 16 天&lt;/span&gt;&lt;/div&gt;&lt;p class=&quot;rm-lead&quot;&gt;选一种画笔，点一下或按住滑过时段。&lt;/p&gt;${editing?&#x27;&lt;div class=&quot;rm-notice&quot;&gt;修改后需重新提交，排练表可能受影响。&lt;/div&gt;&#x27;:&#x27;&#x27;}${dates()}${state.day===15?&#x27;&lt;div class=&quot;rm-notice&quot;&gt;9/19 是全员评估日，只需 2–3 小时。请尽量留出连续时段。&lt;/div&gt;&#x27;:&#x27;&#x27;}&lt;div class=&quot;rm-brushes&quot; aria-label=&quot;空闲状态画笔&quot;&gt;${Object.entries(names).map(([v,n])=&gt;`&lt;button type=&quot;button&quot; data-brush=&quot;${v}&quot; aria-pressed=&quot;${state.brush===v}&quot;&gt;&lt;span class=&quot;rm-dot ${v}&quot;&gt;&lt;/span&gt;${n}&lt;/button&gt;`).join(&#x27;&#x27;)}&lt;/div&gt;&lt;div class=&quot;rm-quick&quot;&gt;&lt;button type=&quot;button&quot; class=&quot;rm-link&quot; data-action=&quot;copy-day&quot; ${state.day===0?&#x27;disabled&#x27;:&#x27;&#x27;}&gt;复制上一天&lt;/button&gt;&lt;button type=&quot;button&quot; class=&quot;rm-link&quot; data-action=&quot;all-free&quot;&gt;全天可排&lt;/button&gt;&lt;button type=&quot;button&quot; class=&quot;rm-link&quot; data-action=&quot;all-busy&quot;&gt;全天不可排&lt;/button&gt;&lt;/div&gt;&lt;div class=&quot;rm-hours&quot; aria-label=&quot;当天 13 个小时的空闲状态&quot;&gt;${state.days[state.day].map((v,i)=&gt;`&lt;div class=&quot;rm-hour&quot;&gt;&lt;span class=&quot;rm-time&quot;&gt;${i+10}:00–${i+11}:00&lt;/span&gt;&lt;button type=&quot;button&quot; class=&quot;rm-slot&quot; data-slot=&quot;${i}&quot; data-value=&quot;${v}&quot; aria-label=&quot;9 月 ${state.day+4} 日 ${i+10}:00 至 ${i+11}:00，${names[v]}&quot;&gt;${names[v]}&lt;/button&gt;&lt;/div&gt;`).join(&#x27;&#x27;)}&lt;/div&gt;${error?`&lt;p class=&quot;rm-error&quot; role=&quot;alert&quot;&gt;${error}&lt;/p&gt;`:&#x27;&#x27;}&lt;/main&gt;${footer(editing?&#x27;重新提交&#x27;:&#x27;提交空闲时间&#x27;,&#x27;submit&#x27;,`${16-state.filled.length} 天未填写，将按「${names[state.defaultMode]}」提交。`)}${nav()}`;
+  }
+  function schedule() {
+    if(state.publishedVersion===0) return `&lt;main class=&quot;rm-content&quot;&gt;${back()}&lt;h2&gt;我的排练表&lt;/h2&gt;&lt;p class=&quot;rm-lead&quot;&gt;秋日舞台公演&lt;/p&gt;&lt;article class=&quot;rm-card&quot;&gt;&lt;span class=&quot;rm-tag&quot;&gt;尚未发布&lt;/span&gt;&lt;h3 style=&quot;margin-top:18px&quot;&gt;排练表正在准备中&lt;/h3&gt;&lt;p class=&quot;rm-card-copy&quot;&gt;${state.status===&#x27;pending&#x27;?&#x27;先填好你的空闲时间，管理员才能安排排练。&#x27;:&#x27;你的空闲时间已提交，管理员发布后会在这里显示。&#x27;}&lt;/p&gt;&lt;/article&gt;&lt;/main&gt;${footer(state.status===&#x27;pending&#x27;?&#x27;去填写&#x27;:&#x27;返回首页&#x27;,state.status===&#x27;pending&#x27;?&#x27;availability&#x27;:&#x27;home&#x27;)}${nav()}`;
+    let last=&#x27;&#x27;;const list=sessions.map(s=&gt;{let title=s.date!==last?`&lt;div class=&quot;rm-date-title&quot;&gt;&lt;span&gt;${s.date} · ${s.day}&lt;/span&gt;&lt;span&gt;${sessions.filter(x=&gt;x.date===s.date).length} 场&lt;/span&gt;&lt;/div&gt;`:&#x27;&#x27;;last=s.date;return title+oneSession(s);}).join(&#x27;&#x27;);
+    return `&lt;main class=&quot;rm-content&quot;&gt;${back()}&lt;div class=&quot;rm-heading-row&quot;&gt;&lt;h2&gt;我的排练表&lt;/h2&gt;&lt;span class=&quot;rm-tag&quot;&gt;已发布 v${state.publishedVersion}&lt;/span&gt;&lt;/div&gt;&lt;p class=&quot;rm-lead&quot;&gt;秋日舞台公演 · 8 场 · 以这里的时间为准&lt;/p&gt;${state.awaitingConfirmation?&#x27;&lt;div class=&quot;rm-notice&quot;&gt;空闲已更新，等待管理员确认。当前排练表可能受影响，确认后将发布新版本。&lt;/div&gt;&#x27;:&#x27;&#x27;}${state.hasChanges?&#x27;&lt;div class=&quot;rm-notice&quot;&gt;有 2 场变动，已在列表中高亮标出。&lt;/div&gt;&#x27;:&#x27;&#x27;}&lt;section class=&quot;rm-evaluation&quot;&gt;&lt;strong&gt;全员评估 · 9/19 周六&lt;/strong&gt;&lt;p&gt;你的到场时段：14:00–17:00&lt;/p&gt;&lt;p class=&quot;rm-small&quot;&gt;请提前到场，准备完整走台。&lt;/p&gt;&lt;/section&gt;${list}&lt;button type=&quot;button&quot; class=&quot;rm-link&quot; data-action=&quot;availability&quot;&gt;临时有变？修改空闲时间&lt;/button&gt;&lt;/main&gt;${footer(&#x27;添加到手机日历&#x27;,&#x27;subscribe&#x27;,&#x27;订阅后，新发布的排练安排会同步到日历。&#x27;)}${nav()}`;
+  }
+  function auth(invite) {return `&lt;main class=&quot;rm-content&quot;&gt;${invite?&#x27;&lt;div class=&quot;rm-kicker&quot;&gt;秋日舞台公演 · 成员邀请&lt;/div&gt;&#x27;:&#x27;&lt;div class=&quot;rm-kicker&quot;&gt;Season · 舞团排练排程&lt;/div&gt;&#x27;}&lt;h2&gt;${invite?&#x27;你好，衿&#x27;:&#x27;欢迎回来&#x27;}&lt;/h2&gt;&lt;p class=&quot;rm-lead&quot;&gt;${invite?&#x27;为自己设置一个账号，就可以填写空闲了。&#x27;:&#x27;登录后，继续你的演出准备。&#x27;}&lt;/p&gt;&lt;form class=&quot;rm-form&quot; id=&quot;rm-auth-form&quot; autocomplete=&quot;off&quot;&gt;&lt;label for=&quot;rm-username&quot;&gt;用户名&lt;input id=&quot;rm-username&quot; name=&quot;username&quot; placeholder=&quot;${invite?&#x27;设置用户名&#x27;:&#x27;输入用户名&#x27;}&quot; autocapitalize=&quot;none&quot; autocomplete=&quot;off&quot;&gt;&lt;/label&gt;&lt;label for=&quot;rm-password&quot;&gt;密码&lt;input id=&quot;rm-password&quot; name=&quot;password&quot; type=&quot;password&quot; placeholder=&quot;${invite?&#x27;设置密码&#x27;:&#x27;输入密码&#x27;}&quot; autocomplete=&quot;off&quot;&gt;&lt;/label&gt;&lt;/form&gt;${error?`&lt;p class=&quot;rm-error&quot; role=&quot;alert&quot;&gt;${error}&lt;/p&gt;`:&#x27;&#x27;}&lt;p class=&quot;rm-meta&quot;&gt;${invite?&#x27;绑定成员：衿 · 由管理员发出邀请&#x27;:&#x27;忘记密码请找管理员重置。&lt;br&gt;连续 5 次密码错误，需等待 15 分钟再试。&#x27;}&lt;/p&gt;&lt;/main&gt;${footer(invite?&#x27;设置账号，开始填空闲&#x27;:&#x27;登录&#x27;,&#x27;auth&#x27;,invite?&#x27;演示中不会创建真实账号。&#x27;:&#x27;演示中填写任意用户名和密码即可进入。&#x27;)}`;}
+  function account() {return `&lt;main class=&quot;rm-content&quot;&gt;${back()}&lt;h2&gt;账号&lt;/h2&gt;${notification()}&lt;div class=&quot;rm-profile&quot;&gt;&lt;div class=&quot;rm-avatar&quot;&gt;衿&lt;/div&gt;&lt;div&gt;&lt;h3&gt;衿&lt;/h3&gt;&lt;p class=&quot;rm-small&quot;&gt;成员账号 · 已开通&lt;/p&gt;&lt;/div&gt;&lt;/div&gt;&lt;div class=&quot;rm-setting&quot;&gt;&lt;span&gt;用户名&lt;/span&gt;&lt;span&gt;jin&lt;/span&gt;&lt;/div&gt;&lt;div class=&quot;rm-setting&quot;&gt;&lt;span&gt;当前演出&lt;/span&gt;&lt;span&gt;秋日舞台公演&lt;/span&gt;&lt;/div&gt;&lt;p class=&quot;rm-meta&quot;&gt;需要更改密码？请联系管理员重置。&lt;/p&gt;&lt;/main&gt;${footer(&#x27;退出登录&#x27;,&#x27;logout&#x27;)}${nav()}`;}
+  function subscribe() {return `&lt;main class=&quot;rm-content&quot;&gt;${back(&#x27;返回排练表&#x27;,&#x27;schedule&#x27;)}&lt;h2&gt;添加到手机日历&lt;/h2&gt;&lt;p class=&quot;rm-lead&quot;&gt;订阅一次，跟随管理员发布的版本更新。&lt;/p&gt;&lt;div class=&quot;rm-subscribe&quot;&gt;&lt;section&gt;&lt;h3&gt;iPhone&lt;/h3&gt;&lt;p&gt;在日历里添加「订阅日历」，粘贴管理员提供的订阅链接，再设置排练前提醒。&lt;/p&gt;&lt;/section&gt;&lt;section&gt;&lt;h3&gt;Android&lt;/h3&gt;&lt;p&gt;在支持订阅网址的日历应用里添加订阅；具体入口随日历应用而异。&lt;/p&gt;&lt;/section&gt;&lt;/div&gt;&lt;div class=&quot;rm-notice rm-calm&quot;&gt;此草图仅展示订阅流程。正式发布后，这里提供你的专属订阅链接。&lt;/div&gt;${button(&#x27;复制订阅链接&#x27;,&#x27;copy-subscription&#x27;,false,&#x27;rm-full&#x27;)}&lt;p class=&quot;rm-small&quot; style=&quot;margin-top:10px&quot;&gt;示例尚未接入日历，暂不提供可用链接。&lt;/p&gt;${notification()}&lt;/main&gt;${footer(&#x27;完成&#x27;,&#x27;schedule&#x27;)}${nav()}`;}
+  function render() {
+    phone.style.borderRadius=`${state.radius}px`;
+    viewSelect.value=state.view===&#x27;subscribe&#x27;?&#x27;schedule&#x27;:state.view;
+    statusSelect.value=state.status;
+    screen.innerHTML=state.view===&#x27;home&#x27;?home():state.view===&#x27;availability&#x27;?availability():state.view===&#x27;schedule&#x27;?schedule():state.view===&#x27;invite&#x27;?auth(true):state.view===&#x27;login&#x27;?auth(false):state.view===&#x27;account&#x27;?account():subscribe();
+    const form=root.querySelector(&#x27;#rm-auth-form&#x27;);if(form)form.addEventListener(&#x27;submit&#x27;,e=&gt;{e.preventDefault();authenticate();});
+  }
+  function markDay(){if(!state.filled.includes(state.day))state.filled.push(state.day);}
+  function paint(slot) {
+    if(slot&lt;0||slot&gt;12||slot===lastSlot)return;
+    lastSlot=slot;state.days[state.day][slot]=state.brush;markDay();error=&#x27;&#x27;;
+    const cell=root.querySelector(`[data-slot=&quot;${slot}&quot;]`);
+    if(cell){cell.dataset.value=state.brush;cell.textContent=names[state.brush];cell.setAttribute(&#x27;aria-label&#x27;,`9 月 ${state.day+4} 日 ${slot+10}:00 至 ${slot+11}:00，${names[state.brush]}`);}
+    const count=root.querySelector(&#x27;#rm-filled&#x27;);if(count)count.textContent=`已填 ${state.filled.length} / 16 天`;
+  }
+  function authenticate(){const user=root.querySelector(&#x27;#rm-username&#x27;),password=root.querySelector(&#x27;#rm-password&#x27;);if(!user.value.trim()||!password.value){error=&#x27;请填写用户名和密码。&#x27;;const old=root.querySelector(&#x27;.rm-error&#x27;);if(old)old.textContent=error;else{const p=document.createElement(&#x27;p&#x27;);p.className=&#x27;rm-error&#x27;;p.setAttribute(&#x27;role&#x27;,&#x27;alert&#x27;);p.textContent=error;root.querySelector(&#x27;#rm-auth-form&#x27;).after(p);}return;}password.value=&#x27;&#x27;;state.view=state.view===&#x27;invite&#x27;?&#x27;availability&#x27;:&#x27;home&#x27;;error=&#x27;&#x27;;notice=&#x27;&#x27;;render();save();}
+  function go(view){state.view=view;notice=&#x27;&#x27;;error=&#x27;&#x27;;render();save();}
+  root.addEventListener(&#x27;click&#x27;,e=&gt;{
+    const day=e.target.closest(&#x27;[data-day]&#x27;);if(day){state.day=Number(day.dataset.day);render();save();return;}
+    const brush=e.target.closest(&#x27;[data-brush]&#x27;);if(brush){state.brush=brush.dataset.brush;render();save();return;}
+    const slot=e.target.closest(&#x27;[data-slot]&#x27;);if(slot&amp;&amp;e.detail===0){lastSlot=-1;paint(Number(slot.dataset.slot));render();save();return;}
+    const trigger=e.target.closest(&#x27;[data-action]&#x27;);if(!trigger||trigger.disabled)return;
+    const action=trigger.dataset.action;
+    if(allowedViews.includes(action)){go(action);return;}
+    if(action===&#x27;day-prev&#x27;||action===&#x27;day-next&#x27;){state.day=Math.max(0,Math.min(15,state.day+(action===&#x27;day-prev&#x27;?-1:1)));}
+    else if(action===&#x27;all-free&#x27;||action===&#x27;all-busy&#x27;){state.days[state.day]=Array(13).fill(action===&#x27;all-free&#x27;?&#x27;free&#x27;:&#x27;busy&#x27;);markDay();}
+    else if(action===&#x27;copy-day&#x27;){if(state.day&gt;0){state.days[state.day]=[...state.days[state.day-1]];markDay();}}
+    else if(action===&#x27;submit&#x27;){
+      if(state.filled.length===0){error=&#x27;请先填写至少一天的空闲时间。&#x27;;render();return;}
+      const changed=state.publishedVersion&gt;0;
+      state.awaitingConfirmation=changed;state.status=&#x27;submitted&#x27;;state.view=&#x27;home&#x27;;
+      notice=changed?&#x27;空闲时间已更新。当前排练表可能受影响，请等待管理员确认。&#x27;:&#x27;空闲时间已提交，等待管理员安排排练。&#x27;;
+    } else if(action===&#x27;auth&#x27;){authenticate();return;}
+    else if(action===&#x27;logout&#x27;){go(&#x27;login&#x27;);return;}
+    else if(action===&#x27;copy-subscription&#x27;){notice=&#x27;草图尚无可复制的订阅地址。正式版会在此复制你的专属链接。&#x27;;}
+    render();save();
+  });
+  root.addEventListener(&#x27;pointerdown&#x27;,e=&gt;{const slot=e.target.closest(&#x27;[data-slot]&#x27;);if(slot){drawing=true;lastSlot=-1;paint(Number(slot.dataset.slot));e.preventDefault();}const strip=e.target.closest(&#x27;.rm-dates&#x27;);if(strip)swipeStart={x:e.clientX,y:e.clientY};});
+  root.addEventListener(&#x27;pointermove&#x27;,e=&gt;{if(!drawing)return;const at=document.elementFromPoint(e.clientX,e.clientY);const slot=at?.closest(&#x27;[data-slot]&#x27;);if(slot&amp;&amp;root.contains(slot))paint(Number(slot.dataset.slot));});
+  window.addEventListener(&#x27;pointerup&#x27;,e=&gt;{if(drawing){drawing=false;lastSlot=-1;render();save();}if(swipeStart){const dx=e.clientX-swipeStart.x,dy=e.clientY-swipeStart.y;if(Math.abs(dx)&gt;35&amp;&amp;Math.abs(dx)&gt;Math.abs(dy)){state.day=Math.max(0,Math.min(15,state.day+(dx&lt;0?1:-1)));render();save();}swipeStart=null;}});
+  window.addEventListener(&#x27;pointercancel&#x27;,()=&gt;{if(drawing){drawing=false;lastSlot=-1;render();save();}swipeStart=null;});
+  viewSelect.addEventListener(&#x27;change&#x27;,()=&gt;go(viewSelect.value));
+  statusSelect.addEventListener(&#x27;change&#x27;,()=&gt;{state.status=statusSelect.value;state.publishedVersion=state.status===&#x27;changed&#x27;?2:state.status===&#x27;published&#x27;?1:0;state.hasChanges=state.status===&#x27;changed&#x27;;state.awaitingConfirmation=false;notice=&#x27;&#x27;;error=&#x27;&#x27;;render();save();});
+  render();
+  if(globalThis.Tweak){
+    let oldDefault=state.defaultMode;
+    const tweak=new Tweak({container:phone,onChange:()=&gt;{if(oldDefault!==state.defaultMode){state.days=state.days.map((d,i)=&gt;state.filled.includes(i)?d:Array(13).fill(state.defaultMode));oldDefault=state.defaultMode;}render();}});
+    tweak.addSelect(state,&#x27;defaultMode&#x27;,{label:&#x27;填报模式对比&#x27;,options:[{label:&#x27;全部不可排 · 当前方案&#x27;,value:&#x27;busy&#x27;},{label:&#x27;全部可排 · 对比方案&#x27;,value:&#x27;free&#x27;}]});
+    tweak.addSlider(state,&#x27;radius&#x27;,{label:&#x27;手机界面圆角&#x27;,min:12,max:32,step:2,unit:&#x27;px&#x27;});
+  }
+})();
+&lt;/script&gt;
+
+&lt;script src=&quot;https://unpkg.com/@floating-ui/core@1.7.3/dist/floating-ui.core.umd.min.js&quot;&gt;&lt;/script&gt;
+&lt;script src=&quot;https://unpkg.com/@floating-ui/dom@1.7.4/dist/floating-ui.dom.umd.min.js&quot;&gt;&lt;/script&gt;
+&lt;script&gt;
+(() =&gt; {
+  if (window.FloatingUIDOM == null) {
+    return;
+  }
+  const { autoUpdate, computePosition, flip, offset, shift, size } =
+    window.FloatingUIDOM;
+  const tooltipPlacements = new Set([&quot;top&quot;, &quot;right&quot;, &quot;bottom&quot;, &quot;left&quot;]);
+  const tooltipId = `codex-visualization-tooltip-${
+    window.crypto?.randomUUID?.() ?? Date.now().toString(36)
+  }`;
+  const tooltipGap = 5;
+  const hoverDelay = 700;
+  const skipDelay = 300;
+  let activeTrigger = null;
+  let pendingTrigger = null;
+  let tooltip = null;
+  let openTimeout = null;
+  let autoUpdateCleanup = null;
+  let positionRequest = 0;
+  let skipDelayUntil = 0;
+  let lastPointerWasTouch = false;
+  let pinnedByTouch = false;
+
+  const getTrigger = (target) =&gt;
+    target?.nodeType === Node.ELEMENT_NODE
+      ? target.closest(&quot;[data-tooltip]&quot;)
+      : null;
+  const containsTarget = (trigger, target) =&gt;
+    target?.nodeType != null &amp;&amp; trigger.contains(target);
+  const getContent = (trigger) =&gt;
+    trigger.getAttribute(&quot;data-tooltip&quot;)?.trim() ?? &quot;&quot;;
+  const getPlacement = (trigger) =&gt; {
+    const placement = trigger.getAttribute(&quot;data-tooltip-placement&quot;);
+    return tooltipPlacements.has(placement) ? placement : &quot;top&quot;;
+  };
+  const getTooltip = () =&gt; {
+    if (tooltip == null) {
+      tooltip = document.createElement(&quot;div&quot;);
+      tooltip.id = tooltipId;
+      tooltip.className = &quot;tooltip&quot;;
+      tooltip.setAttribute(&quot;role&quot;, &quot;tooltip&quot;);
+    }
+    return tooltip;
+  };
+  const setDescribedBy = (trigger, described) =&gt; {
+    const ids = new Set(
+      (trigger.getAttribute(&quot;aria-describedby&quot;) ?? &quot;&quot;)
+        .split(/\s+/)
+        .filter(Boolean),
+    );
+    if (described) {
+      ids.add(tooltipId);
+    } else {
+      ids.delete(tooltipId);
+    }
+    if (ids.size === 0) {
+      trigger.removeAttribute(&quot;aria-describedby&quot;);
+    } else {
+      trigger.setAttribute(&quot;aria-describedby&quot;, [...ids].join(&quot; &quot;));
+    }
+  };
+  const clearOpenTimeout = () =&gt; {
+    if (openTimeout != null) {
+      window.clearTimeout(openTimeout);
+      openTimeout = null;
+    }
+    pendingTrigger = null;
+  };
+  const closeTooltip = (activateSkipDelay = true) =&gt; {
+    clearOpenTimeout();
+    pinnedByTouch = false;
+    positionRequest += 1;
+    autoUpdateCleanup?.();
+    autoUpdateCleanup = null;
+    if (activeTrigger == null) {
+      return;
+    }
+    setDescribedBy(activeTrigger, false);
+    activeTrigger = null;
+    tooltip?.remove();
+    if (activateSkipDelay) {
+      skipDelayUntil = Date.now() + skipDelay;
+    }
+  };
+  const updatePosition = (trigger, floating) =&gt; {
+    const request = ++positionRequest;
+    void computePosition(trigger, floating, {
+      middleware: [
+        offset(tooltipGap),
+        flip({ padding: tooltipGap }),
+        shift({ padding: tooltipGap }),
+        size({
+          padding: tooltipGap,
+          apply({ availableHeight, availableWidth, elements }) {
+            elements.floating.style.setProperty(
+              &quot;--tooltip-available-width&quot;,
+              `${Math.max(0, availableWidth)}px`,
+            );
+            elements.floating.style.setProperty(
+              &quot;--tooltip-available-height&quot;,
+              `${Math.max(0, availableHeight)}px`,
+            );
+          },
+        }),
+      ],
+      placement: getPlacement(trigger),
+      strategy: &quot;fixed&quot;,
+    })
+      .then(({ x, y }) =&gt; {
+        if (activeTrigger !== trigger || request !== positionRequest) {
+          return;
+        }
+        const scale = window.devicePixelRatio || 1;
+        floating.style.transform = `translate(${Math.round(x * scale) / scale}px, ${Math.round(y * scale) / scale}px)`;
+        floating.style.visibility = &quot;visible&quot;;
+      })
+      .catch(() =&gt; {
+        if (activeTrigger === trigger &amp;&amp; request === positionRequest) {
+          closeTooltip(false);
+        }
+      });
+  };
+  const openTooltip = (trigger) =&gt; {
+    const content = getContent(trigger);
+    if (!trigger.isConnected || content.length === 0) {
+      return;
+    }
+    clearOpenTimeout();
+    if (activeTrigger === trigger) {
+      return;
+    }
+    closeTooltip();
+    const floating = getTooltip();
+    floating.textContent = content;
+    floating.style.visibility = &quot;hidden&quot;;
+    floating.style.transform = &quot;translate(0, 0)&quot;;
+    document.body.appendChild(floating);
+    activeTrigger = trigger;
+    setDescribedBy(trigger, true);
+    autoUpdateCleanup = autoUpdate(trigger, floating, () =&gt; {
+      updatePosition(trigger, floating);
+    });
+  };
+  const requestOpen = (trigger, immediate = false) =&gt; {
+    if (
+      getContent(trigger).length === 0 ||
+      activeTrigger === trigger ||
+      pendingTrigger === trigger
+    ) {
+      return;
+    }
+    clearOpenTimeout();
+    pendingTrigger = trigger;
+    const delay =
+      immediate || activeTrigger != null || Date.now() &lt; skipDelayUntil
+        ? 0
+        : hoverDelay;
+    if (delay === 0) {
+      openTooltip(trigger);
+      return;
+    }
+    openTimeout = window.setTimeout(() =&gt; {
+      openTimeout = null;
+      pendingTrigger = null;
+      openTooltip(trigger);
+    }, delay);
+  };
+  const handlePointerOpen = (event) =&gt; {
+    if (event.pointerType === &quot;touch&quot;) {
+      return;
+    }
+    const trigger = getTrigger(event.target);
+    if (trigger == null || containsTarget(trigger, event.relatedTarget)) {
+      return;
+    }
+    requestOpen(trigger);
+  };
+  const handlePointer = (event) =&gt; {
+    lastPointerWasTouch =
+      event.type === &quot;pointerdown&quot; &amp;&amp; event.pointerType === &quot;touch&quot;;
+  };
+  const handleTouchClick = (event) =&gt; {
+    const isTouch = event.pointerType === &quot;touch&quot; || lastPointerWasTouch;
+    lastPointerWasTouch = false;
+    if (!isTouch || event.detail === 0) {
+      return;
+    }
+    const trigger = getTrigger(event.target);
+    if (
+      trigger == null ||
+      !trigger.isConnected ||
+      getContent(trigger).length === 0 ||
+      (pinnedByTouch &amp;&amp; activeTrigger === trigger)
+    ) {
+      if (pinnedByTouch) {
+        closeTooltip();
+      }
+      return;
+    }
+    openTooltip(trigger);
+    pinnedByTouch = activeTrigger === trigger;
+    window.setTimeout(() =&gt; {
+      if (activeTrigger === trigger &amp;&amp; !trigger.isConnected) {
+        closeTooltip(false);
+      }
+    }, 0);
+  };
+  const handleLeave = (event) =&gt; {
+    if (pinnedByTouch) {
+      return;
+    }
+    const trigger = getTrigger(event.target);
+    if (trigger == null || containsTarget(trigger, event.relatedTarget)) {
+      return;
+    }
+    if (activeTrigger === trigger || pendingTrigger === trigger) {
+      closeTooltip();
+    }
+  };
+  const handleFocusIn = (event) =&gt; {
+    const trigger = getTrigger(event.target);
+    if (trigger?.matches(&quot;:focus-visible&quot;)) {
+      requestOpen(trigger, true);
+    }
+  };
+  const handleKeyDown = (event) =&gt; {
+    if (event.key === &quot;Escape&quot;) {
+      closeTooltip();
+    }
+  };
+  const handleContextMenu = (event) =&gt; {
+    lastPointerWasTouch = false;
+    const trigger = getTrigger(event.target);
+    if (activeTrigger === trigger || pendingTrigger === trigger) {
+      closeTooltip();
+    }
+  };
+  const destroy = () =&gt; {
+    closeTooltip(false);
+    lastPointerWasTouch = false;
+    document.removeEventListener(&quot;pointerover&quot;, handlePointerOpen);
+    document.removeEventListener(&quot;pointerdown&quot;, handlePointer);
+    document.removeEventListener(&quot;pointercancel&quot;, handlePointer);
+    document.removeEventListener(&quot;click&quot;, handleTouchClick);
+    document.removeEventListener(&quot;pointerout&quot;, handleLeave);
+    document.removeEventListener(&quot;focusin&quot;, handleFocusIn);
+    document.removeEventListener(&quot;focusout&quot;, handleLeave);
+    document.removeEventListener(&quot;keydown&quot;, handleKeyDown);
+    document.removeEventListener(&quot;contextmenu&quot;, handleContextMenu);
+    tooltip = null;
+  };
+
+  document.addEventListener(&quot;pointerover&quot;, handlePointerOpen);
+  document.addEventListener(&quot;pointerdown&quot;, handlePointer);
+  document.addEventListener(&quot;pointercancel&quot;, handlePointer);
+  document.addEventListener(&quot;click&quot;, handleTouchClick);
+  document.addEventListener(&quot;pointerout&quot;, handleLeave);
+  document.addEventListener(&quot;focusin&quot;, handleFocusIn);
+  document.addEventListener(&quot;focusout&quot;, handleLeave);
+  document.addEventListener(&quot;keydown&quot;, handleKeyDown);
+  document.addEventListener(&quot;contextmenu&quot;, handleContextMenu);
+  window.addEventListener(&quot;pagehide&quot;, destroy, { once: true });
+})();
+&lt;/script&gt;
+&lt;script id=&quot;codex-visualization-tabs&quot;&gt;
+(() =&gt; {
+  const selector = &#x27;.nav[role=&quot;tablist&quot;] [role=&quot;tab&quot;]&#x27;;
+  const disabled = &#x27;:disabled,[aria-disabled=&quot;true&quot;]&#x27;;
+  const selectTab = (selected) =&gt; {
+    const panelId = selected.getAttribute(&quot;aria-controls&quot;);
+    for (const tab of selected.closest(&#x27;[role=&quot;tablist&quot;]&#x27;).querySelectorAll(&#x27;[role=&quot;tab&quot;]&#x27;)) {
+      const active = tab === selected;
+      tab.classList.toggle(&quot;active&quot;, active);
+      tab.setAttribute(&quot;aria-selected&quot;, String(active));
+      const id = tab.getAttribute(&quot;aria-controls&quot;);
+      const panel = id &amp;&amp; document.getElementById(id);
+      if (panel != null) {
+        panel.hidden = id !== panelId;
+        if (!panel.hidden &amp;&amp; selected.id) {
+          panel.setAttribute(&quot;aria-labelledby&quot;, selected.id);
+        }
+      }
+    }
+  };
+  const interact = (event) =&gt; {
+    const tab = event.target?.closest?.(selector);
+    if (event.defaultPrevented || tab == null || tab.matches(disabled)) {
+      return;
+    }
+    if (event.type === &quot;click&quot;) {
+      selectTab(tab);
+      return;
+    }
+    const tabs = Array.from(
+      tab.closest(&#x27;[role=&quot;tablist&quot;]&#x27;).querySelectorAll(&#x27;[role=&quot;tab&quot;]&#x27;),
+    ).filter((candidate) =&gt; !candidate.matches(disabled));
+    const current = tabs.indexOf(tab);
+    let next;
+    if (event.key === &quot;ArrowRight&quot; || event.key === &quot;ArrowDown&quot;) {
+      next = (current + 1) % tabs.length;
+    } else if (event.key === &quot;ArrowLeft&quot; || event.key === &quot;ArrowUp&quot;) {
+      next = (current + tabs.length - 1) % tabs.length;
+    } else if (event.key === &quot;Home&quot;) {
+      next = 0;
+    } else if (event.key === &quot;End&quot;) {
+      next = tabs.length - 1;
+    } else {
+      return;
+    }
+    event.preventDefault();
+    tabs[next].focus();
+    selectTab(tabs[next]);
+  };
+
+  for (const list of document.querySelectorAll(&#x27;.nav[role=&quot;tablist&quot;]&#x27;)) {
+    const selected =
+      list.querySelector(&#x27;[role=&quot;tab&quot;][aria-selected=&quot;true&quot;]&#x27;) ??
+      list.querySelector(&#x27;[role=&quot;tab&quot;].active&#x27;) ??
+      list.querySelector(&#x27;[role=&quot;tab&quot;]&#x27;);
+    if (selected != null) {
+      selectTab(selected);
+    }
+  }
+  document.addEventListener(&quot;click&quot;, interact);
+  document.addEventListener(&quot;keydown&quot;, interact);
+  window.addEventListener(&quot;pagehide&quot;, () =&gt; {
+    document.removeEventListener(&quot;click&quot;, interact);
+    document.removeEventListener(&quot;keydown&quot;, interact);
+  }, { once: true });
+})();
+&lt;/script&gt;
+&lt;script id=&quot;codex-visualization-lucide&quot; async src=&quot;https://unpkg.com/lucide@1.17.0/dist/umd/lucide.js&quot;&gt;&lt;/script&gt;
+&lt;script&gt;
+(() =&gt; {
+  const initialize = () =&gt; {
+    globalThis.lucide?.createIcons({ attrs: { width: 16, height: 16 } });
+  };
+  if (globalThis.lucide != null) {
+    initialize();
+    return;
+  }
+  document
+    .getElementById(&quot;codex-visualization-lucide&quot;)
+    ?.addEventListener(&quot;load&quot;, initialize, { once: true });
+})();
+&lt;/script&gt;
+
+&lt;/body&gt;
+&lt;/html&gt;
+"></iframe>
+<script>(() => {
+  const frame = document.getElementById("codex-visualization");
+  if (!(frame instanceof HTMLIFrameElement)) {
+    return;
+  }
+  let viewportHeight = globalThis.innerHeight;
+  const storageKey = `codex:visualization-widget-state-v2:${JSON.stringify([
+    globalThis.location.pathname,
+    globalThis.location.search,
+  ])}`;
+  const parseState = (serializedState) => {
+    if (
+      typeof serializedState !== "string" ||
+      new TextEncoder().encode(serializedState).length > 16 * 1024
+    ) {
+      throw new TypeError(
+        "Widget state must be a JSON object of at most 16 KiB",
+      );
+    }
+    /** @type {unknown} */
+    const state = JSON.parse(serializedState);
+    if (
+      state == null ||
+      typeof state !== "object" ||
+      Array.isArray(state) ||
+      ("imageIds" in state &&
+        (!Array.isArray(state.imageIds) || state.imageIds.length > 0))
+    ) {
+      throw new TypeError("Widget state must be a JSON object");
+    }
+    const storedState = { modelContent: null, privateContent: null, ...state };
+    const canonicalState = JSON.stringify(
+      storedState,
+      (_key, /** @type {unknown} */ value) => {
+        if (typeof value === "number" && !Number.isFinite(value)) {
+          throw new TypeError("Widget state must contain finite numbers");
+        }
+        return value;
+      },
+    );
+    if (new TextEncoder().encode(canonicalState).length > 16 * 1024) {
+      throw new TypeError(
+        "Widget state must be a JSON object of at most 16 KiB",
+      );
+    }
+    return storedState;
+  };
+  let storage = null;
+  let state = null;
+  try {
+    const localStorage = globalThis.localStorage;
+    const probeKey = `${storageKey}:probe`;
+    localStorage.setItem(probeKey, "1");
+    localStorage.removeItem(probeKey);
+    storage = localStorage;
+    const savedState = storage.getItem(storageKey);
+    if (savedState != null) {
+      try {
+        state = parseState(savedState);
+      } catch {
+        // Invalid saved state does not disable future writes.
+      }
+    }
+  } catch {
+    storage = null;
+  }
+  const initialGlobals = {
+    widgetState: state,
+    statePersistence: storage == null ? "none" : "local",
+  };
+
+  const channel = new MessageChannel();
+  channel.port1.addEventListener("message", (event) => {
+    const data = event.data;
+    if (typeof data !== "object" || data == null) {
+      return;
+    }
+    if (data.type === "widget-state-write") {
+      if (!Number.isSafeInteger(data.id) || data.id <= 0) {
+        return;
+      }
+      let ok = false;
+      try {
+        if (storage != null) {
+          const state = parseState(data.state);
+          storage.setItem(storageKey, JSON.stringify(state));
+          ok = true;
+        }
+      } catch {
+        // Storage denial, quota limits, and invalid state return a failed receipt.
+      }
+      channel.port1.postMessage({
+        type: "widget-state-result",
+        id: data.id,
+        ok,
+      });
+      return;
+    }
+    if (data.type === "height") {
+      const height = data.height;
+      if (
+        typeof height === "number" &&
+        Number.isFinite(height) &&
+        height >= 0 &&
+        height <= 10_000
+      ) {
+        frame.style.height = Math.ceil(height) + "px";
+      }
+      return;
+    }
+    if (data.type === "scroll-to") {
+      const top = data.top;
+      if (
+        typeof top === "number" &&
+        Number.isFinite(top) &&
+        top >= 0 &&
+        globalThis.navigator.userActivation?.isActive === true
+      ) {
+        globalThis.scrollTo({
+          top: Math.ceil(
+            globalThis.scrollY + frame.getBoundingClientRect().top + top,
+          ),
+        });
+      }
+      return;
+    }
+    if (data.type === "open-external") {
+      const rawHref = data.href;
+      if (typeof rawHref !== "string") {
+        return;
+      }
+      let href;
+      try {
+        const url = new URL(rawHref, document.baseURI);
+        if (url.protocol !== "https:") {
+          return;
+        }
+        href = url.href;
+      } catch {
+        return;
+      }
+      if (globalThis.navigator.userActivation?.isActive === true) {
+        const anchor = document.createElement("a");
+        anchor.href = href;
+        anchor.rel = "noopener noreferrer";
+        anchor.target = "_blank";
+        document.body.appendChild(anchor);
+        anchor.click();
+        anchor.remove();
+      }
+      return;
+    }
+    if (data.type === "follow-up") {
+      const prompt = data.prompt;
+      if (
+        typeof prompt !== "string" ||
+        globalThis.navigator.userActivation?.isActive !== true
+      ) {
+        return;
+      }
+      const title = data.title;
+      globalThis.prompt(typeof title === "string" ? title : prompt, prompt);
+    }
+  });
+  channel.port1.start();
+  const srcdoc = frame.dataset.srcdoc;
+  if (srcdoc == null) {
+    return;
+  }
+  globalThis.addEventListener("resize", () => {
+    const height = Number.parseFloat(frame.style.height);
+    if (!Number.isFinite(height) || height <= viewportHeight) {
+      frame.style.removeProperty("height");
+    }
+    viewportHeight = globalThis.innerHeight;
+    channel.port1.postMessage({ type: "measure" });
+  });
+  frame.addEventListener(
+    "load",
+    () => {
+      frame.contentWindow?.postMessage(
+        { type: "codex-visualization-initialize" },
+        "*",
+        [channel.port2],
+      );
+    },
+    { once: true },
+  );
+  // Match the trusted bootstrap element, not the same text in an authored title.
+  frame.srcdoc = srcdoc.replace(
+    '<script type="application/json" id="codex-visualization-widget-state">__CODEX_VISUALIZATION_WIDGET_STATE__<\/script>',
+    () =>
+      '<script type="application/json" id="codex-visualization-widget-state">' +
+      JSON.stringify(initialGlobals).replaceAll("<", "\\u003c") +
+      "<\/script>",
+  );
+  delete frame.dataset.srcdoc;
+})();
+</script>
+</body>
+</html>
