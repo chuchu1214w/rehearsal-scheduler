@@ -1,0 +1,48 @@
+{
+  "event": {
+    "performance_date": "2026-09-20",
+    "formal_start_date": "2026-09-04",
+    "day_start_hour": 10,
+    "day_end_hour": 23,
+    "soft_daily_limit": 8,
+    "hard_daily_limit": 8,
+    "merge_visit_gap": 1,
+    "free_gap": 1,
+    "eval_durations": [3, 2],
+    "eval_min_contiguous": 2,
+    "same_song_different_days": true,
+    "difficulty_templates": {"困难": [3, 3, 3], "一般": [3, 2, 2], "简单": [2, 2]},
+    "stage_time_limit": 90,
+    "workers": 8,
+    "seed": 42
+  },
+  "members": ["衿", "菁", "幸", "思", "Ash", "嘎", "Siri", "Mo", "林", "郑", "若", "颜", "娄", "诗"],
+  "songs": [
+    {"code": "a", "name": "恋爱的条件", "difficulty": "简单", "members": ["衿", "菁", "嘎", "幸"], "session_plan": [2]},
+    {"code": "b", "name": "Kiss of life-sweat", "difficulty": "一般", "members": ["Ash", "幸", "嘎", "菁"]},
+    {"code": "c", "name": "KATSEYE-ANIMAL", "difficulty": "一般", "members": ["Siri", "Mo", "幸", "思", "林"], "session_plan": [3, 2]},
+    {"code": "d", "name": "aespa-lemonadeA", "difficulty": "简单", "members": ["郑", "嘎", "幸", "Ash"]},
+    {"code": "e", "name": "aespa-lemonadeB", "difficulty": "简单", "members": ["菁", "Mo", "Siri", "若"]},
+    {"code": "f", "name": "thatsnono", "difficulty": "简单", "members": ["Siri", "娄", "诗", "若", "思"]},
+    {"code": "g", "name": "rescene-pretty girl", "difficulty": "简单", "members": ["郑", "衿", "若"]},
+    {"code": "h", "name": "少时-说出愿望吧", "difficulty": "简单", "members": ["衿", "郑", "菁", "Mo", "若", "林"]},
+    {"code": "i", "name": "itzy-kill shot", "difficulty": "简单", "members": ["娄", "衿", "思", "若"]},
+    {"code": "j", "name": "BTS-ineedu", "difficulty": "困难", "members": ["思", "林", "菁", "Ash", "颜"]},
+    {"code": "k", "name": "blackpink-玩火", "difficulty": "简单", "members": ["菁", "Siri", "若", "嘎"]},
+    {"code": "l", "name": "aespa-kissntell", "difficulty": "一般", "members": ["郑", "Siri", "若", "诗"], "session_plan": [3, 2]}
+  ],
+  "availability": {},
+  "rules": {
+    "blocked_slots": {},
+    "max_sessions_per_date": {},
+    "member_song_max_attendance": [{"member": "菁", "song": "e", "max": 1}],
+    "focus_members": ["菁"],
+    "fixed_sessions": []
+  },
+  "ladder": [
+    {"level": 0, "max_absent_ratio": 0.0, "per_song_min_full": null, "per_member_per_song_max_absent": 0},
+    {"level": 1, "max_absent_ratio": 0.20, "per_song_min_full": 1, "per_member_per_song_max_absent": 1},
+    {"level": 2, "max_absent_ratio": 0.25, "per_song_min_full": 1, "per_member_per_song_max_absent": 1}
+  ],
+  "objectives": ["absent", "eval_attendance", "spacing", "focus_days", "trips", "gaps", "overtime", "soft_avoid"]
+}

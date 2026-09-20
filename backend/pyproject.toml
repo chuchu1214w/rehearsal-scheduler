@@ -1,0 +1,36 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "rehearsal-scheduler-solver"
+version = "0.1.0"
+description = "舞团排练排程求解包(OR-Tools CP-SAT 字典序优化、无解诊断、校验器)"
+requires-python = ">=3.12"
+dependencies = [
+    "ortools>=9.15,<9.16",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8",
+    "ruff>=0.6",
+]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["solver*"]
+
+[tool.setuptools.package-data]
+solver = ["fixtures/*.json"]
+
+[tool.ruff]
+line-length = 140
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"

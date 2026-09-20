@@ -1,0 +1,62 @@
+/* 舞团排练排程系统 · 设计令牌(取自 logo-reference.png,见 开发文档 §7.3)
+ * 风格:泡泡糖粉的圆润气泡字 + 藏青描边与错位阴影 + 高光、星星、网点纹理。
+ * 前端(M4 起)直接引入本文件;深色模式仅调整底色与文字,不改变品牌色。 */
+:root {
+  /* 品牌色 */
+  --brand-pink-50: #fef0fb;   /* 高光、卡片底 */
+  --brand-pink-100: #fcd5f4;  /* 页面底色(logo 背景) */
+  --brand-pink-300: #f7a0d1;  /* 主按钮、强调 */
+  --brand-pink-400: #e59cc8;  /* 主色(logo 字面) */
+  --brand-pink-500: #d97ab5;  /* 悬停、深一档 */
+  --brand-navy-600: #5369af;  /* 描边、错位阴影、链接 */
+  --brand-navy-800: #2f3f78;  /* 正文标题 */
+  --brand-white: #ffffff;
+
+  /* 语义色(排练表三态、状态) */
+  --slot-available: #f7a0d1;     /* 可排 */
+  --slot-avoid: #fcd5f4;         /* 尽量避开(加斜纹) */
+  --slot-unavailable: #ecebf3;   /* 不可排 */
+  --status-ok: #4fb286;
+  --status-warn: #f2a93b;
+  --status-error: #e0557b;
+  --session-formal: #e59cc8;     /* 正规排练 */
+  --session-evaluation: #5369af; /* 全员评估 */
+  --session-absent: #f2a93b;     /* 有缺席的场次 */
+
+  /* 页面 */
+  --bg: #fcd5f4;
+  --surface: #ffffff;
+  --text: #2f3f78;
+  --text-muted: #6b6f8a;
+  --border: #5369af;
+
+  /* 形状与效果 */
+  --radius-pill: 999px;
+  --radius-card: 20px;
+  --stroke: 3px solid var(--border);
+  --offset-shadow: 4px 4px 0 var(--brand-navy-600); /* 错位实心阴影,不用模糊 */
+  --highlight: inset 3px 3px 0 rgba(255, 255, 255, 0.85); /* 泡泡高光 */
+
+  /* 字体:标题用圆润气泡感的展示字,正文用清晰无衬线 */
+  --font-display: "Baloo 2", "ZCOOL KuaiLe", "Fredoka", system-ui, sans-serif;
+  --font-body: "Noto Sans SC", "PingFang SC", system-ui, sans-serif;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #23264a;
+    --surface: #2f3468;
+    --text: #fef0fb;
+    --text-muted: #c7c4dd;
+    --border: #f7a0d1;
+    --slot-unavailable: #3a3f6e;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #23264a;
+  --surface: #2f3468;
+  --text: #fef0fb;
+  --text-muted: #c7c4dd;
+  --border: #f7a0d1;
+  --slot-unavailable: #3a3f6e;
+}
