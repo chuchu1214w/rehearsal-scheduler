@@ -39,3 +39,6 @@ build/
 
 # 求解器本地输入输出(可能含真实空闲数据)
 /backend/*.json
+
+# 由 scripts/md2pdf.py 生成的 PDF(可随时重新生成)
+/*.pdf
