@@ -26,6 +26,9 @@ MEMBER_OK = {
     ("post", "/api/events/{event_id}/availability/{member_id}/submit"),
     ("post", "/api/events/{event_id}/availability/{member_id}/unsubmit"),
     ("get", "/api/events/{event_id}/schedule/published"),
+    ("get", "/api/notifications"),
+    ("get", "/api/notifications/unread-count"),
+    ("post", "/api/notifications/read"),
     ("get", "/api/me/calendar"),
     ("post", "/api/me/calendar/rotate"),
 }

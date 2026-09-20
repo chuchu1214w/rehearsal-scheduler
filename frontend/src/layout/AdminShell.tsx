@@ -3,6 +3,7 @@ import { NavLink, Outlet, useLocation, useMatch, useNavigate } from 'react-route
 import { useEvents } from '../api/hooks'
 import { useAuth } from '../auth/AuthContext'
 import { Wordmark } from '../ui'
+import { Bell } from './Bell'
 import { IconCalendar, IconHome, IconUser } from './icons'
 
 export function AdminShell() {
@@ -18,6 +19,7 @@ export function AdminShell() {
   const isHome = eventId ? location.pathname === homeTo || (!location.pathname.includes('/schedule') && location.pathname !== '/account') : location.pathname === '/'
   const isSchedule = eventId ? location.pathname.includes('/schedule') : false
   const isAccount = location.pathname === '/account'
+  const isNotif = location.pathname === '/notifications'
 
   const nav = (
     <>
@@ -70,6 +72,7 @@ export function AdminShell() {
           <small>排练排程 · 管理员</small>
         </div>
         {nav}
+        <Bell active={isNotif} asNav />
         <div className="sidebar__bottom">
           {user?.username}
           <span>管理员</span>
@@ -84,7 +87,10 @@ export function AdminShell() {
             <Wordmark to="/" />
             <small>排练排程</small>
           </div>
-          <span className="tag-role">管理员</span>
+          <span className="shell__top-right">
+            <Bell active={isNotif} />
+            <span className="tag-role">管理员</span>
+          </span>
         </header>
         {showbar}
         <main className="shell__main">

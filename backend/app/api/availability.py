@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 
 from ..deps import DB, AdminUser, CurrentUser
 from ..models import AvailabilityDay, Event, EventMember, User
+from ..notify import on_availability_submitted
 from ..schemas import AvailabilityIn, AvailabilityOut, HeatOut
 from ..services import availability_index, blank_slots, event_config, heat
 from ..utils import utcnow
@@ -93,6 +94,9 @@ def put_availability(event_id: int, member_id: int, body: AvailabilityIn, db: DB
     event = load_event(db, event_id, user)
     p = _authorize(event, member_id, user)
     _apply(db, event, p, body, user)
+    db.flush()
+    if body.submit:
+        on_availability_submitted(db, event, p, user)
     db.commit()
     db.refresh(event)
     return serialize_availability(event, _participant(event, member_id))
@@ -103,6 +107,8 @@ def submit_availability(event_id: int, member_id: int, db: DB, user: CurrentUser
     event = load_event(db, event_id, user)
     p = _authorize(event, member_id, user)
     p.availability_submitted_at = utcnow()
+    db.flush()
+    on_availability_submitted(db, event, p, user)
     db.commit()
     db.refresh(event)
     return serialize_availability(event, _participant(event, member_id))

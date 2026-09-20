@@ -370,7 +370,14 @@ def event_problem(event: Event, *, include_unsubmitted: bool = False, song_codes
         for s in event.songs
         if song_codes is None or s.code in song_codes
     )
-    return Problem(config=event_config(event), members=names, songs=songs, availability=avail, rules=to_solver_rules(event))
+    return Problem(
+        config=event_config(event),
+        members=names,
+        songs=songs,
+        availability=avail,
+        rules=to_solver_rules(event),
+        objectives=tuple(event_settings(event).objectives),
+    )
 
 
 # ---------- 求解任务 / 排练表版本 ----------
@@ -619,3 +626,26 @@ def precheck(event: Event) -> PrecheckOut:
     errors = [i for i in items if i.level == "error"]
     warnings = [i for i in items if i.level == "warn"]
     return PrecheckOut(items=items, can_solve=not errors, warnings=len(warnings))
+
+
+# ---------- 规则冲突检查(RULE-06) ----------
+def rule_conflict_warning(event: Event) -> str | None:
+    """不看个人空闲,只看规则本身是否让某场排练完全没有可排时段(如禁排太多、固定场次落在禁排时段)。"""
+    if not event.songs or not event.participants:
+        return None
+    problem = event_problem(event)
+    full = Availability()
+    for name in problem.members:
+        for d in problem.config.all_dates:
+            full.set_row(name, d, [1] * problem.config.slots_per_day)
+    problem.availability = full
+    errors, _ = problem.validate()
+    if errors:
+        return ";".join(errors[:3])
+    tasks = make_tasks(problem)
+    cands = build_candidates(problem, tasks, allow_absent=False)
+    dead = [t for t in tasks if not cands[t.task_id]]
+    if dead:
+        names = "、".join(f"{problem.song(t.song_code).name} 第 {t.task_no} 场({t.duration}h)" for t in dead[:4])
+        return f"按现在的要求,{names} 没有任何可排时段(即使所有人都有空)"
+    return None

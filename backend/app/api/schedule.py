@@ -8,6 +8,7 @@ from fastapi import APIRouter, HTTPException
 
 from ..deps import DB, AdminUser, CurrentUser
 from ..models import ScheduleVersion
+from ..notify import on_publish, on_unpublish
 from ..schedule_edit import apply_move, diff_versions, ensure_draft, find_session, participants_brief, schedule_conflicts
 from ..schemas import ConflictsOut, DiffOut, EditResultOut, LockIn, MoveIn, PublishedScheduleOut, VersionOut
 from ..services import published_version, serialize_version
@@ -32,11 +33,14 @@ def publish_version(version_id: int, db: DB, admin: AdminUser) -> VersionOut:
         raise HTTPException(status_code=422, detail="校验未通过的版本不能发布")
     if version.status == "published":
         raise HTTPException(status_code=409, detail="这一版已经是发布状态")
+    previous = None
     for other in version.event.versions:
         if other.id != version.id and other.status == "published":
             other.status = "archived"
+            previous = other
     version.status = "published"
     version.published_at = utcnow()
+    on_publish(db, version.event, version, previous)
     db.commit()
     return serialize_version(version.event, version)  # type: ignore[return-value]
 
@@ -48,6 +52,7 @@ def unpublish_version(version_id: int, db: DB, admin: AdminUser) -> VersionOut:
         raise HTTPException(status_code=409, detail="这一版不是发布状态")
     version.status = "draft"
     version.published_at = None
+    on_unpublish(db, version.event, version)
     db.commit()
     return serialize_version(version.event, version)  # type: ignore[return-value]
 

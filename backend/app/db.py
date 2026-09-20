@@ -23,6 +23,7 @@ def _migrate_3_to_4(engine: Engine) -> None:
 MIGRATIONS: dict[int, Callable[[Engine], None]] = {
     2: lambda engine: None,  # 2 → 3:新增 solve_jobs / schedule_versions / rehearsal_sessions
     3: _migrate_3_to_4,  # 3 → 4:users.calendar_token
+    4: lambda engine: None,  # 4 → 5:新增 notifications(create_all 已建)
 }
 
 

@@ -8,6 +8,8 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
+from solver.types import DEFAULT_OBJECTIVES, OBJECTIVE_LABELS
+
 from .utils import USERNAME_RE, normalize_name
 
 Difficulty = Literal["简单", "一般", "困难"]
@@ -173,6 +175,17 @@ class EventSettings(BaseModel):
     same_song_different_days: bool = True
     difficulty_templates: dict[str, list[int]] = {"困难": [3, 3, 3], "一般": [3, 2, 2], "简单": [2, 2]}
     stage_time_limit: float = Field(default=90.0, ge=5, le=600)
+    objectives: list[str] = list(DEFAULT_OBJECTIVES)  # 优化目标顺序(RULE-04),可去掉不要的项
+
+    @field_validator("objectives")
+    @classmethod
+    def _objectives(cls, v: list[str]) -> list[str]:
+        if len(set(v)) != len(v):
+            raise ValueError("优化目标不能重复")
+        for key in v:
+            if key not in OBJECTIVE_LABELS:
+                raise ValueError(f"未知的优化目标 {key}")
+        return v
 
     @field_validator("eval_durations")
     @classmethod
@@ -432,6 +445,7 @@ class RuleOut(BaseModel):
     enabled: bool
     sentence: str
     sort_order: int
+    warning: str | None = None  # 新建 / 修改时的规则冲突检查结果(RULE-06)
 
 
 class RuleTypeOut(BaseModel):
@@ -633,3 +647,35 @@ class ConflictsOut(BaseModel):
     status: str
     items: list[ConflictOut]
     members: list[MemberBrief]
+
+
+# ---------- 通知(M6) ----------
+class NotificationOut(BaseModel):
+    id: int
+    type: str
+    title: str
+    body: str
+    link: str
+    event_id: int | None
+    created_at: datetime
+    read_at: datetime | None
+
+
+class UnreadCountOut(BaseModel):
+    count: int
+
+
+class ReadIn(BaseModel):
+    ids: list[int] = []  # 空 = 全部
+
+
+class RemindOut(BaseModel):
+    notified: list[str]
+    without_account: list[str]
+    copy_text: str
+
+
+class ObjectiveOut(BaseModel):
+    key: str
+    label: str
+    default_on: bool

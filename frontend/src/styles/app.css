@@ -2132,3 +2132,131 @@ i.lock::before {
 .conflict b {
   font-weight: 500;
 }
+
+/* ---------- 通知(M6) ---------- */
+.shell__top-right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.bell {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 12px;
+  color: var(--ink);
+  border: 1px solid var(--line);
+  background: var(--paper);
+}
+
+.bell.is-active {
+  background: var(--tint);
+}
+
+.bell__icon {
+  position: relative;
+  display: inline-flex;
+}
+
+.bell__badge {
+  position: absolute;
+  top: -8px;
+  right: -10px;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  border-radius: 999px;
+  background: var(--red);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+}
+
+.notif {
+  display: grid;
+  grid-template-columns: 10px 1fr;
+  gap: 10px;
+  align-items: start;
+  width: 100%;
+  text-align: left;
+  border: 0;
+  background: transparent;
+  padding: 11px 0;
+  border-bottom: 1px solid var(--line);
+  cursor: pointer;
+  color: var(--ink);
+}
+
+.notif:last-child {
+  border-bottom: 0;
+}
+
+.notif__dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  margin-top: 6px;
+  background: transparent;
+}
+
+.notif.is-unread .notif__dot {
+  background: var(--accent);
+}
+
+.notif__main {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.notif__title {
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.notif.is-unread .notif__title {
+  font-weight: 600;
+}
+
+.notif__body {
+  font-size: 12px;
+  color: var(--muted);
+  white-space: pre-wrap;
+}
+
+.notif__time {
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.objectives {
+  margin-top: 14px;
+}
+
+.objective {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 0;
+  border-bottom: 1px solid var(--line);
+  font-size: 13px;
+}
+
+.objective.is-off {
+  color: var(--muted);
+}
+
+.objective__btns {
+  display: inline-flex;
+  gap: 4px;
+}

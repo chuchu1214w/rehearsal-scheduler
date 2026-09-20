@@ -3,6 +3,7 @@ import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { useEvents } from '../api/hooks'
 import { useAuth } from '../auth/AuthContext'
 import { Wordmark } from '../ui'
+import { Bell } from './Bell'
 import { IconCalendar, IconUser } from './icons'
 import { pickCurrentEvent } from './currentEvent'
 
@@ -14,6 +15,7 @@ export function MemberShell() {
   const current = pickCurrentEvent(events.data ?? [])
   const isSchedule = location.pathname.startsWith('/schedule')
   const isAccount = location.pathname === '/account'
+  const isNotif = location.pathname === '/notifications'
 
   const nav = (
     <>
@@ -39,6 +41,7 @@ export function MemberShell() {
           我的首页
         </NavLink>
         {nav}
+        <Bell active={isNotif} asNav />
         <div className="sidebar__bottom">
           {user?.member_name ?? user?.username}
           <span>成员</span>
@@ -50,7 +53,10 @@ export function MemberShell() {
       <div className="shell__work">
         <header className="shell__top">
           <Wordmark to="/" />
-          <small>{current ? `${current.name}` : '排练排程'}</small>
+          <span className="shell__top-right">
+            <small>{current ? `${current.name}` : '排练排程'}</small>
+            <Bell active={isNotif} />
+          </span>
         </header>
         <main className="shell__main">
           <Outlet />

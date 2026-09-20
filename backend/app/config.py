@@ -27,7 +27,8 @@ class Settings(BaseModel):
     login_window_minutes: int = 15
     frontend_dist: Path | None = ROOT / "frontend" / "dist"
     solver_mode: str = "subprocess"  # subprocess:独立子进程(生产);inline:同步执行(测试)
-    solver_workers: int = 0  # 0 = min(8, CPU 核数)
+    solver_workers: int = 0
+    reminders_interval_minutes: int = 30  # 定时提醒检查间隔;0 = 关闭(测试用)  # 0 = min(8, CPU 核数)
 
     @classmethod
     def from_env(cls) -> Settings:

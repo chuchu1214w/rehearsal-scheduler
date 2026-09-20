@@ -2,7 +2,7 @@ import dayjs from 'dayjs'
 import { useMemo, useState, type FormEvent } from 'react'
 
 import { api } from '../../../api/client'
-import { useAction, useInvalidateEvent } from '../../../api/hooks'
+import { useAction, useInvalidateEvent, useObjectives } from '../../../api/hooks'
 import { DIFFICULTIES, type EventSettings, type RehearsalEvent } from '../../../api/types'
 import { Button, Field, Note } from '../../../ui'
 import { useToast } from '../../../ui/Toast'
@@ -18,6 +18,7 @@ const DEFAULT_SETTINGS: EventSettings = {
   same_song_different_days: true,
   difficulty_templates: { 简单: [2, 2], 一般: [3, 2, 2], 困难: [3, 3, 3] },
   stage_time_limit: 90,
+  objectives: ['absent', 'eval_attendance', 'spacing', 'focus_days', 'trips', 'gaps', 'overtime', 'soft_avoid'],
 }
 
 interface Props {
@@ -41,6 +42,8 @@ export function InfoEditor({ event, submitLabel = '保存', onSaved }: Props) {
   const [evalDur, setEvalDur] = useState(s.eval_durations.join(','))
   const [sameDay, setSameDay] = useState(s.same_song_different_days)
   const [tpl, setTpl] = useState<Record<string, string>>(Object.fromEntries(DIFFICULTIES.map((d) => [d, planText(s.difficulty_templates[d])])))
+  const [objectives, setObjectives] = useState<string[]>(s.objectives ?? DEFAULT_SETTINGS.objectives)
+  const objectiveDefs = useObjectives()
   const [err, setErr] = useState('')
 
   const derived = useMemo(() => {
@@ -73,7 +76,7 @@ export function InfoEditor({ event, submitLabel = '保存', onSaved }: Props) {
         availability_deadline: deadline || null,
         day_start_hour: dayStart,
         day_end_hour: dayEnd,
-        settings: { ...s, soft_daily_limit: soft, hard_daily_limit: hard, eval_durations: evalPlan, same_song_different_days: sameDay, difficulty_templates: templates },
+        settings: { ...s, soft_daily_limit: soft, hard_daily_limit: hard, eval_durations: evalPlan, same_song_different_days: sameDay, difficulty_templates: templates, objectives },
       }
       if (event) return api<RehearsalEvent>(`/api/events/${event.id}`, { method: 'PATCH', json: body })
       return api<RehearsalEvent>('/api/events', { method: 'POST', json: body })
@@ -150,6 +153,43 @@ export function InfoEditor({ event, submitLabel = '保存', onSaved }: Props) {
             <input type="checkbox" checked={sameDay} onChange={(e) => setSameDay(e.target.checked)} />
             同一曲目的场次必须在不同日期
           </label>
+        </div>
+        <div className="objectives">
+          <div className="kicker">优化优先级 · 从上到下依次满足,勾掉的不参与</div>
+          {(objectiveDefs.data ?? []).length === 0 ? (
+            <p className="muted">加载中…</p>
+          ) : (
+            [...objectives.map((k) => ({ key: k, on: true })), ...(objectiveDefs.data ?? []).filter((o) => !objectives.includes(o.key)).map((o) => ({ key: o.key, on: false }))].map((item, i) => {
+              const def = (objectiveDefs.data ?? []).find((o) => o.key === item.key)
+              const idx = objectives.indexOf(item.key)
+              const move = (delta: number) => {
+                const next = [...objectives]
+                const j = idx + delta
+                if (idx < 0 || j < 0 || j >= next.length) return
+                ;[next[idx], next[j]] = [next[j], next[idx]]
+                setObjectives(next)
+              }
+              return (
+                <div key={item.key} className={'objective' + (item.on ? '' : ' is-off')}>
+                  <label className="check">
+                    <input type="checkbox" checked={item.on} onChange={(e) => setObjectives(e.target.checked ? [...objectives, item.key] : objectives.filter((k) => k !== item.key))} />
+                    {item.on ? `${i + 1}. ` : ''}
+                    {def?.label ?? item.key}
+                  </label>
+                  {item.on && (
+                    <span className="objective__btns">
+                      <button type="button" className="btn btn--sm btn--ghost" disabled={idx <= 0} onClick={() => move(-1)} aria-label="上移">
+                        ↑
+                      </button>
+                      <button type="button" className="btn btn--sm btn--ghost" disabled={idx >= objectives.length - 1} onClick={() => move(1)} aria-label="下移">
+                        ↓
+                      </button>
+                    </span>
+                  )}
+                </div>
+              )
+            })
+          )}
         </div>
       </details>
       {err && <p className="error-text" role="alert">{err}</p>}

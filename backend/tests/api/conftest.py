@@ -21,6 +21,7 @@ def settings(tmp_path) -> Settings:
         public_base_url="http://test",
         solver_mode="inline",
         solver_workers=4,
+        reminders_interval_minutes=0,
     )
 
 

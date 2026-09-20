@@ -10,7 +10,7 @@ from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 from .utils import utcnow
 
 # 每次改表结构 +1;启动时与 meta 表比对,不一致就提示删库重建(开发阶段;有真实数据后改用 Alembic)
-SCHEMA_VERSION = 4  # 3:新增 solve_jobs / schedule_versions / rehearsal_sessions(可从 2 自动迁移)
+SCHEMA_VERSION = 5  # 3:新增 solve_jobs / schedule_versions / rehearsal_sessions(可从 2 自动迁移)
 
 
 class Base(DeclarativeBase):
@@ -252,3 +252,20 @@ class RehearsalSession(Base):
 
     version: Mapped[ScheduleVersion] = relationship(back_populates="sessions")
     song: Mapped[Song | None] = relationship()
+
+
+class Notification(Base):
+    """站内通知(NOTIF-01)。dedupe_key 用于定时提醒去重。"""
+
+    __tablename__ = "notifications"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    type: Mapped[str] = mapped_column(String(32))
+    title: Mapped[str] = mapped_column(String(200))
+    body: Mapped[str] = mapped_column(String(1000), default="")
+    link: Mapped[str] = mapped_column(String(200), default="")
+    event_id: Mapped[int | None] = mapped_column(ForeignKey("events.id", ondelete="SET NULL"), nullable=True)
+    dedupe_key: Mapped[str | None] = mapped_column(String(160), nullable=True, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+    read_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)

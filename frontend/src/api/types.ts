@@ -51,6 +51,7 @@ export interface EventSettings {
   same_song_different_days: boolean
   difficulty_templates: Record<Difficulty, number[]>
   stage_time_limit: number
+  objectives: string[]
 }
 
 export type EventStatus = 'preparing' | 'collecting' | 'scheduling' | 'published' | 'closed'
@@ -150,6 +151,7 @@ export interface Rule {
   enabled: boolean
   sentence: string
   sort_order: number
+  warning?: string | null
 }
 
 export interface RuleTypeInfo {
@@ -362,4 +364,28 @@ export interface Conflicts {
   status: string
   items: Conflict[]
   members: MemberBrief[]
+}
+
+// ---------- 通知(M6) ----------
+export interface Notification {
+  id: number
+  type: string
+  title: string
+  body: string
+  link: string
+  event_id: number | null
+  created_at: string
+  read_at: string | null
+}
+
+export interface RemindResult {
+  notified: string[]
+  without_account: string[]
+  copy_text: string
+}
+
+export interface Objective {
+  key: string
+  label: string
+  default_on: boolean
 }

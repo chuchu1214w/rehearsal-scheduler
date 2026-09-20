@@ -1,5 +1,6 @@
 import { useState } from 'react'
 
+import { useToast } from '../../../ui/Toast'
 import { api } from '../../../api/client'
 import { useAction, useEventMembers, useInvalidateEvent, useRuleTypes, useRules, useSongs } from '../../../api/hooks'
 import type { RehearsalEvent, Rule, RuleType } from '../../../api/types'
@@ -50,6 +51,7 @@ export function RulesEditor({ event }: Props) {
 }
 
 function RuleModal({ event, onClose, onSaved }: { event: RehearsalEvent; onClose: () => void; onSaved: () => void }) {
+  const { toast } = useToast()
   const types = useRuleTypes()
   const members = useEventMembers(event.id)
   const songs = useSongs(event.id)
@@ -85,7 +87,13 @@ function RuleModal({ event, onClose, onSaved }: { event: RehearsalEvent; onClose
         return { member_id: memberId }
     }
   }
-  const save = useAction(() => api<Rule>(`/api/events/${event.id}/rules`, { method: 'POST', json: { type, params: params() } }), onSaved)
+  const save = useAction(
+    () => api<Rule>(`/api/events/${event.id}/rules`, { method: 'POST', json: { type, params: params() } }),
+    (r) => {
+      if (r.warning) toast(r.warning, 'error')
+      onSaved()
+    },
+  )
 
   const hourOptions = Array.from({ length: event.day_end_hour - event.day_start_hour + 1 }, (_, i) => event.day_start_hour + i)
   const memberSelect = (

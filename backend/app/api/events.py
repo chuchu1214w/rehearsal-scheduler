@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 
 from ..deps import DB, AdminUser, CurrentUser, SettingsDep
 from ..models import Event, EventMember, Member, Song, User
+from ..notify import on_joined
 from ..schemas import (
     AccountCredentialsOut,
     BatchAccountsIn,
@@ -205,9 +206,12 @@ def set_event_members(event_id: int, body: EventMembersIn, db: DB, admin: AdminU
         raise HTTPException(status_code=409, detail="以下人员仍在曲目中,请先从曲目移除:" + "、".join(blocking))
     for mid in removed:
         db.delete(current[mid])
-    for mid in found:
-        if mid not in current:
-            db.add(EventMember(event_id=event.id, member_id=mid))
+    added = [mid for mid in found if mid not in current]
+    for mid in added:
+        db.add(EventMember(event_id=event.id, member_id=mid))
+    db.flush()
+    db.refresh(event)
+    on_joined(db, event, [p for p in event.participants if p.member_id in added])
     db.commit()
     db.refresh(event)
     return serialize_event_members(event)
@@ -218,6 +222,7 @@ def add_event_members(event_id: int, body: EventMembersAddIn, db: DB, admin: Adm
     """按昵称添加:名册里已有同名(或别名)的直接关联,没有的自动创建。"""
     event = load_event(db, event_id, admin)
     current = {p.member_id for p in event.participants}
+    added: list[int] = []
     max_order = db.scalar(select(func.max(Member.sort_order))) or 0
     for name in body.names:
         member = find_member_by_name(db, name)
@@ -230,6 +235,10 @@ def add_event_members(event_id: int, body: EventMembersAddIn, db: DB, admin: Adm
         if member.id not in current:
             db.add(EventMember(event_id=event.id, member_id=member.id))
             current.add(member.id)
+            added.append(member.id)
+    db.flush()
+    db.refresh(event)
+    on_joined(db, event, [p for p in event.participants if p.member_id in added])
     db.commit()
     db.refresh(event)
     return serialize_event_members(event)
@@ -253,9 +262,13 @@ def open_accounts(event_id: int, body: BatchAccountsIn, db: DB, _admin: AdminUse
     """为本演出所有未开通账号的人员一次开通,统一初始密码。"""
     event = load_event(db, event_id, _admin)
     out: list[AccountCredentialsOut] = []
+    created: list[EventMember] = []
     for p in sorted(event.participants, key=lambda p: (p.member.sort_order, p.member.id)):
         if p.member.user is None and p.member.active:
             out.append(create_account(db, settings, p.member, None, body.password))
+            created.append(p)
+    db.flush()
+    on_joined(db, event, created)
     db.commit()
     return out
 

@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import asyncio
+import contextlib
+from collections.abc import AsyncIterator
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException
@@ -26,10 +29,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     app = FastAPI(
         title="舞团排练排程系统",
-        version="0.2.0",
+        version="0.3.0",
         docs_url="/api/docs",
         openapi_url="/api/openapi.json",
         redoc_url=None,
+        lifespan=_lifespan,
     )
     app.state.settings = settings
     app.state.engine = engine
@@ -41,6 +45,34 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         app.include_router(router)
     _mount_frontend(app, settings.frontend_dist)
     return app
+
+
+@contextlib.asynccontextmanager
+async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
+    """后台定时提醒(NOTIF-02):每隔 N 分钟检查一次填报截止与明天的排练。"""
+    settings: Settings = app.state.settings
+    task = (
+        asyncio.create_task(_reminder_loop(app, settings.reminders_interval_minutes)) if settings.reminders_interval_minutes > 0 else None
+    )
+    try:
+        yield
+    finally:
+        if task is not None:
+            task.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await task
+
+
+async def _reminder_loop(app: FastAPI, minutes: int) -> None:
+    from .notify import run_due_reminders
+
+    while True:
+        try:
+            with app.state.session_factory() as db:
+                await asyncio.to_thread(run_due_reminders, db, None, app.state.settings.app_timezone)
+        except Exception:  # noqa: BLE001
+            pass  # 提醒失败不影响服务;下一轮再试
+        await asyncio.sleep(minutes * 60)
 
 
 def _fail_stale_jobs(session_factory) -> None:  # noqa: ANN001

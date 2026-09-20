@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 from ..config import Settings
 from ..deps import DB, AdminUser, SettingsDep, revoke_all_sessions
 from ..models import EventMember, Member, User, song_members
+from ..notify import on_joined
 from ..schemas import (
     AccountCreateIn,
     AccountCredentialsOut,
@@ -154,6 +155,9 @@ def create_account(db: Session, settings: Settings, member: Member, username: st
 def open_account(member_id: int, body: AccountCreateIn, db: DB, _admin: AdminUser, settings: SettingsDep) -> AccountCredentialsOut:
     member = get_member(db, member_id)
     out = create_account(db, settings, member, body.username, body.password)
+    db.flush()
+    for p in db.scalars(select(EventMember).where(EventMember.member_id == member.id)).all():
+        on_joined(db, p.event, [p])
     db.commit()
     return out
 

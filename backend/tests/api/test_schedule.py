@@ -83,7 +83,7 @@ def test_calendar_feed(app, admin: TestClient, anon: TestClient):
     text = anon.get(path).text
     # C 只参加第二首(1 场)+ 评估 → 2 个事件;第一首(A、B)不在 C 的日历里
     assert text.count("BEGIN:VEVENT") == 2 and "第二首" in text and "第一首" not in text and "全员评估" in text
-    assert "DTSTART:" in text and "TRIGGER:-PT60M" in text
+    assert "DTSTART:" in text and "TRIGGER:-PT2H" in text and "TRIGGER:-P1D" in text
     assert all(len(line.encode("utf-8")) <= 75 for line in text.split("\r\n"))
 
     # 管理员的日历包含全部 4 场

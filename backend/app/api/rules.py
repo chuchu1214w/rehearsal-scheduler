@@ -9,6 +9,7 @@ from ..deps import DB, AdminUser
 from ..models import Rule
 from ..rules import rule_types, serialize_rule, validate_params
 from ..schemas import RuleIn, RuleOut, RulePatch, RuleTypeOut
+from ..services import rule_conflict_warning
 from .events import load_event
 
 router = APIRouter(tags=["rules"])
@@ -34,7 +35,9 @@ def create_rule(event_id: int, body: RuleIn, db: DB, admin: AdminUser) -> RuleOu
     db.add(rule)
     db.commit()
     db.refresh(event)
-    return serialize_rule(event, rule)
+    out = serialize_rule(event, rule)
+    out.warning = rule_conflict_warning(event)
+    return out
 
 
 def _get_rule(db, rule_id: int) -> Rule:  # noqa: ANN001
@@ -56,7 +59,9 @@ def update_rule(rule_id: int, body: RulePatch, db: DB, admin: AdminUser) -> Rule
         rule.sort_order = body.sort_order
     db.commit()
     db.refresh(event)
-    return serialize_rule(event, rule)
+    out = serialize_rule(event, rule)
+    out.warning = rule_conflict_warning(event)
+    return out
 
 
 @router.delete("/rules/{rule_id}", status_code=204)

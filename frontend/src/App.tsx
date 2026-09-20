@@ -14,6 +14,7 @@ import { EditorPage } from './pages/admin/EditorPage'
 import { ProgressPage } from './pages/admin/ProgressPage'
 import { ProxyAvailabilityPage } from './pages/admin/ProxyAvailabilityPage'
 import { SchedulePage } from './pages/admin/SchedulePage'
+import { NotificationsPage } from './pages/NotificationsPage'
 import { ScheduleDayPage } from './pages/admin/ScheduleDayPage'
 import { SolvePage } from './pages/admin/SolvePage'
 import { NewEventPage, WizardPage } from './pages/admin/WizardPage'
@@ -66,6 +67,7 @@ function RoleRoutes() {
           <Route path="/events/:id/schedule/day/:date" element={<ScheduleDayPage />} />
           <Route path="/events/:id/availability/:memberId" element={<ProxyAvailabilityPage />} />
           <Route path="/account" element={<AccountPage />} />
+          <Route path="/notifications" element={<NotificationsPage />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Route>
       </Routes>
@@ -79,6 +81,7 @@ function RoleRoutes() {
         <Route path="/schedule" element={<MemberSchedulePage />} />
         <Route path="/schedule/day/:date" element={<MemberScheduleDayPage />} />
         <Route path="/account" element={<AccountPage />} />
+        <Route path="/notifications" element={<NotificationsPage />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>
     </Routes>

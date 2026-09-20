@@ -12,6 +12,8 @@ import type {
   RuleTypeInfo,
   CalendarInfo,
   Conflicts,
+  Notification,
+  Objective,
   PublishedSchedule,
   ScheduleDiff,
   ScheduleVersion,
@@ -36,6 +38,9 @@ export const keys = {
   version: (vid: number) => ['version', vid] as const,
   published: (id: number) => ['published', id] as const,
   calendar: ['calendar'] as const,
+  notifications: ['notifications'] as const,
+  unread: ['unread'] as const,
+  objectives: ['objectives'] as const,
   diff: (vid: number, against: number | null) => ['diff', vid, against] as const,
   conflicts: (id: number, vid: number | null) => ['conflicts', id, vid] as const,
 }
@@ -158,6 +163,25 @@ export function useConflicts(eventId: number, versionId: number | null) {
     },
     enabled: Number.isFinite(eventId),
   })
+}
+
+export function useNotifications(enabled = true) {
+  return useQuery({ queryKey: keys.notifications, queryFn: () => api<Notification[]>('/api/notifications'), enabled })
+}
+
+/** 未读数,每分钟拉一次(切到后台也拉) */
+export function useUnreadCount(enabled = true) {
+  return useQuery({
+    queryKey: keys.unread,
+    queryFn: () => api<{ count: number }>('/api/notifications/unread-count'),
+    enabled,
+    refetchInterval: 60_000,
+    refetchIntervalInBackground: true,
+  })
+}
+
+export function useObjectives() {
+  return useQuery({ queryKey: keys.objectives, queryFn: () => api<Objective[]>('/api/objectives'), staleTime: Infinity })
 }
 
 export function useCalendarInfo(enabled = true) {

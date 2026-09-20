@@ -1,6 +1,8 @@
 import { useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 
+import { api } from '../../api/client'
+import type { RemindResult } from '../../api/types'
 import { useEvent, useEventMembers, useHeat } from '../../api/hooks'
 import type { Heat } from '../../api/types'
 import { Back, Badge, Button, Heading, KV, LinkButton, Panel, Spinner } from '../../ui'
@@ -72,9 +74,14 @@ export function ProgressPage() {
   const submitted = list.filter((m) => m.availability_submitted_at)
   const pct = list.length ? Math.round((submitted.length / list.length) * 100) : 0
   const remind = async () => {
-    const names = pending.map((m) => m.display_name).join('、')
-    const text = `${names}:请在 ${e.availability_deadline ? fmtMd(e.availability_deadline) : '尽快'} 前登录 Season 填写空闲时间,谢谢!`
-    toast((await copyText(text)) ? '催办文案已复制,发到群里即可' : text)
+    const r = await api<RemindResult>(`/api/events/${e.id}/remind`, { method: 'POST' })
+    const parts: string[] = []
+    if (r.notified.length) parts.push(`已通知 ${r.notified.join('、')}`)
+    if (r.without_account.length) {
+      const copied = await copyText(r.copy_text)
+      parts.push(`${r.without_account.join('、')} 没有账号${copied ? ',催办文案已复制,发到群里即可' : `:${r.copy_text}`}`)
+    }
+    toast(parts.join(';') || '没有需要催办的人')
   }
   return (
     <>
