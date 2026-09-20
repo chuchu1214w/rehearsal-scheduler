@@ -1,46 +1,57 @@
-import { useMutation } from '@tanstack/react-query'
-import { App as AntApp, Button, Form, Input } from 'antd'
+import { useState, type FormEvent } from 'react'
 import { Navigate, useLocation, useNavigate } from 'react-router-dom'
 
-import { api, errorMessage } from '../api/client'
+import { api } from '../api/client'
+import { useAction } from '../api/hooks'
 import type { User } from '../api/types'
 import { useAuth } from '../auth/AuthContext'
-import { AuthShell } from '../components/AuthShell'
-
-interface Values {
-  username: string
-  password: string
-}
+import { Button, Field, PrimaryBar, Wordmark } from '../ui'
 
 export function LoginPage() {
   const navigate = useNavigate()
   const location = useLocation()
   const { user, setUser } = useAuth()
-  const { message } = AntApp.useApp()
+  const [username, setUsername] = useState('')
+  const [password, setPassword] = useState('')
   const from = (location.state as { from?: string } | null)?.from ?? '/'
-  const mutation = useMutation({
-    mutationFn: (v: Values) => api<User>('/api/auth/login', { method: 'POST', json: v }),
-    onSuccess: (u) => {
+  const login = useAction(
+    () => api<User>('/api/auth/login', { method: 'POST', json: { username, password } }),
+    (u) => {
       setUser(u)
-      navigate(from, { replace: true })
+      navigate(from === '/login' ? '/' : from, { replace: true })
     },
-    onError: (err) => message.error(errorMessage(err)),
-  })
+  )
   if (user) return <Navigate to="/" replace />
-
+  const submit = (e: FormEvent) => {
+    e.preventDefault()
+    if (username.trim() && password) login.mutate(undefined)
+  }
   return (
-    <AuthShell title="登录" subtitle="还没有账号?请向管理员索取邀请链接。">
-      <Form<Values> layout="vertical" onFinish={(v) => mutation.mutate(v)} requiredMark={false}>
-        <Form.Item name="username" label="用户名" rules={[{ required: true, message: '请输入用户名' }]}>
-          <Input autoComplete="username" autoFocus />
-        </Form.Item>
-        <Form.Item name="password" label="密码" rules={[{ required: true, message: '请输入密码' }]}>
-          <Input.Password autoComplete="current-password" />
-        </Form.Item>
-        <Button type="primary" htmlType="submit" block size="large" loading={mutation.isPending}>
-          登录
-        </Button>
-      </Form>
-    </AuthShell>
+    <div className="auth shell-member">
+      <div className="auth__box">
+        <Wordmark big />
+        <div className="kicker">Season · 舞团排练排程</div>
+        <h1>欢迎回来</h1>
+        <p className="lead">登录后,继续你的演出准备。</p>
+        <form onSubmit={submit} className="fields">
+          <Field label="用户名">
+            <input value={username} onChange={(e) => setUsername(e.target.value)} autoComplete="username" autoCapitalize="none" placeholder="输入用户名" autoFocus />
+          </Field>
+          <Field label="密码">
+            <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="current-password" placeholder="输入密码" />
+          </Field>
+          <p className="meta">
+            忘记密码请找管理员重置。
+            <br />
+            连续 5 次密码错误,需等待 15 分钟再试。
+          </p>
+          <PrimaryBar>
+            <Button type="submit" variant="primary" full loading={login.isPending} disabled={!username.trim() || !password}>
+              登录
+            </Button>
+          </PrimaryBar>
+        </form>
+      </div>
+    </div>
   )
 }

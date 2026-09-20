@@ -61,6 +61,7 @@ def main() -> int:
     parser.add_argument("--password", default="demo12345")
     parser.add_argument("--member-password", default="season2026")
     parser.add_argument("--seed", type=int, default=42)
+    parser.add_argument("--performance-date", default=(date.today() + timedelta(days=30)).isoformat(), help="演出日期,默认今天起 30 天后")
     args = parser.parse_args()
     rng = random.Random(args.seed)
 
@@ -69,7 +70,11 @@ def main() -> int:
             print("数据库已初始化,不重复填充。", file=sys.stderr)
             return 1
         c.post("/api/setup", json={"username": args.username, "password": args.password}).raise_for_status()
-        r = c.post("/api/events", json={"name": "2026 秋季路演", "performance_date": "2026-09-20", "formal_start_date": "2026-09-04"})
+        perf = date.fromisoformat(args.performance_date)
+        r = c.post(
+            "/api/events",
+            json={"name": "2026 秋季路演", "performance_date": perf.isoformat(), "formal_start_date": (perf - timedelta(days=16)).isoformat()},
+        )
         r.raise_for_status()
         ev = r.json()
         eid = ev["id"]
@@ -83,7 +88,7 @@ def main() -> int:
             song_ids[name] = r.json()["id"]
         rules = [
             {"type": "member_song_max_absent", "params": {"member_id": ids["菁"], "song_id": song_ids["aespa-lemonadeB"], "n": 1}},
-            {"type": "blocked_day", "params": {"date": "2026-09-10"}},
+            {"type": "blocked_day", "params": {"date": (perf - timedelta(days=10)).isoformat()}},
             {"type": "focus_member", "params": {"member_id": ids["若"]}},
         ]
         for body in rules:
