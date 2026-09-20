@@ -1,0 +1,34 @@
+# 系统 / 编辑器
+.DS_Store
+.idea/
+.vscode/
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# Node
+node_modules/
+dist/
+
+# 运行时数据与密钥(不要提交)
+.env
+.env.*
+!.env.example
+*.db
+*.sqlite3
+/data/
+/output/
+排程结果/
+
+# 成员真实空闲数据 / 个人信息(不要提交)
+*.xlsx
+*.xls
+
+# 原始需求文档:文档属性含作者个人信息,未纳入版本库(内容已整理进 开发文档.md)
+时间调度代码要求.docx
