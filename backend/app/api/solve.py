@@ -53,9 +53,13 @@ def start_solve(event_id: int, body: SolveIn, db: DB, admin: AdminUser, settings
             raise HTTPException(status_code=409, detail="已有求解任务在进行中")
     if not event.participants or not event.songs:
         raise HTTPException(status_code=422, detail="先添加人员和曲目,再开始求解")
+    if body.base_version_id is not None:
+        base = db.get(ScheduleVersion, body.base_version_id)
+        if base is None or base.event_id != event.id:
+            raise HTTPException(status_code=404, detail="锁定重排的基准版本不存在")
     job = SolveJob(
         event_id=event.id,
-        options={"only_ready_songs": body.only_ready_songs},
+        options={"only_ready_songs": body.only_ready_songs, "base_version_id": body.base_version_id},
         params_snapshot={"settings": event.settings, "day_start_hour": event.day_start_hour, "day_end_hour": event.day_end_hour},
         created_by=admin.id,
     )

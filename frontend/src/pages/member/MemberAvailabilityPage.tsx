@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 
 import { api } from '../../api/client'
-import { useAction, useAvailability, useEvent, useInvalidateEvent } from '../../api/hooks'
+import { useAction, useAvailability, useEvent, useInvalidateEvent, usePublishedSchedule } from '../../api/hooks'
 import type { Availability } from '../../api/types'
 import { useAuth } from '../../auth/AuthContext'
 import { AvailabilityGrid, countFilled } from '../../components/AvailabilityGrid'
@@ -19,6 +19,7 @@ export function MemberAvailabilityPage() {
   const { toast } = useToast()
   const ev = useEvent(id)
   const avail = useAvailability(id, memberId)
+  const pub = usePublishedSchedule(id)
   const [days, setDays] = useState<Record<string, string> | null>(null)
   const [dirty, setDirty] = useState(false)
   useEffect(() => {
@@ -52,7 +53,11 @@ export function MemberAvailabilityPage() {
         </span>
       </div>
       <p className="lead">选一种画笔,点一下或按住滑过时段。</p>
-      {editing && <Note>你已提交过;修改后需重新提交,排练表可能受影响。</Note>}
+      {pub.data ? (
+        <Note tone="warning">排练表已发布(v{pub.data.version_no})。修改后重新提交,管理员会看到哪些场次受影响,并决定是否重排;你的排练表在管理员发布新版本前不变。</Note>
+      ) : (
+        editing && <Note>你已提交过;修改后需重新提交,排练表可能受影响。</Note>
+      )}
       {a.past_deadline && <Note tone="warning">已过截止日 {a.deadline ? fmtMd(a.deadline) : ''},仍可填写。</Note>}
       <AvailabilityGrid
         availability={a}

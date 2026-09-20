@@ -293,6 +293,7 @@ class EventOut(BaseModel):
     latest_version_no: int | None
     published_version_no: int | None
     latest_job_status: str | None
+    conflict_count: int  # 已发布版本中与最新空闲冲突的场次数
     created_at: datetime
     updated_at: datetime
 
@@ -492,6 +493,7 @@ JobStatus = Literal["queued", "running", "succeeded", "infeasible", "failed", "c
 
 class SolveIn(BaseModel):
     only_ready_songs: bool = False  # 只排参演人员已全部提交空闲的曲目
+    base_version_id: int | None = None  # 锁定后重排:保留该版本中锁定的场次
 
 
 class JobOut(BaseModel):
@@ -508,6 +510,7 @@ class JobOut(BaseModel):
     error: str | None
     version_id: int | None
     only_ready_songs: bool
+    base_version_id: int | None
     created_at: datetime
     started_at: datetime | None
     finished_at: datetime | None
@@ -547,7 +550,9 @@ class VersionOut(BaseModel):
     event_id: int
     version_no: int
     source: str
+    parent_version_id: int | None
     status: Literal["draft", "published", "archived"]
+    locked_count: int
     level_used: int | None
     exact_optimum: bool
     objective_values: dict
@@ -580,3 +585,51 @@ class PublishedScheduleOut(VersionDetailOut):
 class CalendarOut(BaseModel):
     url: str
     webcal_url: str
+
+
+# ---------- 排练表调整(M5) ----------
+class MoveIn(BaseModel):
+    date: date
+    start_slot: int
+    duration_slots: int | None = None
+
+
+class LockIn(BaseModel):
+    locked: bool
+
+
+class EditResultOut(BaseModel):
+    version: VersionDetailOut
+    warnings: list[str]  # 软目标变化,如「成员额外往返 +1」
+    forked: bool  # 原版本不是草稿,已复制成新草稿
+
+
+class DiffItemOut(BaseModel):
+    change: Literal["added", "removed", "moved", "changed"]
+    kind: Literal["formal", "evaluation"]
+    before: SessionOut | None
+    after: SessionOut | None
+
+
+class DiffOut(BaseModel):
+    base_id: int
+    base_no: int
+    against_id: int
+    against_no: int
+    items: list[DiffItemOut]
+    affected_members: list[MemberBrief]
+    summary: str
+
+
+class ConflictOut(BaseModel):
+    session: SessionOut
+    member: MemberBrief
+    hours: list[str]
+
+
+class ConflictsOut(BaseModel):
+    version_id: int
+    version_no: int
+    status: str
+    items: list[ConflictOut]
+    members: list[MemberBrief]

@@ -2026,3 +2026,109 @@ details.diag > *:not(summary) {
   color: var(--accent);
   background: var(--paper);
 }
+
+/* ---------- 排练表调整(M5) ---------- */
+.weekgrid {
+  position: relative;
+}
+
+.weekgrid__block.is-draggable {
+  cursor: grab;
+  touch-action: none;
+}
+
+.weekgrid__block.is-dragging {
+  opacity: 0.35;
+}
+
+.weekgrid__ghost {
+  position: absolute;
+  z-index: 3;
+  pointer-events: none;
+  border-radius: 7px;
+  background: var(--paper);
+  border: 2px dashed var(--accent);
+  color: var(--accent);
+  padding: 3px 4px;
+  font-size: 11px;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 3px 3px 0 var(--outline);
+}
+
+.weekgrid__ghost.is-invalid {
+  border-color: var(--red);
+  color: var(--red);
+}
+
+.weekgrid__ghost b {
+  font-size: 12px;
+}
+
+i.lock {
+  display: inline-block;
+  width: 8px;
+  height: 9px;
+  margin-right: 3px;
+  border: 1.5px solid currentcolor;
+  border-radius: 2px;
+  position: relative;
+  vertical-align: -1px;
+}
+
+i.lock::before {
+  content: '';
+  position: absolute;
+  left: 1px;
+  top: -5px;
+  width: 4px;
+  height: 5px;
+  border: 1.5px solid currentcolor;
+  border-bottom: 0;
+  border-radius: 3px 3px 0 0;
+}
+
+.weekgrid__block.is-locked {
+  box-shadow: inset 0 0 0 2px currentcolor;
+}
+
+.diff-item {
+  display: grid;
+  grid-template-columns: 52px 1fr;
+  gap: 10px;
+  padding: 9px 0;
+  border-bottom: 1px solid var(--line);
+  font-size: 12px;
+}
+
+.diff-item:last-child {
+  border-bottom: 0;
+}
+
+.diff-item .badge {
+  justify-self: start;
+}
+
+.diff-item .from {
+  color: var(--muted);
+  text-decoration: line-through;
+}
+
+.diff-item .arrow {
+  color: var(--muted);
+  margin: 0 4px;
+}
+
+.conflict {
+  font-size: 12px;
+  padding: 6px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.conflict:last-child {
+  border-bottom: 0;
+}
+
+.conflict b {
+  font-weight: 500;
+}

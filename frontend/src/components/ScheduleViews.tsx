@@ -33,12 +33,18 @@ export function WeekView({
   focusMemberId = null,
   onDateClick,
   initialDate,
+  editable = false,
+  onMove,
+  onLock,
 }: {
   sessions: ScheduleSession[]
   range: ScheduleRange
   focusMemberId?: number | null
   onDateClick?: (date: string) => void
   initialDate?: string
+  editable?: boolean
+  onMove?: (s: ScheduleSession, date: string, startSlot: number) => void
+  onLock?: (s: ScheduleSession, locked: boolean) => void
 }) {
   const weeks = weekStarts(range.formal_start_date, range.eval_date)
   const today = dayjs().format('YYYY-MM-DD')
@@ -75,6 +81,8 @@ export function WeekView({
         focusMemberId={focusMemberId}
         onDateClick={onDateClick}
         onSessionClick={setOpen}
+        editable={editable}
+        onMove={onMove}
       />
       <div className="legend">
         {order.map((code) => (
@@ -88,20 +96,45 @@ export function WeekView({
           全员评估
         </span>
         {onDateClick && <span className="muted">点日期看当天日程</span>}
+        {editable && <span className="muted">拖动色块可移动场次;<i className="lock" /> 已锁定</span>}
       </div>
-      <SessionModal s={open} onClose={() => setOpen(null)} />
+      <SessionModal
+        s={open}
+        onClose={() => setOpen(null)}
+        onLock={
+          editable && onLock
+            ? (s, locked) => {
+                setOpen(null)
+                onLock(s, locked)
+              }
+            : undefined
+        }
+      />
     </>
   )
 }
 
-export function SessionModal({ s, onClose }: { s: ScheduleSession | null; onClose: () => void }) {
+export function SessionModal({ s, onClose, onLock }: { s: ScheduleSession | null; onClose: () => void; onLock?: (s: ScheduleSession, locked: boolean) => void }) {
   if (!s) return null
   const absent = new Set(s.absent.map((m) => m.id))
   return (
-    <Modal open title={s.kind === 'evaluation' ? '全员评估' : `${s.song_code} · ${s.song_name}`} onClose={onClose}>
+    <Modal
+      open
+      title={s.kind === 'evaluation' ? '全员评估' : `${s.song_code} · ${s.song_name}`}
+      onClose={onClose}
+      actions={
+        onLock && s.kind === 'formal' ? (
+          <Button variant={s.locked ? 'ghost' : 'default'} onClick={() => onLock(s, !s.locked)}>
+            {s.locked ? '解锁' : '锁定这场'}
+          </Button>
+        ) : undefined
+      }
+    >
       <p style={{ fontSize: 14, color: 'var(--ink)' }}>
         {fmtMd(s.date)} {s.weekday} · {s.time} · {s.duration_slots}h
+        {s.locked && <Badge tone="orange">已锁定</Badge>}
       </p>
+      {onLock && s.kind === 'formal' && <p className="muted">在周日历里拖动色块可移动这场;锁定后不会被拖动,「锁定后重排」时也保持不变。时长由曲目的排练方案决定。</p>}
       {s.kind === 'evaluation' ? (
         <div style={{ marginTop: 8 }}>
           {s.attendance && Object.values(s.attendance).some((t) => t !== s.time) ? (

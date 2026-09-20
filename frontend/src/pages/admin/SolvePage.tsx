@@ -1,9 +1,9 @@
 import { useEffect, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
-import { useNavigate, useParams } from 'react-router-dom'
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 
 import { api } from '../../api/client'
-import { keys, useAction, useEvent, useInvalidateEvent, useLatestJob, usePrecheck } from '../../api/hooks'
+import { keys, useAction, useEvent, useInvalidateEvent, useLatestJob, usePrecheck, useVersions } from '../../api/hooks'
 import type { Diagnosis, SolveJob } from '../../api/types'
 import { Back, Badge, Button, CheckRow, Heading, LinkButton, Note, Panel, Spinner } from '../../ui'
 import { Modal } from '../../ui/Modal'
@@ -25,9 +25,13 @@ export function SolvePage() {
   const navigate = useNavigate()
   const qc = useQueryClient()
   const invalidate = useInvalidateEvent()
+  const [params] = useSearchParams()
+  const baseId = Number(params.get('base')) || null
   const ev = useEvent(id)
   const check = usePrecheck(id)
   const latest = useLatestJob(id)
+  const versions = useVersions(id)
+  const base = baseId != null ? (versions.data ?? []).find((v) => v.id === baseId) ?? null : null
   const [confirm, setConfirm] = useState(false)
   const [startedId, setStartedId] = useState<number | null>(null)
 
@@ -35,7 +39,7 @@ export function SolvePage() {
   const running = !!job && (job.status === 'running' || job.status === 'queued')
 
   const start = useAction(
-    (onlyReady: boolean) => api<SolveJob>(`/api/events/${id}/solve`, { method: 'POST', json: { only_ready_songs: onlyReady } }),
+    (onlyReady: boolean) => api<SolveJob>(`/api/events/${id}/solve`, { method: 'POST', json: { only_ready_songs: onlyReady, base_version_id: baseId } }),
     (created) => {
       setConfirm(false)
       setStartedId(created.id)
@@ -53,7 +57,7 @@ export function SolvePage() {
     if (!job || running) return
     invalidate(id)
     if (job.id === startedId && job.status === 'succeeded' && job.version_id) {
-      navigate(`/events/${id}/schedule?v=${job.version_id}`)
+      navigate(`/events/${id}/schedule?v=${job.version_id}${job.base_version_id ? `&diff=${job.base_version_id}` : ''}`)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [status, job?.id])
@@ -73,7 +77,12 @@ export function SolvePage() {
   return (
     <>
       <Back to={`/events/${e.id}`} label={`${e.name} · 工作台`} />
-      <Heading title="排程" subtitle="先检查,再开始求解。求解在后台进行,通常几秒到一两分钟。" />
+      <Heading title={base ? '锁定后重排' : '排程'} subtitle="先检查,再开始求解。求解在后台进行,通常几秒到一两分钟。" />
+      {base && (
+        <Note>
+          将保留 v{base.version_no} 中锁定的 {base.locked_count} 场不动,重排其余场次;完成后自动显示与 v{base.version_no} 的差异。
+        </Note>
+      )}
 
       <Panel>
         <div className="section">
@@ -95,7 +104,7 @@ export function SolvePage() {
         <div className="actions">
           <LinkButton to={`/events/${e.id}/progress`}>回填报进度</LinkButton>
           <Button variant="primary" disabled={!canSolve} loading={start.isPending} onClick={onSolve}>
-            {job && !running ? '重新求解' : '开始求解'}
+            {base ? `保留锁定,重排其余` : job && !running ? '重新求解' : '开始求解'}
           </Button>
         </div>
       </Panel>
@@ -161,6 +170,7 @@ function ResultPanel({ job, eventId, evalDate }: { job: SolveJob; eventId: numbe
         {when}
         {job.elapsed_seconds != null && ` · 用时 ${job.elapsed_seconds} 秒`}
         {job.only_ready_songs && ' · 只排已就绪曲目'}
+        {job.base_version_id != null && ' · 锁定后重排'}
       </p>
       {job.skipped_songs.length > 0 && <Note tone="warning">跳过了曲目:{job.skipped_songs.join('、')}(参演人员未全部提交空闲)。</Note>}
 
@@ -169,7 +179,7 @@ function ResultPanel({ job, eventId, evalDate }: { job: SolveJob; eventId: numbe
           <Note>{job.summary}</Note>
           <StageList job={job} />
           <div className="actions">
-            <LinkButton to={`/events/${eventId}/schedule?v=${job.version_id}`} variant="primary">
+            <LinkButton to={`/events/${eventId}/schedule?v=${job.version_id}${job.base_version_id ? `&diff=${job.base_version_id}` : ''}`} variant="primary">
               查看排练表
             </LinkButton>
           </div>

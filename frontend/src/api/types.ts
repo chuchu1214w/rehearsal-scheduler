@@ -92,6 +92,7 @@ export interface RehearsalEvent {
   latest_version_no: number | null
   published_version_no: number | null
   latest_job_status: JobStatus | null
+  conflict_count: number
   created_at: string
   updated_at: string
 }
@@ -222,6 +223,7 @@ export interface SolveJob {
   error: string | null
   version_id: number | null
   only_ready_songs: boolean
+  base_version_id: number | null
   created_at: string
   started_at: string | null
   finished_at: string | null
@@ -285,7 +287,9 @@ export interface ScheduleVersion {
   event_id: number
   version_no: number
   source: string
+  parent_version_id: number | null
   status: 'draft' | 'published' | 'archived'
+  locked_count: number
   level_used: number | null
   exact_optimum: boolean
   objective_values: Record<string, number>
@@ -318,4 +322,44 @@ export interface PublishedSchedule extends ScheduleVersionDetail {
 export interface CalendarInfo {
   url: string
   webcal_url: string
+}
+
+// ---------- 排练表调整(M5) ----------
+export interface EditResult {
+  version: ScheduleVersionDetail
+  warnings: string[]
+  forked: boolean
+}
+
+export type DiffChange = 'added' | 'removed' | 'moved' | 'changed'
+
+export interface DiffItem {
+  change: DiffChange
+  kind: 'formal' | 'evaluation'
+  before: ScheduleSession | null
+  after: ScheduleSession | null
+}
+
+export interface ScheduleDiff {
+  base_id: number
+  base_no: number
+  against_id: number
+  against_no: number
+  items: DiffItem[]
+  affected_members: MemberBrief[]
+  summary: string
+}
+
+export interface Conflict {
+  session: ScheduleSession
+  member: MemberBrief
+  hours: string[]
+}
+
+export interface Conflicts {
+  version_id: number
+  version_no: number
+  status: string
+  items: Conflict[]
+  members: MemberBrief[]
 }

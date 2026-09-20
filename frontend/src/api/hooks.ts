@@ -11,7 +11,9 @@ import type {
   Rule,
   RuleTypeInfo,
   CalendarInfo,
+  Conflicts,
   PublishedSchedule,
+  ScheduleDiff,
   ScheduleVersion,
   ScheduleVersionDetail,
   SolveJob,
@@ -34,6 +36,8 @@ export const keys = {
   version: (vid: number) => ['version', vid] as const,
   published: (id: number) => ['published', id] as const,
   calendar: ['calendar'] as const,
+  diff: (vid: number, against: number | null) => ['diff', vid, against] as const,
+  conflicts: (id: number, vid: number | null) => ['conflicts', id, vid] as const,
 }
 
 export function useEvents() {
@@ -96,6 +100,7 @@ export function useLatestJob(eventId: number) {
     },
     enabled: Number.isFinite(eventId),
     refetchInterval: (q) => POLL_WHEN_RUNNING(q.state.data),
+    refetchIntervalInBackground: true, // 切到别的应用再回来时,求解进度也已更新
   })
 }
 
@@ -114,6 +119,38 @@ export function usePublishedSchedule(eventId: number) {
     queryFn: async (): Promise<PublishedSchedule | null> => {
       try {
         return await api<PublishedSchedule>(`/api/events/${eventId}/schedule/published`)
+      } catch (err) {
+        if (err instanceof ApiError && err.status === 404) return null
+        throw err
+      }
+    },
+    enabled: Number.isFinite(eventId),
+  })
+}
+
+/** 版本差异;against 为空时后端默认与父版本 / 已发布版本比。没有可比的版本 → null */
+export function useDiff(versionId: number | null, against: number | null) {
+  return useQuery({
+    queryKey: keys.diff(versionId ?? 0, against),
+    queryFn: async (): Promise<ScheduleDiff | null> => {
+      try {
+        return await api<ScheduleDiff>(`/api/schedules/${versionId}/diff${against != null ? `?against=${against}` : ''}`)
+      } catch (err) {
+        if (err instanceof ApiError && err.status === 404) return null
+        throw err
+      }
+    },
+    enabled: versionId != null,
+  })
+}
+
+/** 排练表与最新空闲的冲突(管理员);没有排练表 → null */
+export function useConflicts(eventId: number, versionId: number | null) {
+  return useQuery({
+    queryKey: keys.conflicts(eventId, versionId),
+    queryFn: async (): Promise<Conflicts | null> => {
+      try {
+        return await api<Conflicts>(`/api/events/${eventId}/schedule/conflicts${versionId != null ? `?version_id=${versionId}` : ''}`)
       } catch (err) {
         if (err instanceof ApiError && err.status === 404) return null
         throw err
@@ -142,6 +179,8 @@ export function useInvalidateEvent() {
     void qc.invalidateQueries({ queryKey: keys.versions(id) })
     void qc.invalidateQueries({ queryKey: ['version'] })
     void qc.invalidateQueries({ queryKey: keys.published(id) })
+    void qc.invalidateQueries({ queryKey: ['diff'] })
+    void qc.invalidateQueries({ queryKey: ['conflicts'] })
     void qc.invalidateQueries({ queryKey: keys.roster })
   }
 }

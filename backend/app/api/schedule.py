@@ -8,7 +8,8 @@ from fastapi import APIRouter, HTTPException
 
 from ..deps import DB, AdminUser, CurrentUser
 from ..models import ScheduleVersion
-from ..schemas import PublishedScheduleOut, VersionOut
+from ..schedule_edit import apply_move, diff_versions, ensure_draft, find_session, participants_brief, schedule_conflicts
+from ..schemas import ConflictsOut, DiffOut, EditResultOut, LockIn, MoveIn, PublishedScheduleOut, VersionOut
 from ..services import published_version, serialize_version
 from ..utils import utcnow
 from .events import load_event
@@ -68,4 +69,73 @@ def get_published(event_id: int, db: DB, user: CurrentUser) -> PublishedSchedule
         day_start_hour=event.day_start_hour,
         day_end_hour=event.day_end_hour,
         my_member_id=user.member_id if user.role != "admin" else None,
+    )
+
+
+# ---------- 调整(M5) ----------
+@router.post("/schedules/{version_id}/sessions/{session_id}/move", response_model=EditResultOut)
+def move_session(version_id: int, session_id: int, body: MoveIn, db: DB, admin: AdminUser) -> EditResultOut:
+    version = _get_version(db, version_id, admin)
+    event = version.event
+    draft, forked = ensure_draft(db, event, version, admin.id)
+    session = find_session(draft, session_id, original=version if forked else None)
+    warnings = apply_move(db, event, draft, session, new_date=body.date, new_start=body.start_slot, new_duration=body.duration_slots)
+    db.refresh(draft)
+    return EditResultOut(version=serialize_version(event, draft, detail=True), warnings=warnings, forked=forked)  # type: ignore[arg-type]
+
+
+@router.post("/schedules/{version_id}/sessions/{session_id}/lock", response_model=EditResultOut)
+def lock_session(version_id: int, session_id: int, body: LockIn, db: DB, admin: AdminUser) -> EditResultOut:
+    version = _get_version(db, version_id, admin)
+    event = version.event
+    draft, forked = ensure_draft(db, event, version, admin.id)
+    session = find_session(draft, session_id, original=version if forked else None)
+    if session.kind == "evaluation":
+        raise HTTPException(status_code=422, detail="全员评估场不需要锁定")
+    session.locked = body.locked
+    db.commit()
+    db.refresh(draft)
+    return EditResultOut(version=serialize_version(event, draft, detail=True), warnings=[], forked=forked)  # type: ignore[arg-type]
+
+
+@router.get("/schedules/{version_id}/diff", response_model=DiffOut)
+def version_diff(version_id: int, db: DB, admin: AdminUser, against: int | None = None) -> DiffOut:
+    version = _get_version(db, version_id, admin)
+    event = version.event
+    other: ScheduleVersion | None
+    if against is not None:
+        other = db.get(ScheduleVersion, against)
+        if other is None or other.event_id != event.id:
+            raise HTTPException(status_code=404, detail="对比的版本不存在")
+    else:
+        other = db.get(ScheduleVersion, version.parent_version_id) if version.parent_version_id else None
+        if other is None:
+            other = next((v for v in event.versions if v.status == "published" and v.id != version.id), None)
+        if other is None:
+            other = next((v for v in reversed(event.versions) if v.version_no < version.version_no), None)
+    if other is None:
+        raise HTTPException(status_code=404, detail="没有可对比的版本")
+    return diff_versions(event, version, other)
+
+
+@router.get("/events/{event_id}/schedule/conflicts", response_model=ConflictsOut)
+def schedule_conflict_list(event_id: int, db: DB, admin: AdminUser, version_id: int | None = None) -> ConflictsOut:
+    event = load_event(db, event_id, admin)
+    version: ScheduleVersion | None
+    if version_id is not None:
+        version = db.get(ScheduleVersion, version_id)
+        if version is None or version.event_id != event.id:
+            raise HTTPException(status_code=404, detail="排练表版本不存在")
+    else:
+        version = published_version(event) or (event.versions[-1] if event.versions else None)
+    if version is None:
+        raise HTTPException(status_code=404, detail="还没有排练表")
+    items = schedule_conflicts(event, version)
+    ids = {c.member.id for c in items}
+    return ConflictsOut(
+        version_id=version.id,
+        version_no=version.version_no,
+        status=version.status,
+        items=items,
+        members=[m for m in participants_brief(event) if m.id in ids],
     )

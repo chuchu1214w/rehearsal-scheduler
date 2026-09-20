@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import os
 import traceback
-from dataclasses import asdict
+from dataclasses import asdict, replace
 
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
@@ -18,6 +18,7 @@ from solver.validator import compute_metrics
 
 from .db import make_engine, make_session_factory
 from .models import Event, RehearsalSession, ScheduleVersion, SolveJob
+from .schedule_edit import copy_locks, locked_fixed_sessions
 from .services import event_problem, ready_song_codes, summarize_diagnosis
 from .utils import utcnow
 
@@ -42,10 +43,13 @@ def store_result(db: Session, job: SolveJob, problem: Problem, result: SolveResu
     job.progress = ""
     if result.feasible:
         next_no = (db.scalar(select(func.max(ScheduleVersion.version_no)).where(ScheduleVersion.event_id == event.id)) or 0) + 1
+        base_id = (job.options or {}).get("base_version_id")
+        base = db.get(ScheduleVersion, base_id) if base_id else None
         version = ScheduleVersion(
             event_id=event.id,
             version_no=next_no,
-            source="solver",
+            source="resolve" if base is not None else "solver",
+            parent_version_id=base.id if base is not None else None,
             job_id=job.id,
             status="draft",
             level_used=result.level_used,
@@ -76,6 +80,10 @@ def store_result(db: Session, job: SolveJob, problem: Problem, result: SolveResu
                     attendance={str(name_to_id[m]): [a, b] for m, (a, b) in (s.attendance or {}).items() if m in name_to_id} or None,
                 )
             )
+        db.flush()
+        if base is not None:
+            db.refresh(version)
+            copy_locks(base, version)
         job.status = "succeeded"
         job.version_id = version.id
         level = f"层级 L{result.level_used}" if result.level_used is not None else ""
@@ -106,6 +114,13 @@ def run_job(database_url: str, job_id: int, workers: int = 0) -> None:
             job.skipped_songs = [s.code for s in event.songs if codes is not None and s.code not in codes]
             db.commit()
             problem = event_problem(event, song_codes=codes)
+            base_id = (job.options or {}).get("base_version_id")
+            base = db.get(ScheduleVersion, base_id) if base_id else None
+            if base is not None:
+                fixed = locked_fixed_sessions(event, base)
+                problem.rules = replace(problem.rules, fixed_sessions=problem.rules.fixed_sessions + fixed)
+                job.progress = f"保留 {len(fixed)} 场锁定,重排其余"
+                db.commit()
             errors, _warnings = problem.validate()
             if errors:
                 _mark_failed(db, job_id, "数据有误:" + ";".join(errors))

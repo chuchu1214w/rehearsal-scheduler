@@ -22,3 +22,4 @@ echo "   同一 Wi-Fi 的成员可访问 http://<你的电脑局域网地址>:${
 echo "   按 Ctrl+C 停止"
 echo
 exec ./.venv/bin/uvicorn app.asgi:app --app-dir backend --host "${HOST:-0.0.0.0}" --port "${PORT}"
+

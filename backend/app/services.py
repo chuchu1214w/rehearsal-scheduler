@@ -237,9 +237,14 @@ def event_steps(event: Event) -> tuple[int, list[StepOut], dict[str, int]]:
         solve_summary = f"已生成草稿 v{latest.version_no}"
     else:
         solve_summary = "未开始"
+    from .schedule_edit import conflict_count  # 局部导入,避免循环引用
+
+    conflicts = conflict_count(event, published)
     if published is not None:
-        schedule_summary = f"已发布 v{published.version_no}" + (
-            f" · 草稿 v{latest.version_no}" if latest and latest.status == "draft" else ""
+        schedule_summary = (
+            f"已发布 v{published.version_no}"
+            + (f" · 草稿 v{latest.version_no}" if latest and latest.status == "draft" else "")
+            + (f" · {conflicts} 场与最新空闲冲突" if conflicts else "")
         )
     elif latest is not None:
         schedule_summary = f"草稿 v{latest.version_no}(未发布)"
@@ -279,6 +284,7 @@ def event_steps(event: Event) -> tuple[int, list[StepOut], dict[str, int]]:
         "latest_version_no": latest.version_no if latest else None,
         "published_version_no": published.version_no if published else None,
         "latest_job_status": last_job.status if last_job else None,
+        "conflict_count": conflicts,
     }
     return current, steps, counts
 
@@ -421,6 +427,7 @@ def serialize_job(job: SolveJob) -> JobOut:
         error=job.error,
         version_id=job.version_id,
         only_ready_songs=bool((job.options or {}).get("only_ready_songs")),
+        base_version_id=(job.options or {}).get("base_version_id"),
         created_at=job.created_at,
         started_at=job.started_at,
         finished_at=job.finished_at,
@@ -507,7 +514,9 @@ def serialize_version(event: Event, v: ScheduleVersion, *, detail: bool = False)
         event_id=v.event_id,
         version_no=v.version_no,
         source=v.source,
+        parent_version_id=v.parent_version_id,
         status=v.status,
+        locked_count=sum(1 for s in v.sessions if s.locked),
         level_used=v.level_used,
         exact_optimum=v.exact_optimum,
         objective_values=dict(v.objective_values or {}),
