@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom'
 
 import { api } from '../api/client'
 import { useAction, useEvents } from '../api/hooks'
+import { CalendarPanel } from '../components/CalendarPanel'
 import { useAuth } from '../auth/AuthContext'
 import { pickCurrentEvent } from '../layout/currentEvent'
 import { Back, Button, Field, Heading, Note, Panel, PrimaryBar } from '../ui'
@@ -90,6 +91,7 @@ export function AccountPage() {
           </div>
         </form>
       </Panel>
+      <CalendarPanel />
       <PrimaryBar>
         <Button full onClick={() => void logout().then(() => navigate('/login', { replace: true }))}>
           退出登录

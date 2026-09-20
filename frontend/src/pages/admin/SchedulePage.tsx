@@ -1,23 +1,50 @@
 import { useState } from 'react'
-import { useParams, useSearchParams } from 'react-router-dom'
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 
-import { useEvent, useVersion, useVersions } from '../../api/hooks'
-import type { ScheduleSession, ScheduleVersion, ScheduleVersionDetail } from '../../api/types'
-import { Back, Badge, Heading, LinkButton, Note, Panel, Spinner, Tabs } from '../../ui'
+import { api } from '../../api/client'
+import { useAction, useEvent, useEventMembers, useInvalidateEvent, useVersion, useVersions } from '../../api/hooks'
+import type { ScheduleVersion } from '../../api/types'
+import { MemberTable, SessionsByDate, WeekView, sessionsForMember } from '../../components/ScheduleViews'
+import { Back, Badge, Button, Heading, LinkButton, Note, Panel, Spinner, Tabs } from '../../ui'
+import { Modal } from '../../ui/Modal'
+import { useToast } from '../../ui/Toast'
 import { fmtDateTime, fmtMd } from '../../utils'
 
-type View = 'sessions' | 'members'
+type View = 'week' | 'list' | 'members'
 
 export function SchedulePage() {
   const id = Number(useParams().id)
+  const navigate = useNavigate()
+  const invalidate = useInvalidateEvent()
+  const { toast } = useToast()
   const [params, setParams] = useSearchParams()
-  const [view, setView] = useState<View>('sessions')
+  const [view, setView] = useState<View>('week')
+  const [memberFilter, setMemberFilter] = useState<number | null>(null)
+  const [confirm, setConfirm] = useState<'publish' | 'unpublish' | null>(null)
   const ev = useEvent(id)
+  const members = useEventMembers(id)
   const versions = useVersions(id)
   const list = versions.data ?? []
   const requested = Number(params.get('v'))
   const selectedId = list.some((v) => v.id === requested) ? requested : (list[0]?.id ?? null)
   const detail = useVersion(selectedId)
+
+  const publish = useAction(
+    (vid: number) => api<ScheduleVersion>(`/api/schedules/${vid}/publish`, { method: 'POST' }),
+    (v) => {
+      setConfirm(null)
+      invalidate(id)
+      toast(`已发布 v${v.version_no},成员现在可以看到并订阅日历`)
+    },
+  )
+  const unpublish = useAction(
+    (vid: number) => api<ScheduleVersion>(`/api/schedules/${vid}/unpublish`, { method: 'POST' }),
+    (v) => {
+      setConfirm(null)
+      invalidate(id)
+      toast(`已撤回 v${v.version_no},成员端恢复为「尚未发布」`)
+    },
+  )
 
   if (ev.isPending || versions.isPending) return <Spinner />
   if (!ev.data) return null
@@ -45,6 +72,11 @@ export function SchedulePage() {
   }
 
   const current = list.find((v) => v.id === selectedId) ?? list[0]
+  const canPublish = current.status !== 'published' && current.validation_errors.length === 0
+  const sessions = detail.data ? sessionsForMember(detail.data.sessions, memberFilter) : []
+  const range = { formal_start_date: e.formal_start_date, formal_end_date: e.formal_end_date, eval_date: e.eval_date, day_start_hour: e.day_start_hour, day_end_hour: e.day_end_hour }
+  const dayUrl = (date: string) => `/events/${e.id}/schedule/day/${date}?v=${current.id}${memberFilter != null ? `&m=${memberFilter}` : ''}`
+
   return (
     <>
       <Back to={`/events/${e.id}`} label={`${e.name} · 工作台`} />
@@ -55,7 +87,8 @@ export function SchedulePage() {
           <select value={current.id} onChange={(ev2) => setParams({ v: ev2.target.value })} aria-label="选择版本">
             {list.map((v) => (
               <option key={v.id} value={v.id}>
-                v{v.version_no} · {versionLabel(v)}
+                v{v.version_no} · {fmtDateTime(v.created_at)}
+                {v.status === 'published' ? ' · 已发布' : v.status === 'archived' ? ' · 已归档' : ''}
               </option>
             ))}
           </select>
@@ -65,11 +98,12 @@ export function SchedulePage() {
         </div>
         <p className="muted" style={{ marginTop: 8 }}>
           {current.session_count} 场 · 生成于 {fmtDateTime(current.created_at)}
+          {current.published_at && ` · 发布于 ${fmtDateTime(current.published_at)}`}
         </p>
         {current.skipped_songs.length > 0 && <Note tone="warning">这一版跳过了曲目 {current.skipped_songs.join('、')}(求解时参演人员尚未全部提交空闲)。</Note>}
         {current.validation_errors.length > 0 && (
           <Note tone="error">
-            校验未通过:
+            校验未通过,不能发布:
             <ul style={{ margin: '4px 0 0 16px' }}>
               {current.validation_errors.map((x, i) => (
                 <li key={i}>{x}</li>
@@ -79,6 +113,15 @@ export function SchedulePage() {
         )}
         <div className="actions">
           <LinkButton to={`/events/${e.id}/solve`}>重新求解</LinkButton>
+          {current.status === 'published' ? (
+            <Button variant="ghost-danger" onClick={() => setConfirm('unpublish')}>
+              撤回发布
+            </Button>
+          ) : (
+            <Button variant="primary" disabled={!canPublish} onClick={() => setConfirm('publish')}>
+              发布这一版
+            </Button>
+          )}
         </div>
       </Panel>
 
@@ -86,118 +129,59 @@ export function SchedulePage() {
         <Tabs
           value={view}
           options={[
-            { value: 'sessions', label: '按日期' },
+            { value: 'week', label: '周日历' },
+            { value: 'list', label: '按日期' },
             { value: 'members', label: '按成员' },
           ]}
           onChange={setView}
         />
-        {detail.isPending || !detail.data ? <Spinner /> : view === 'sessions' ? <SessionsByDate d={detail.data} /> : <MemberTable d={detail.data} />}
-      </Panel>
-      <Note>周视图、拖拽微调、锁定后重排、版本对比与发布,在 M4 接入。</Note>
-    </>
-  )
-}
-
-function versionLabel(v: ScheduleVersion): string {
-  return fmtDateTime(v.created_at)
-}
-
-function SessionsByDate({ d }: { d: ScheduleVersionDetail }) {
-  const byDate = new Map<string, ScheduleSession[]>()
-  for (const s of d.sessions) byDate.set(s.date, [...(byDate.get(s.date) ?? []), s])
-  const taskTotal = new Map<string, number>()
-  for (const s of d.sessions) if (s.kind === 'formal' && s.song_code) taskTotal.set(s.song_code, (taskTotal.get(s.song_code) ?? 0) + 1)
-  return (
-    <>
-      {[...byDate.entries()].map(([date, sessions]) => (
-        <div key={date}>
-          <div className="date-title">
-            <span>
-              {fmtMd(date)} {sessions[0].weekday}
-            </span>
-            <span>{sessions.length} 场</span>
+        {view !== 'members' && (
+          <div className="version-bar" style={{ marginTop: 10 }}>
+            <select value={memberFilter ?? ''} onChange={(ev2) => setMemberFilter(ev2.target.value ? Number(ev2.target.value) : null)} aria-label="按成员筛选">
+              <option value="">全体成员</option>
+              {(members.data ?? []).map((m) => (
+                <option key={m.member_id} value={m.member_id}>
+                  只看 {m.display_name}
+                </option>
+              ))}
+            </select>
+            {memberFilter != null && <span className="muted">{sessions.filter((s) => s.kind === 'formal').length} 场</span>}
           </div>
-          {sessions.map((s) =>
-            s.kind === 'evaluation' ? (
-              <div key={s.id} className="evaluation" style={{ margin: '8px 0 12px' }}>
-                <strong>全员评估 · {s.time}</strong>
-                <p>
-                  {s.attendance && Object.values(s.attendance).some((t) => t !== s.time)
-                    ? Object.entries(s.attendance)
-                        .filter(([, t]) => t !== s.time)
-                        .map(([m, t]) => `${m} ${t}`)
-                        .join(' · ') + ';其余全程到场'
-                    : `${s.members.length} 人全程到场`}
-                </p>
-              </div>
-            ) : (
-              <SessionRow key={s.id} s={s} total={s.song_code ? (taskTotal.get(s.song_code) ?? 0) : 0} />
-            ),
-          )}
-        </div>
-      ))}
-    </>
-  )
-}
+        )}
+        {detail.isPending || !detail.data ? (
+          <Spinner />
+        ) : view === 'week' ? (
+          <WeekView sessions={sessions} range={range} onDateClick={(d) => navigate(dayUrl(d))} />
+        ) : view === 'list' ? (
+          <SessionsByDate sessions={sessions} allSessions={detail.data.sessions} />
+        ) : (
+          <MemberTable d={detail.data} />
+        )}
+      </Panel>
+      <Note>拖拽微调、锁定后重排、版本对比在 M5 接入。</Note>
 
-function SessionRow({ s, total }: { s: ScheduleSession; total: number }) {
-  const [start, end] = s.time.split('–')
-  const absentIds = new Set(s.absent.map((m) => m.id))
-  return (
-    <div className="session">
-      <div className="session__time">
-        {start}
-        <br />
-        <span>{end}</span>
-      </div>
-      <div>
-        <div className="session__title">
-          {s.song_code && <Badge>{s.song_code}</Badge>} {s.song_name}
-          <small>
-            第 {s.task_no} / {total} 场 · {s.duration_slots}h
-          </small>
-        </div>
+      <Modal
+        open={confirm !== null}
+        title={confirm === 'publish' ? `发布 v${current.version_no}?` : `撤回 v${current.version_no} 的发布?`}
+        onClose={() => setConfirm(null)}
+        actions={
+          confirm === 'publish' ? (
+            <Button variant="primary" loading={publish.isPending} onClick={() => publish.mutate(current.id)}>
+              发布
+            </Button>
+          ) : (
+            <Button variant="danger" loading={unpublish.isPending} onClick={() => unpublish.mutate(current.id)}>
+              撤回
+            </Button>
+          )
+        }
+      >
         <p>
-          {s.members.map((m, i) => (
-            <span key={m.id} className={absentIds.has(m.id) ? 'absent' : undefined}>
-              {i > 0 && '、'}
-              {m.display_name}
-              {absentIds.has(m.id) && '(缺)'}
-            </span>
-          ))}
+          {confirm === 'publish'
+            ? `发布后成员能在「我的排练表」看到,并可订阅到手机日历;${e.published_version_no ? `已发布的 v${e.published_version_no} 会归档。` : '之前没有发布过的版本。'}`
+            : '撤回后成员端恢复为「尚未发布」,已订阅的日历会清空这场演出的排练。'}
         </p>
-      </div>
-    </div>
-  )
-}
-
-function MemberTable({ d }: { d: ScheduleVersionDetail }) {
-  return (
-    <div className="tbl-wrap" style={{ marginTop: 12 }}>
-      <table className="tbl">
-        <thead>
-          <tr>
-            <th>成员</th>
-            <th className="num">场次</th>
-            <th className="num">小时</th>
-            <th className="num">天数</th>
-            <th className="num">缺席</th>
-            <th>评估到场</th>
-          </tr>
-        </thead>
-        <tbody>
-          {d.member_stats.map((m) => (
-            <tr key={m.member_id} className={m.absent > 0 ? 'bad' : ''}>
-              <td>{m.display_name}</td>
-              <td className="num">{m.sessions}</td>
-              <td className="num">{m.hours}</td>
-              <td className="num">{m.days}</td>
-              <td className="num">{m.absent}</td>
-              <td>{m.eval_time ?? '—'}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
+      </Modal>
+    </>
   )
 }

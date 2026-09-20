@@ -224,7 +224,7 @@ def event_steps(event: Event) -> tuple[int, list[StepOut], dict[str, int]]:
     formal_end = event.performance_date - timedelta(days=2)
     eval_date = event.performance_date - timedelta(days=1)
     latest = event.versions[-1] if event.versions else None
-    published = next((v for v in reversed(event.versions) if v.status == "published"), None)
+    published = published_version(event)
     last_job = event.jobs[-1] if event.jobs else None
 
     if last_job is not None and last_job.status in ("queued", "running"):
@@ -368,6 +368,10 @@ def event_problem(event: Event, *, include_unsubmitted: bool = False, song_codes
 
 
 # ---------- 求解任务 / 排练表版本 ----------
+def published_version(event: Event) -> ScheduleVersion | None:
+    return next((v for v in reversed(event.versions) if v.status == "published"), None)
+
+
 def summarize_diagnosis(diag: dict | None) -> str:
     """把诊断报告压成一句话(交互设计 A6:「差 3 场:曲目 c、f 排不下,主要卡在 若、思」)。"""
     if not diag:

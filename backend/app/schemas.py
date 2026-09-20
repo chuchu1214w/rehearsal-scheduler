@@ -563,3 +563,20 @@ class VersionDetailOut(VersionOut):
     sessions: list[SessionOut]
     member_stats: list[MemberStatOut]
     stage_records: list[dict]
+
+
+# ---------- 发布 / 日历订阅(M4) ----------
+class PublishedScheduleOut(VersionDetailOut):
+    event_name: str
+    performance_date: date
+    formal_start_date: date
+    formal_end_date: date
+    eval_date: date
+    day_start_hour: int
+    day_end_hour: int
+    my_member_id: int | None
+
+
+class CalendarOut(BaseModel):
+    url: str
+    webcal_url: str

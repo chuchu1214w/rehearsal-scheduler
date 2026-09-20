@@ -10,6 +10,8 @@ import type {
   RehearsalEvent,
   Rule,
   RuleTypeInfo,
+  CalendarInfo,
+  PublishedSchedule,
   ScheduleVersion,
   ScheduleVersionDetail,
   SolveJob,
@@ -30,6 +32,8 @@ export const keys = {
   latestJob: (id: number) => ['latest-job', id] as const,
   versions: (id: number) => ['versions', id] as const,
   version: (vid: number) => ['version', vid] as const,
+  published: (id: number) => ['published', id] as const,
+  calendar: ['calendar'] as const,
 }
 
 export function useEvents() {
@@ -103,6 +107,26 @@ export function useVersion(versionId: number | null) {
   return useQuery({ queryKey: keys.version(versionId ?? 0), queryFn: () => api<ScheduleVersionDetail>(`/api/schedules/${versionId}`), enabled: versionId != null })
 }
 
+/** 已发布的排练表;未发布时为 null */
+export function usePublishedSchedule(eventId: number) {
+  return useQuery({
+    queryKey: keys.published(eventId),
+    queryFn: async (): Promise<PublishedSchedule | null> => {
+      try {
+        return await api<PublishedSchedule>(`/api/events/${eventId}/schedule/published`)
+      } catch (err) {
+        if (err instanceof ApiError && err.status === 404) return null
+        throw err
+      }
+    },
+    enabled: Number.isFinite(eventId),
+  })
+}
+
+export function useCalendarInfo(enabled = true) {
+  return useQuery({ queryKey: keys.calendar, queryFn: () => api<CalendarInfo>('/api/me/calendar'), enabled, staleTime: Infinity })
+}
+
 /** 让某个演出相关的所有查询失效(演出、人员、曲目、要求、进度、排程) */
 export function useInvalidateEvent() {
   const qc = useQueryClient()
@@ -116,6 +140,8 @@ export function useInvalidateEvent() {
     void qc.invalidateQueries({ queryKey: ['precheck', id] })
     void qc.invalidateQueries({ queryKey: keys.latestJob(id) })
     void qc.invalidateQueries({ queryKey: keys.versions(id) })
+    void qc.invalidateQueries({ queryKey: ['version'] })
+    void qc.invalidateQueries({ queryKey: keys.published(id) })
     void qc.invalidateQueries({ queryKey: keys.roster })
   }
 }

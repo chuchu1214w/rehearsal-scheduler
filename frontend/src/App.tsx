@@ -14,12 +14,13 @@ import { EditorPage } from './pages/admin/EditorPage'
 import { ProgressPage } from './pages/admin/ProgressPage'
 import { ProxyAvailabilityPage } from './pages/admin/ProxyAvailabilityPage'
 import { SchedulePage } from './pages/admin/SchedulePage'
+import { ScheduleDayPage } from './pages/admin/ScheduleDayPage'
 import { SolvePage } from './pages/admin/SolvePage'
 import { NewEventPage, WizardPage } from './pages/admin/WizardPage'
 import { WorkbenchPage } from './pages/admin/WorkbenchPage'
 import { MemberAvailabilityPage } from './pages/member/MemberAvailabilityPage'
 import { MemberHomePage } from './pages/member/MemberHomePage'
-import { MemberSchedulePage } from './pages/member/MemberSchedulePage'
+import { MemberScheduleDayPage, MemberSchedulePage } from './pages/member/MemberSchedulePage'
 import { Spinner } from './ui'
 import { ToastProvider } from './ui/Toast'
 
@@ -62,6 +63,7 @@ function RoleRoutes() {
           <Route path="/events/:id/progress" element={<ProgressPage />} />
           <Route path="/events/:id/solve" element={<SolvePage />} />
           <Route path="/events/:id/schedule" element={<SchedulePage />} />
+          <Route path="/events/:id/schedule/day/:date" element={<ScheduleDayPage />} />
           <Route path="/events/:id/availability/:memberId" element={<ProxyAvailabilityPage />} />
           <Route path="/account" element={<AccountPage />} />
           <Route path="*" element={<Navigate to="/" replace />} />
@@ -75,6 +77,7 @@ function RoleRoutes() {
         <Route path="/" element={<MemberHomePage />} />
         <Route path="/events/:id/availability" element={<MemberAvailabilityPage />} />
         <Route path="/schedule" element={<MemberSchedulePage />} />
+        <Route path="/schedule/day/:date" element={<MemberScheduleDayPage />} />
         <Route path="/account" element={<AccountPage />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>

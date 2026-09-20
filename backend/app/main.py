@@ -9,7 +9,7 @@ from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy import select
 
-from .api import ROUTERS
+from .api import PUBLIC_ROUTERS, ROUTERS
 from .config import Settings
 from .db import SchemaOutdated, init_db, make_engine, make_session_factory
 from .models import SolveJob
@@ -37,6 +37,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     _fail_stale_jobs(app.state.session_factory)
     for router in ROUTERS:
         app.include_router(router, prefix="/api")
+    for router in PUBLIC_ROUTERS:
+        app.include_router(router)
     _mount_frontend(app, settings.frontend_dist)
     return app
 

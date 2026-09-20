@@ -302,3 +302,20 @@ export interface ScheduleVersionDetail extends ScheduleVersion {
   member_stats: MemberStat[]
   stage_records: StageRecord[]
 }
+
+// ---------- 发布 / 日历订阅(M4) ----------
+export interface PublishedSchedule extends ScheduleVersionDetail {
+  event_name: string
+  performance_date: string
+  formal_start_date: string
+  formal_end_date: string
+  eval_date: string
+  day_start_hour: number
+  day_end_hour: number
+  my_member_id: number | null
+}
+
+export interface CalendarInfo {
+  url: string
+  webcal_url: string
+}

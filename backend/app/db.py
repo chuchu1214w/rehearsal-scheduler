@@ -3,15 +3,26 @@ from __future__ import annotations
 from collections.abc import Callable
 from pathlib import Path
 
-from sqlalchemy import Engine, create_engine, event, inspect, select
+from sqlalchemy import Engine, create_engine, event, inspect, select, text
 from sqlalchemy.orm import Session, sessionmaker
 
 from .config import ROOT
 from .models import SCHEMA_VERSION, Base, Meta
 
+
 # 版本 n → n+1 的迁移。只新增表时 create_all 已建好,登记为空操作即可;改列时在这里写 ALTER。
+def _migrate_3_to_4(engine: Engine) -> None:
+    """users 增加日历订阅令牌列。"""
+    with engine.begin() as conn:
+        cols = {row[1] for row in conn.execute(text("PRAGMA table_info(users)"))}
+        if "calendar_token" not in cols:
+            conn.execute(text("ALTER TABLE users ADD COLUMN calendar_token VARCHAR(64)"))
+        conn.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS ix_users_calendar_token ON users (calendar_token)"))
+
+
 MIGRATIONS: dict[int, Callable[[Engine], None]] = {
     2: lambda engine: None,  # 2 → 3:新增 solve_jobs / schedule_versions / rehearsal_sessions
+    3: _migrate_3_to_4,  # 3 → 4:users.calendar_token
 }
 
 

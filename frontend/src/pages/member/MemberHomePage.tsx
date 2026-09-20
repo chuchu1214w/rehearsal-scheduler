@@ -1,9 +1,12 @@
 import { Link, useNavigate } from 'react-router-dom'
 
-import { useAvailability, useEventMembers, useEvents, useSongs } from '../../api/hooks'
+import dayjs from 'dayjs'
+
+import { useAvailability, useEventMembers, useEvents, usePublishedSchedule, useSongs } from '../../api/hooks'
 import type { RehearsalEvent } from '../../api/types'
 import { useAuth } from '../../auth/AuthContext'
 import { pickCurrentEvent } from '../../layout/currentEvent'
+import { sessionsForMember } from '../../components/ScheduleViews'
 import { Badge, Button, Empty, Note, Panel, PrimaryBar, Spinner } from '../../ui'
 import { daysUntilText, fmtMd, hourLabel, planText } from '../../utils'
 
@@ -31,7 +34,8 @@ function HomeForEvent({ event, memberId, name, others }: { event: RehearsalEvent
   const avail = useAvailability(event.id, memberId)
   const members = useEventMembers(event.id)
   const songs = useSongs(event.id)
-  if (avail.isPending) return <Spinner />
+  const pub = usePublishedSchedule(event.id)
+  if (avail.isPending || pub.isPending) return <Spinner />
   const a = avail.data
   const submitted = !!a?.submitted_at
   const pending = (members.data ?? []).filter((m) => !m.availability_submitted_at).length
@@ -41,7 +45,23 @@ function HomeForEvent({ event, memberId, name, others }: { event: RehearsalEvent
   let status = '待填写'
   let heading = '一起,把时间排好'
   let copy: JSX.Element
-  if (submitted) {
+  const published = pub.data
+  const todayStr = dayjs().format('YYYY-MM-DD')
+  const upcoming = published ? sessionsForMember(published.sessions, memberId).filter((s) => s.date >= todayStr).sort((a, b) => a.date.localeCompare(b.date) || a.start_slot - b.start_slot) : []
+  if (published) {
+    status = '已发布'
+    heading = upcoming.length ? '排练表已发布' : '排练全部结束'
+    const next = upcoming[0]
+    copy = next ? (
+      <>
+        下一场:{fmtMd(next.date)} {next.weekday} {next.time} · {next.kind === 'evaluation' ? '全员评估' : `${next.song_code} ${next.song_name}`}
+        <br />
+        共 {sessionsForMember(published.sessions, memberId).filter((s) => s.kind === 'formal').length} 场排练 + 1 场全员评估,可订阅到手机日历。
+      </>
+    ) : (
+      <>这场演出的排练已全部结束,加油!</>
+    )
+  } else if (submitted) {
     status = '已提交'
     heading = '时间收到,等排练表吧'
     copy = <>{pending > 0 ? `还有 ${pending} 位成员未填。` : '全员已提交。'}排练表发布后,你会在这里看到自己的安排。</>
@@ -123,10 +143,16 @@ function HomeForEvent({ event, memberId, name, others }: { event: RehearsalEvent
           ))}
         </Note>
       )}
-      <PrimaryBar note={submitted ? '提交后仍可修改;修改后排练表可能受影响。' : '大约 2 分钟 · 支持连续涂格、复制上一天'}>
-        <Button variant="primary" full onClick={() => navigate(`/events/${event.id}/availability`)}>
-          {submitted ? '修改空闲时间' : '去填写空闲时间'}
-        </Button>
+      <PrimaryBar note={published ? '有临时变动可在「账号 → 修改空闲时间」或排练表页修改。' : submitted ? '提交后仍可修改;修改后排练表可能受影响。' : '大约 2 分钟 · 支持连续涂格、复制上一天'}>
+        {published ? (
+          <Button variant="primary" full onClick={() => navigate('/schedule')}>
+            查看我的排练表
+          </Button>
+        ) : (
+          <Button variant="primary" full onClick={() => navigate(`/events/${event.id}/availability`)}>
+            {submitted ? '修改空闲时间' : '去填写空闲时间'}
+          </Button>
+        )}
       </PrimaryBar>
     </>
   )

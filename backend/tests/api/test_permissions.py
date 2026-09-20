@@ -25,6 +25,9 @@ MEMBER_OK = {
     ("put", "/api/events/{event_id}/availability/{member_id}"),
     ("post", "/api/events/{event_id}/availability/{member_id}/submit"),
     ("post", "/api/events/{event_id}/availability/{member_id}/unsubmit"),
+    ("get", "/api/events/{event_id}/schedule/published"),
+    ("get", "/api/me/calendar"),
+    ("post", "/api/me/calendar/rotate"),
 }
 
 

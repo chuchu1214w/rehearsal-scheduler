@@ -10,7 +10,7 @@ from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 from .utils import utcnow
 
 # 每次改表结构 +1;启动时与 meta 表比对,不一致就提示删库重建(开发阶段;有真实数据后改用 Alembic)
-SCHEMA_VERSION = 3  # 3:新增 solve_jobs / schedule_versions / rehearsal_sessions(可从 2 自动迁移)
+SCHEMA_VERSION = 4  # 3:新增 solve_jobs / schedule_versions / rehearsal_sessions(可从 2 自动迁移)
 
 
 class Base(DeclarativeBase):
@@ -61,6 +61,7 @@ class User(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
     last_login_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     password_changed_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+    calendar_token: Mapped[str | None] = mapped_column(String(64), unique=True, nullable=True)  # 日历订阅令牌(M4)
 
     member: Mapped[Member | None] = relationship(back_populates="user")
     sessions: Mapped[list[AuthSession]] = relationship(back_populates="user", cascade="all, delete-orphan")

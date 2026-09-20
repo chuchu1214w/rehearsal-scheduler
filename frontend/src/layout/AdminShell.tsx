@@ -15,8 +15,8 @@ export function AdminShell() {
 
   const homeTo = eventId ? `/events/${eventId}` : '/'
   const scheduleTo = eventId ? `/events/${eventId}/schedule` : '/'
-  const isHome = eventId ? location.pathname === homeTo || (!location.pathname.endsWith('/schedule') && location.pathname !== '/account') : location.pathname === '/'
-  const isSchedule = eventId ? location.pathname.endsWith('/schedule') : false
+  const isHome = eventId ? location.pathname === homeTo || (!location.pathname.includes('/schedule') && location.pathname !== '/account') : location.pathname === '/'
+  const isSchedule = eventId ? location.pathname.includes('/schedule') : false
   const isAccount = location.pathname === '/account'
 
   const nav = (

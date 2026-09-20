@@ -1849,3 +1849,180 @@ details.diag > *:not(summary) {
 .session .absent {
   color: var(--red);
 }
+
+/* ---------- 周日历(课程表式,M4) ---------- */
+.weekgrid {
+  --row-h: 34px;
+  display: grid;
+  grid-template-columns: 30px repeat(7, minmax(0, 1fr));
+  grid-template-rows: auto calc(var(--rows) * var(--row-h));
+  gap: 0 2px;
+  margin-top: 12px;
+  user-select: none;
+}
+
+@media (min-width: 900px) {
+  .weekgrid {
+    --row-h: 44px;
+    grid-template-columns: 40px repeat(7, minmax(0, 1fr));
+    gap: 0 4px;
+  }
+}
+
+.weekgrid__day {
+  border: 0;
+  background: transparent;
+  padding: 4px 0 6px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+  font-size: 10px;
+  color: var(--muted);
+  border-radius: 10px;
+  min-height: 42px;
+}
+
+.weekgrid__day b {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.weekgrid__day.is-today b {
+  background: var(--accent);
+  color: #fff;
+  border-radius: 999px;
+  padding: 1px 6px;
+}
+
+.weekgrid__day.is-off b,
+.weekgrid__day.is-off {
+  color: var(--line);
+}
+
+.weekgrid__day:not(:disabled):hover {
+  background: var(--bg);
+}
+
+.weekgrid__hours {
+  display: grid;
+  grid-auto-rows: var(--row-h);
+  font-size: 10px;
+  color: var(--muted);
+  text-align: right;
+  padding-right: 4px;
+  font-variant-numeric: tabular-nums;
+}
+
+.weekgrid__hours span {
+  transform: translateY(-6px);
+}
+
+.weekgrid__col {
+  position: relative;
+  border-radius: 8px;
+  background: repeating-linear-gradient(to bottom, var(--paper) 0, var(--paper) calc(var(--row-h) - 1px), var(--line) calc(var(--row-h) - 1px), var(--line) var(--row-h));
+  border: 1px solid var(--line);
+  overflow: hidden;
+}
+
+.weekgrid__col.is-off {
+  background: var(--bg);
+  opacity: 0.6;
+}
+
+.weekgrid__block {
+  position: absolute;
+  border: 0;
+  border-radius: 7px;
+  padding: 3px 4px;
+  text-align: left;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  overflow: hidden;
+  line-height: 1.25;
+  box-shadow: inset 0 0 0 1px rgb(0 0 0 / 6%);
+  cursor: pointer;
+}
+
+.weekgrid__block b {
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.weekgrid__block span {
+  font-size: 10px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.weekgrid__block small {
+  font-size: 9px;
+  opacity: 0.8;
+  margin-top: auto;
+}
+
+.weekgrid__block.is-eval {
+  box-shadow: 2px 2px 0 var(--outline);
+}
+
+.weekgrid__block.is-dim {
+  opacity: 0.28;
+}
+
+.weeknav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.weeknav b {
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 10px;
+  margin-top: 10px;
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.legend i {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
+  margin-right: 4px;
+  vertical-align: -1px;
+}
+
+.toggle {
+  display: inline-flex;
+  gap: 2px;
+  padding: 3px;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+}
+
+.toggle button {
+  border: 0;
+  border-radius: 9px;
+  padding: 5px 10px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.toggle button[aria-pressed="true"] {
+  color: var(--accent);
+  background: var(--paper);
+}
