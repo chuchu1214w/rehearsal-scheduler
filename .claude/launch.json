@@ -1,0 +1,17 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "backend",
+      "runtimeExecutable": ".venv/bin/uvicorn",
+      "runtimeArgs": ["app.asgi:app", "--app-dir", "backend", "--port", "8000"],
+      "port": 8000
+    },
+    {
+      "name": "backend-demo",
+      "runtimeExecutable": "bash",
+      "runtimeArgs": ["-c", "DATABASE_URL=sqlite:///data/demo.db exec .venv/bin/uvicorn app.asgi:app --app-dir backend --port 8000"],
+      "port": 8000
+    }
+  ]
+}

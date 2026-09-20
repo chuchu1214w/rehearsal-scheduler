@@ -2,62 +2,77 @@
 
 为舞团路演安排多首曲目排练的排程工具:成员在线填写空闲时间,管理员一键求解(OR-Tools CP-SAT 分层优化),无解时给出诊断与最小调整建议;支持手动微调、锁定重排、版本对比和日历订阅。
 
-**当前状态:M0 完成(求解包 + 命令行),尚无网页界面。** 里程碑见 [开发文档.md §11](开发文档.md)。
+**当前状态:M0(求解包)与 M1(账号、名册、活动、曲目 + 网页界面)已完成;空闲填报、求解、排练表在后续里程碑。** 里程碑与设计见 [开发文档.md](开发文档.md)。
 
-## 文档
+## 本机运行
 
-- [开发文档.md](开发文档.md):需求决策记录、功能需求、排程算法规格、数据模型、系统架构、接口概要、视觉规范、部署方案、里程碑与验收标准。
+需要 Python 3.12 和 Node.js。在仓库根目录执行:
+
+```bash
+./scripts/start.sh
+```
+
+脚本会创建虚拟环境、安装依赖、首次构建前端并启动服务。浏览器打开 <http://localhost:8000>,第一次会进入「首次设置」创建管理员账号。
+
+想先看演示数据(仅对空数据库有效,会创建管理员 `demo / demo12345` 和示例名册、曲目):
+
+```bash
+./.venv/bin/python scripts/seed_demo.py
+```
+
+开发模式(后端自动重载 + 前端热更新,前端在 <http://localhost:5173>):
+
+```bash
+./scripts/dev.sh
+```
+
+数据保存在 `data/app.db`,不会提交到仓库;备份就是复制这个文件。不需要任何环境变量,可选项见 `.env.example`。
+
+## 测试
+
+```bash
+cd backend && ../.venv/bin/python -m pytest
+```
+
+包含求解包测试与接口测试;其中权限矩阵测试会枚举全部 API 端点,确保匿名返回 401、普通成员访问管理接口返回 403。
+
+前端类型检查与构建:
+
+```bash
+cd frontend && npm run build
+```
+
+## 求解器命令行(M0)
+
+求解包可以脱离网页单独使用:
+
+```bash
+cd backend && ../.venv/bin/python -m solver sample -o sample.json
+```
+
+```bash
+cd backend && ../.venv/bin/python -m solver synth sample.json -o input.json --density 0.7 --seed 42
+```
+
+```bash
+cd backend && ../.venv/bin/python -m solver solve input.json -o result.json
+```
+
+其他命令:`validate`(用校验器检查一份排练表)、`diagnose`(只做无解诊断)。输入文件格式见 `backend/solver/serialization.py` 的模块说明。
 
 ## 仓库结构
 
 | 路径 | 说明 |
 |---|---|
-| `开发文档.md` | 本项目的开发依据 |
+| `开发文档.md` | 需求、算法、数据模型、架构、视觉规范、里程碑 |
+| `backend/app/` | FastAPI 后端(账号、名册、活动、曲目) |
 | `backend/solver/` | 排程求解包(纯 Python + OR-Tools,不依赖数据库或 Web 框架) |
 | `backend/tests/` | 测试(pytest) |
-| `design/` | 视觉参考:logo 与设计令牌 `tokens.css` |
+| `frontend/` | Vite + React + TypeScript + Ant Design 前端 |
+| `design/` | logo 参考图与设计令牌 `tokens.css` |
+| `scripts/` | `start.sh` 一键启动、`dev.sh` 开发模式、`seed_demo.py` 演示数据 |
 | `untitled11.py` | Colab 原型脚本,仅作参考;已被 `backend/solver` 取代 |
-
-## 本机运行求解器(M0)
-
-需要 Python 3.12。
-
-```bash
-python3 -m venv .venv && source .venv/bin/activate && pip install -e "backend[dev]"
-```
-
-```bash
-cd backend && python -m solver sample -o sample.json
-```
-
-```bash
-cd backend && python -m solver synth sample.json -o input.json --density 0.7 --seed 42
-```
-
-```bash
-cd backend && python -m solver solve input.json -o result.json
-```
-
-其他命令:`python -m solver validate input.json result.json` 用校验器检查一份排练表;`python -m solver diagnose input.json` 只做无解诊断。`sample` 写出的是附录 A 的示例活动(不含空闲数据),`synth` 生成的是**合成**空闲矩阵,只用于测试与演示。
-
-运行测试:
-
-```bash
-cd backend && python -m pytest
-```
-
-## 输入文件格式(JSON)
-
-| 键 | 说明 |
-|---|---|
-| `event` | 活动参数:`performance_date`、`formal_start_date`、`day_start_hour`(默认 10)、`day_end_hour`(默认 23)、`soft_daily_limit` / `hard_daily_limit`(默认 8 / 8)、`merge_visit_gap`、`free_gap`、`eval_durations`(默认 `[3, 2]`)、`eval_min_contiguous`(默认 2)、`same_song_different_days`、`difficulty_templates`、`stage_time_limit`、`workers`、`seed` |
-| `members` | 成员昵称列表 |
-| `songs` | 每首:`code`、`name`、`difficulty`(简单/一般/困难)、`members`、可选 `session_plan`(如 `[3, 2]`,覆盖难度模板) |
-| `availability` | `{"成员": {"YYYY-MM-DD": "1110000002211"}}`,每格 `0` 不可排 / `1` 可排 / `2` 尽量避开;字符串长度 = 每日格数 |
-| `rules` | `blocked_slots`(`{"日期": "all"` 或 格索引列表`}`)、`max_sessions_per_date`、`member_song_max_attendance`(`[{"member","song","max"}]`)、`focus_members`、`fixed_sessions`(`[{"song","date","start","duration","absent_member"}]`) |
-| `ladder` | 缺席降级阶梯,默认 L0 严格 → L1 20% → L2 25% |
-| `objectives` | 优化目标顺序,键名见 `solver/types.py` 的 `OBJECTIVE_LABELS` |
 
 ## 隐私说明
 
-本仓库为公开仓库,只放代码与文档。`.gitignore` 已排除数据库、`.env`、Excel 等可能含真实成员数据的文件,请勿提交成员的真实空闲时间。
+本仓库为公开仓库,只放代码与文档。`.gitignore` 已排除数据库、`.env`、Excel、求解输入输出等可能含真实成员数据的文件,请勿提交成员的真实空闲时间。
