@@ -290,6 +290,9 @@ class EventOut(BaseModel):
     rule_count: int
     current_step: int
     steps: list[StepOut]
+    latest_version_no: int | None
+    published_version_no: int | None
+    latest_job_status: str | None
     created_at: datetime
     updated_at: datetime
 
@@ -481,3 +484,82 @@ class PrecheckOut(BaseModel):
     items: list[PrecheckItem]
     can_solve: bool
     warnings: int
+
+
+# ---------- 求解 / 排练表 ----------
+JobStatus = Literal["queued", "running", "succeeded", "infeasible", "failed", "cancelled"]
+
+
+class SolveIn(BaseModel):
+    only_ready_songs: bool = False  # 只排参演人员已全部提交空闲的曲目
+
+
+class JobOut(BaseModel):
+    id: int
+    event_id: int
+    status: JobStatus
+    progress: str
+    stage_records: list[dict]
+    attempts: list[dict]
+    ladder_level_used: int | None
+    skipped_songs: list[str]
+    diagnosis: dict | None
+    summary: str
+    error: str | None
+    version_id: int | None
+    only_ready_songs: bool
+    created_at: datetime
+    started_at: datetime | None
+    finished_at: datetime | None
+    elapsed_seconds: float | None
+
+
+class SessionOut(BaseModel):
+    id: int
+    kind: Literal["formal", "evaluation"]
+    song_id: int | None
+    song_code: str | None
+    song_name: str
+    task_no: int | None
+    date: date
+    weekday: str
+    start_slot: int
+    duration_slots: int
+    time: str
+    members: list[MemberBrief]
+    absent: list[MemberBrief]
+    attendance: dict[str, str] | None  # 评估场:成员名 -> "14:00–17:00"
+    locked: bool
+
+
+class MemberStatOut(BaseModel):
+    member_id: int
+    display_name: str
+    sessions: int
+    hours: int
+    days: int
+    absent: int
+    eval_time: str | None
+
+
+class VersionOut(BaseModel):
+    id: int
+    event_id: int
+    version_no: int
+    source: str
+    status: Literal["draft", "published", "archived"]
+    level_used: int | None
+    exact_optimum: bool
+    objective_values: dict
+    validation_errors: list[str]
+    metrics: dict
+    skipped_songs: list[str]
+    session_count: int
+    created_at: datetime
+    published_at: datetime | None
+
+
+class VersionDetailOut(VersionOut):
+    sessions: list[SessionOut]
+    member_stats: list[MemberStatOut]
+    stage_records: list[dict]

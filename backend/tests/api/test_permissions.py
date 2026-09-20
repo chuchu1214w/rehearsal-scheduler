@@ -34,7 +34,14 @@ def _all_endpoints(app) -> list[tuple[str, str]]:
 
 
 def _concrete(path: str) -> str:
-    return path.replace("{event_id}", "999").replace("{member_id}", "999").replace("{song_id}", "999").replace("{rule_id}", "999")
+    return (
+        path.replace("{event_id}", "999")
+        .replace("{member_id}", "999")
+        .replace("{song_id}", "999")
+        .replace("{rule_id}", "999")
+        .replace("{job_id}", "999")
+        .replace("{version_id}", "999")
+    )
 
 
 def test_every_endpoint_is_guarded(app, anon: TestClient, member):

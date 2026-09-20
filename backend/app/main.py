@@ -7,10 +7,13 @@ from pathlib import Path
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
+from sqlalchemy import select
 
 from .api import ROUTERS
 from .config import Settings
 from .db import SchemaOutdated, init_db, make_engine, make_session_factory
+from .models import SolveJob
+from .utils import utcnow
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
@@ -31,10 +34,24 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.settings = settings
     app.state.engine = engine
     app.state.session_factory = make_session_factory(engine)
+    _fail_stale_jobs(app.state.session_factory)
     for router in ROUTERS:
         app.include_router(router, prefix="/api")
     _mount_frontend(app, settings.frontend_dist)
     return app
+
+
+def _fail_stale_jobs(session_factory) -> None:  # noqa: ANN001
+    """服务重启后,上次未完成的求解任务不可能再有结果,标记为失败。"""
+    with session_factory() as db:
+        stale = db.scalars(select(SolveJob).where(SolveJob.status.in_(["queued", "running"]))).all()
+        for job in stale:
+            job.status = "failed"
+            job.error = "服务重启,任务中断;请重新求解"
+            job.progress = ""
+            job.finished_at = utcnow()
+        if stale:
+            db.commit()
 
 
 def _mount_frontend(app: FastAPI, dist: Path | None) -> None:

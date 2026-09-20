@@ -187,7 +187,7 @@ def solve(problem: Problem, opts: SolveOptions | None = None) -> SolveResult:
         sessions.append(eval_choice.to_session(problem))
     else:
         feasible = False
-        diagnosis = {"评估场": diagnose_evaluation(problem)}
+        diagnosis = {"评估场": {**diagnose_evaluation(problem), "可行": False}}
 
     report = validate_schedule(problem, sessions, bundle.level)
     warnings.extend(report.warnings)

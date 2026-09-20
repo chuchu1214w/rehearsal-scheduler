@@ -1,7 +1,20 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 
-import { api, errorMessage } from './client'
-import type { Availability, EventMember, Heat, Member, Precheck, RehearsalEvent, Rule, RuleTypeInfo, SongList } from './types'
+import { ApiError, api, errorMessage } from './client'
+import type {
+  Availability,
+  EventMember,
+  Heat,
+  Member,
+  Precheck,
+  RehearsalEvent,
+  Rule,
+  RuleTypeInfo,
+  ScheduleVersion,
+  ScheduleVersionDetail,
+  SolveJob,
+  SongList,
+} from './types'
 import { useToast } from '../ui/Toast'
 
 export const keys = {
@@ -14,6 +27,9 @@ export const keys = {
   roster: ['roster'] as const,
   availability: (id: number, memberId: number) => ['availability', id, memberId] as const,
   heat: (id: number) => ['heat', id] as const,
+  latestJob: (id: number) => ['latest-job', id] as const,
+  versions: (id: number) => ['versions', id] as const,
+  version: (vid: number) => ['version', vid] as const,
 }
 
 export function useEvents() {
@@ -60,7 +76,34 @@ export function usePrecheck(eventId: number) {
   return useQuery({ queryKey: ['precheck', eventId], queryFn: () => api<Precheck>(`/api/events/${eventId}/precheck`, { method: 'POST' }) })
 }
 
-/** 让某个演出相关的所有查询失效(演出、人员、曲目、要求、进度) */
+const POLL_WHEN_RUNNING = (job: SolveJob | null | undefined) => (job && (job.status === 'running' || job.status === 'queued') ? 1500 : false)
+
+/** 最近一次求解任务;没有求解过时为 null。运行中每 1.5 秒轮询 */
+export function useLatestJob(eventId: number) {
+  return useQuery({
+    queryKey: keys.latestJob(eventId),
+    queryFn: async (): Promise<SolveJob | null> => {
+      try {
+        return await api<SolveJob>(`/api/events/${eventId}/solve-jobs/latest`)
+      } catch (err) {
+        if (err instanceof ApiError && err.status === 404) return null
+        throw err
+      }
+    },
+    enabled: Number.isFinite(eventId),
+    refetchInterval: (q) => POLL_WHEN_RUNNING(q.state.data),
+  })
+}
+
+export function useVersions(eventId: number) {
+  return useQuery({ queryKey: keys.versions(eventId), queryFn: () => api<ScheduleVersion[]>(`/api/events/${eventId}/schedules`), enabled: Number.isFinite(eventId) })
+}
+
+export function useVersion(versionId: number | null) {
+  return useQuery({ queryKey: keys.version(versionId ?? 0), queryFn: () => api<ScheduleVersionDetail>(`/api/schedules/${versionId}`), enabled: versionId != null })
+}
+
+/** 让某个演出相关的所有查询失效(演出、人员、曲目、要求、进度、排程) */
 export function useInvalidateEvent() {
   const qc = useQueryClient()
   return (id: number) => {
@@ -71,6 +114,8 @@ export function useInvalidateEvent() {
     void qc.invalidateQueries({ queryKey: keys.rules(id) })
     void qc.invalidateQueries({ queryKey: keys.heat(id) })
     void qc.invalidateQueries({ queryKey: ['precheck', id] })
+    void qc.invalidateQueries({ queryKey: keys.latestJob(id) })
+    void qc.invalidateQueries({ queryKey: keys.versions(id) })
     void qc.invalidateQueries({ queryKey: keys.roster })
   }
 }

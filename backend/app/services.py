@@ -2,16 +2,17 @@
 
 from __future__ import annotations
 
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 
 from fastapi import HTTPException
 
 from solver.candidates import build_candidates, make_tasks
 from solver.evaluation import diagnose_evaluation
+from solver.timegrid import weekday_zh
 from solver.types import Availability, EventConfig, Problem
 from solver.types import Song as SolverSong
 
-from .models import AvailabilityDay, Event, EventMember, Member, Song, User
+from .models import AvailabilityDay, Event, EventMember, Member, RehearsalSession, ScheduleVersion, SolveJob, Song, User
 from .rules import to_solver_rules
 from .schemas import (
     AccountOut,
@@ -19,13 +20,18 @@ from .schemas import (
     EventOut,
     EventSettings,
     HeatOut,
+    JobOut,
     MemberBrief,
     MemberOut,
+    MemberStatOut,
     PrecheckItem,
     PrecheckOut,
+    SessionOut,
     SongOut,
     StepOut,
     UserOut,
+    VersionDetailOut,
+    VersionOut,
 )
 
 STEPS = [
@@ -217,6 +223,28 @@ def event_steps(event: Event) -> tuple[int, list[StepOut], dict[str, int]]:
     n_rules = sum(1 for r in event.rules if r.enabled)
     formal_end = event.performance_date - timedelta(days=2)
     eval_date = event.performance_date - timedelta(days=1)
+    latest = event.versions[-1] if event.versions else None
+    published = next((v for v in reversed(event.versions) if v.status == "published"), None)
+    last_job = event.jobs[-1] if event.jobs else None
+
+    if last_job is not None and last_job.status in ("queued", "running"):
+        solve_summary = "求解中…"
+    elif last_job is not None and last_job.status == "infeasible":
+        solve_summary = f"上次无解:{last_job.summary}" if last_job.summary else "上次求解无解"
+    elif last_job is not None and last_job.status == "failed":
+        solve_summary = "上次求解失败,可重试"
+    elif latest is not None:
+        solve_summary = f"已生成草稿 v{latest.version_no}"
+    else:
+        solve_summary = "未开始"
+    if published is not None:
+        schedule_summary = f"已发布 v{published.version_no}" + (
+            f" · 草稿 v{latest.version_no}" if latest and latest.status == "draft" else ""
+        )
+    elif latest is not None:
+        schedule_summary = f"草稿 v{latest.version_no}(未发布)"
+    else:
+        schedule_summary = "尚未生成"
 
     deadline = f",截止 {fmt_md(event.availability_deadline)}" if event.availability_deadline else ""
     defs: list[tuple[bool, str]] = [
@@ -225,8 +253,8 @@ def event_steps(event: Event) -> tuple[int, list[StepOut], dict[str, int]]:
         (n_songs > 0, f"{n_songs} 首 · {n_sessions} 场正规排练 + 1 场评估" if n_songs else "还没有曲目"),
         (n_songs > 0, f"{n_rules} 条要求" if n_rules else "没有特殊要求(可跳过)"),
         (n_members > 0 and n_submitted == n_members, f"已提交 {n_submitted} / {n_members}{deadline}"),
-        (False, "未开始"),
-        (False, "尚未生成"),
+        (latest is not None, solve_summary),
+        (published is not None, schedule_summary),
     ]
     steps: list[StepOut] = []
     current = 0
@@ -248,6 +276,9 @@ def event_steps(event: Event) -> tuple[int, list[StepOut], dict[str, int]]:
         "song_count": n_songs,
         "session_count": n_sessions,
         "rule_count": n_rules,
+        "latest_version_no": latest.version_no if latest else None,
+        "published_version_no": published.version_no if published else None,
+        "latest_job_status": last_job.status if last_job else None,
     }
     return current, steps, counts
 
@@ -305,8 +336,14 @@ def serialize_event_members(event: Event) -> list[EventMemberOut]:
 
 
 # ---------- 求解包桥接 ----------
-def event_problem(event: Event, *, include_unsubmitted: bool = False) -> Problem:
-    """把演出转换为求解包的 Problem。默认只用已提交的空闲,未提交者视为全天不可排。"""
+def ready_song_codes(event: Event) -> list[str]:
+    """参演人员已全部提交空闲的曲目。"""
+    submitted = {p.member_id for p in event.participants if p.availability_submitted_at is not None}
+    return [s.code for s in event.songs if all(m.id in submitted for m in s.members)]
+
+
+def event_problem(event: Event, *, include_unsubmitted: bool = False, song_codes: set[str] | None = None) -> Problem:
+    """把演出转换为求解包的 Problem。默认只用已提交的空闲,未提交者视为全天不可排;``song_codes`` 可限定只排部分曲目。"""
     participants = sorted_participants(event)
     names = tuple(p.member.display_name for p in participants)
     avail = Availability()
@@ -325,8 +362,166 @@ def event_problem(event: Event, *, include_unsubmitted: bool = False) -> Problem
             session_plan=tuple(s.session_plan) if s.session_plan else None,
         )
         for s in event.songs
+        if song_codes is None or s.code in song_codes
     )
     return Problem(config=event_config(event), members=names, songs=songs, availability=avail, rules=to_solver_rules(event))
+
+
+# ---------- 求解任务 / 排练表版本 ----------
+def summarize_diagnosis(diag: dict | None) -> str:
+    """把诊断报告压成一句话(交互设计 A6:「差 3 场:曲目 c、f 排不下,主要卡在 若、思」)。"""
+    if not diag:
+        return "没有可行方案"
+    parts: list[str] = []
+    mc = diag.get("最大覆盖") or {}
+    gap = int(mc.get("要求场次", 0)) - int(mc.get("最多可排场次", 0))
+    songs = [row["曲目"] for row in diag.get("各曲缺口", []) if int(row.get("全局缺口", 0)) > 0]
+    ev = diag.get("评估场") or {}
+    eval_ok = bool(ev.get("可行", True))
+    formal_checked = "最大覆盖" in diag
+    if gap > 0:
+        parts.append(f"差 {gap} 场" + (f":曲目 {'、'.join(songs)} 排不下" if songs else ""))
+    elif diag.get("无候选任务") or songs:
+        parts.append("曲目 " + "、".join(songs) + " 排不下" if songs else "有排练没有全员共同时段")
+    elif not eval_ok:
+        parts.append("正规排练能排下,但评估日没有全员都能到的时段" if formal_checked else "评估日没有全员都能到的时段")
+    else:
+        parts.append("各曲单独能排,但合在一起有冲突")
+    adj = diag.get("最小调整建议") or {}
+    if gap > 0 and adj.get("可行"):
+        who = sorted({c["成员"] for c in adj.get("调整", [])})
+        parts.append(
+            f"最少需 {adj.get('受影响成员数', len(who))} 人协调 {adj.get('调整小时数', 0)} 小时" + (f"({'、'.join(who)})" if who else "")
+        )
+    if not eval_ok and (gap > 0 or songs):
+        parts.append("评估日也需协调")
+    return ";".join(parts)
+
+
+def serialize_job(job: SolveJob) -> JobOut:
+    elapsed = None
+    if job.started_at is not None:
+        end = job.finished_at or datetime.utcnow()
+        elapsed = round((end - job.started_at).total_seconds(), 1)
+    return JobOut(
+        id=job.id,
+        event_id=job.event_id,
+        status=job.status,  # type: ignore[arg-type]
+        progress=job.progress or "",
+        stage_records=list(job.stage_records or []),
+        attempts=list(job.attempts or []),
+        ladder_level_used=job.ladder_level_used,
+        skipped_songs=list(job.skipped_songs or []),
+        diagnosis=job.diagnosis,
+        summary=job.summary or "",
+        error=job.error,
+        version_id=job.version_id,
+        only_ready_songs=bool((job.options or {}).get("only_ready_songs")),
+        created_at=job.created_at,
+        started_at=job.started_at,
+        finished_at=job.finished_at,
+        elapsed_seconds=elapsed,
+    )
+
+
+def serialize_session(event: Event, s: RehearsalSession) -> SessionOut:
+    config = event_config(event)
+    names = {p.member_id: p.member.display_name for p in event.participants}
+    if s.kind == "evaluation":
+        members = [MemberBrief(id=p.member_id, display_name=p.member.display_name) for p in sorted_participants(event)]
+        song_code, song_name = None, "全员评估"
+    else:
+        song = s.song
+        members = [MemberBrief(id=m.id, display_name=m.display_name) for m in song.members] if song else []
+        song_code, song_name = (song.code, song.name) if song else (None, "(曲目已删除)")
+    absent_ids = list(s.absent_member_ids or [])
+    attendance = None
+    if s.attendance:
+        attendance = {names.get(int(k), str(k)): config.range_label(int(v[0]), int(v[1]) - int(v[0])) for k, v in s.attendance.items()}
+    return SessionOut(
+        id=s.id,
+        kind=s.kind,  # type: ignore[arg-type]
+        song_id=s.song_id,
+        song_code=song_code,
+        song_name=song_name,
+        task_no=s.task_no,
+        date=s.date,
+        weekday=weekday_zh(s.date),
+        start_slot=s.start_slot,
+        duration_slots=s.duration_slots,
+        time=config.range_label(s.start_slot, s.duration_slots),
+        members=members,
+        absent=[MemberBrief(id=i, display_name=names.get(i, "?")) for i in absent_ids],
+        attendance=attendance,
+        locked=s.locked,
+    )
+
+
+def member_stats(event: Event, sessions: list[RehearsalSession]) -> list[MemberStatOut]:
+    config = event_config(event)
+    stats: dict[int, dict] = {
+        p.member_id: {"sessions": 0, "hours": 0, "days": set(), "absent": 0, "eval": None} for p in sorted_participants(event)
+    }
+    for s in sessions:
+        if s.kind == "evaluation":
+            for k, v in (s.attendance or {}).items():
+                st = stats.get(int(k))
+                if st is not None:
+                    st["eval"] = config.range_label(int(v[0]), int(v[1]) - int(v[0]))
+            continue
+        if s.song is None:
+            continue
+        absent = set(s.absent_member_ids or [])
+        for m in s.song.members:
+            st = stats.get(m.id)
+            if st is None:
+                continue
+            if m.id in absent:
+                st["absent"] += 1
+                continue
+            st["sessions"] += 1
+            st["hours"] += s.duration_slots
+            st["days"].add(s.date)
+    names = {p.member_id: p.member.display_name for p in event.participants}
+    return [
+        MemberStatOut(
+            member_id=mid,
+            display_name=names[mid],
+            sessions=st["sessions"],
+            hours=st["hours"],
+            days=len(st["days"]),
+            absent=st["absent"],
+            eval_time=st["eval"],
+        )
+        for mid, st in stats.items()
+    ]
+
+
+def serialize_version(event: Event, v: ScheduleVersion, *, detail: bool = False) -> VersionOut | VersionDetailOut:
+    base = dict(
+        id=v.id,
+        event_id=v.event_id,
+        version_no=v.version_no,
+        source=v.source,
+        status=v.status,
+        level_used=v.level_used,
+        exact_optimum=v.exact_optimum,
+        objective_values=dict(v.objective_values or {}),
+        validation_errors=list(v.validation_errors or []),
+        metrics=dict(v.metrics or {}),
+        skipped_songs=list(v.skipped_songs or []),
+        session_count=len(v.sessions),
+        created_at=v.created_at,
+        published_at=v.published_at,
+    )
+    if not detail:
+        return VersionOut(**base)  # type: ignore[arg-type]
+    return VersionDetailOut(
+        **base,  # type: ignore[arg-type]
+        sessions=[serialize_session(event, s) for s in v.sessions],
+        member_stats=member_stats(event, list(v.sessions)),
+        stage_records=list(v.stage_records or []),
+    )
 
 
 def heat(event: Event) -> HeatOut:

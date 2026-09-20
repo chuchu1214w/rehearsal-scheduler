@@ -26,6 +26,8 @@ class Settings(BaseModel):
     login_max_failures: int = 5
     login_window_minutes: int = 15
     frontend_dist: Path | None = ROOT / "frontend" / "dist"
+    solver_mode: str = "subprocess"  # subprocess:独立子进程(生产);inline:同步执行(测试)
+    solver_workers: int = 0  # 0 = min(8, CPU 核数)
 
     @classmethod
     def from_env(cls) -> Settings:
@@ -45,4 +47,8 @@ class Settings(BaseModel):
             kwargs["invite_days"] = int(v)
         if v := env.get("FRONTEND_DIST"):
             kwargs["frontend_dist"] = Path(v)
+        if v := env.get("SOLVER_MODE"):
+            kwargs["solver_mode"] = v
+        if v := env.get("SOLVER_WORKERS"):
+            kwargs["solver_workers"] = int(v)
         return cls(**kwargs)

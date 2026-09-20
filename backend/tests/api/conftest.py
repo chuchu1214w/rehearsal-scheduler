@@ -15,7 +15,13 @@ EVENT_BODY = {"name": "秋季路演", "performance_date": "2026-09-20", "formal_
 
 @pytest.fixture
 def settings(tmp_path) -> Settings:
-    return Settings(database_url=f"sqlite:///{tmp_path / 'test.db'}", frontend_dist=None, public_base_url="http://test")
+    return Settings(
+        database_url=f"sqlite:///{tmp_path / 'test.db'}",
+        frontend_dist=None,
+        public_base_url="http://test",
+        solver_mode="inline",
+        solver_workers=4,
+    )
 
 
 @pytest.fixture

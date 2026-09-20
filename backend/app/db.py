@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 from pathlib import Path
 
 from sqlalchemy import Engine, create_engine, event, inspect, select
@@ -7,6 +8,11 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from .config import ROOT
 from .models import SCHEMA_VERSION, Base, Meta
+
+# 版本 n → n+1 的迁移。只新增表时 create_all 已建好,登记为空操作即可;改列时在这里写 ALTER。
+MIGRATIONS: dict[int, Callable[[Engine], None]] = {
+    2: lambda engine: None,  # 2 → 3:新增 solve_jobs / schedule_versions / rehearsal_sessions
+}
 
 
 class SchemaOutdated(RuntimeError):
@@ -68,7 +74,17 @@ def init_db(engine: Engine) -> None:
             db.add(Meta(key="schema_version", value=str(SCHEMA_VERSION)))
             db.commit()
         elif row.value != str(SCHEMA_VERSION):
-            raise SchemaOutdated(_outdated_message(engine, row.value))
+            found = int(row.value)
+            if found > SCHEMA_VERSION:
+                raise SchemaOutdated(_outdated_message(engine, row.value))
+            while found < SCHEMA_VERSION:
+                migrate = MIGRATIONS.get(found)
+                if migrate is None:
+                    raise SchemaOutdated(_outdated_message(engine, row.value))
+                migrate(engine)
+                found += 1
+            row.value = str(SCHEMA_VERSION)
+            db.commit()
 
 
 def _outdated_message(engine: Engine, found: str) -> str:
