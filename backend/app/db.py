@@ -2,11 +2,15 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from sqlalchemy import Engine, create_engine, event
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy import Engine, create_engine, event, inspect, select
+from sqlalchemy.orm import Session, sessionmaker
 
 from .config import ROOT
-from .models import Base
+from .models import SCHEMA_VERSION, Base, Meta
+
+
+class SchemaOutdated(RuntimeError):
+    pass
 
 
 def resolve_sqlite_url(url: str) -> str:
@@ -48,5 +52,28 @@ def make_session_factory(engine: Engine) -> sessionmaker:
 
 
 def init_db(engine: Engine) -> None:
-    # M1 用 create_all 建表;首次出现需要改表结构的里程碑(M2)起改用 Alembic 迁移。
+    """建表并核对结构版本。
+
+    开发阶段用 create_all;结构变化时 SCHEMA_VERSION +1,旧库会被拒绝启动并提示删除重建。
+    有真实数据后改用 Alembic 迁移。
+    """
+    existing = inspect(engine).get_table_names()
     Base.metadata.create_all(engine)
+    with Session(engine) as db:
+        row = db.scalar(select(Meta).where(Meta.key == "schema_version"))
+        if row is None:
+            # 全新库,或旧到还没有 meta 表的库
+            if existing and "meta" not in existing:
+                raise SchemaOutdated(_outdated_message(engine, "未知(早于版本 1)"))
+            db.add(Meta(key="schema_version", value=str(SCHEMA_VERSION)))
+            db.commit()
+        elif row.value != str(SCHEMA_VERSION):
+            raise SchemaOutdated(_outdated_message(engine, row.value))
+
+
+def _outdated_message(engine: Engine, found: str) -> str:
+    target = engine.url.database or "数据库"
+    return (
+        f"数据库结构版本不匹配:文件是 {found},程序需要 {SCHEMA_VERSION}。"
+        f"开发阶段请删除 {target} 后重新启动(会重新建空库);有真实数据时请先备份再联系开发者迁移。"
+    )

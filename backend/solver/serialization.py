@@ -101,6 +101,7 @@ def rules_from_dict(data: dict | None) -> Rules:
         blocked[d] = frozenset(range(0, 24)) if v == "all" else frozenset(int(h) for h in v)
     max_per_date = {parse_date(k): int(v) for k, v in (data.get("max_sessions_per_date") or {}).items()}
     caps = {(r["member"], r["song"]): int(r["max"]) for r in data.get("member_song_max_attendance") or []}
+    allow = {(r["member"], r["song"]): int(r["max"]) for r in data.get("member_song_max_absent") or []}
     fixed = tuple(
         FixedSession(r["song"], parse_date(r["date"]), int(r["start"]), int(r["duration"]), r.get("absent_member"))
         for r in data.get("fixed_sessions") or []
@@ -109,6 +110,7 @@ def rules_from_dict(data: dict | None) -> Rules:
         blocked_slots=blocked,
         max_sessions_per_date=max_per_date,
         member_song_max_attendance=caps,
+        member_song_max_absent=allow,
         focus_members=tuple(data.get("focus_members") or ()),
         fixed_sessions=fixed,
     )
@@ -119,6 +121,7 @@ def rules_to_dict(rules: Rules) -> dict:
         "blocked_slots": {d.isoformat(): sorted(hs) for d, hs in rules.blocked_slots.items()},
         "max_sessions_per_date": {d.isoformat(): n for d, n in rules.max_sessions_per_date.items()},
         "member_song_max_attendance": [{"member": m, "song": s, "max": cap} for (m, s), cap in rules.member_song_max_attendance.items()],
+        "member_song_max_absent": [{"member": m, "song": s, "max": n} for (m, s), n in rules.member_song_max_absent.items()],
         "focus_members": list(rules.focus_members),
         "fixed_sessions": [
             {

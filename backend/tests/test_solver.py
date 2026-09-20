@@ -162,3 +162,33 @@ def test_ladder_level_with_zero_cap_is_skipped(problem):
 def test_start_date_boundary():
     cfg = make_config(formal_start_date=START)
     assert cfg.formal_dates[0] == START
+
+
+def test_absence_allowance_used_only_when_needed(problem):
+    # C 每天只有 2 小时可用:s2(B、C 的 3 小时)在严格层排不下;给 C 一次“允许缺席”后无需降级即可排
+    for d in problem.config.formal_dates:
+        problem.availability.set_row("C", d, [UNAVAILABLE] * 13)
+        set_slots(problem.availability, "C", d, [5, 6], 1)
+    problem.rules = Rules(member_song_max_absent={("C", "s2"): 1})
+    result = solve(problem)
+    assert result.feasible and result.level_used == 0 and result.validation_errors == []
+    s2 = next(s for s in _formal(result) if s.song_code == "s2")
+    assert s2.absent_members == ("C",)
+    assert result.objective_values["absent"] == 1
+    # s3(C、D)C 可以到,允许缺席不会被滥用
+    assert all(s.absent_members == () for s in _formal(result) if s.song_code == "s3")
+
+
+def test_absence_allowance_cap_is_enforced(problem):
+    # C 完全没空:s2 一场 + s3 两场都需要 C 缺席;只允许 s3 缺席 1 次 → 仍无解(严格层 s2 无候选、s3 超出次数)
+    for d in problem.config.formal_dates:
+        problem.availability.set_row("C", d, [UNAVAILABLE] * 13)
+    problem.rules = Rules(member_song_max_absent={("C", "s3"): 1})
+    result = solve(problem, SolveOptions(diagnose_on_failure=False))
+    assert not result.feasible
+
+
+def test_absence_allowance_validation(problem):
+    problem.rules = Rules(member_song_max_absent={("A", "s3"): 1})  # A 不在 s3
+    errors, _ = problem.validate()
+    assert any("允许缺席规则" in e for e in errors)

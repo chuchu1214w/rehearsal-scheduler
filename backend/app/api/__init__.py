@@ -1,3 +1,3 @@
-from . import auth, events, invites, members, setup, songs
+from . import auth, availability, events, members, rules, setup, songs
 
-ROUTERS = [setup.router, auth.router, members.router, invites.router, events.router, songs.router]
+ROUTERS = [setup.router, auth.router, members.router, events.router, songs.router, rules.router, availability.router]

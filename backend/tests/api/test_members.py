@@ -31,12 +31,12 @@ def test_cannot_delete_referenced_member(app, admin: TestClient, member):
     _client, m = member
     assert admin.delete(f"/api/members/{m['id']}").status_code == 409  # 有账号
     other = add_member(admin, "小张")
-    ev = make_event(admin)
-    admin.put(f"/api/events/{ev['id']}/members", json={"member_ids": [other["id"]]})
+    ev = make_event(admin, member_ids=[other["id"]])
+    assert ev["member_count"] == 1
     r = admin.delete(f"/api/members/{other['id']}")
-    assert r.status_code == 409 and "活动" in r.json()["detail"]
+    assert r.status_code == 409 and "演出" in r.json()["detail"]
 
 
-def test_cannot_invite_inactive_member(admin: TestClient):
+def test_cannot_open_account_for_inactive_member(admin: TestClient):
     m = add_member(admin, "停用者", active=False)
-    assert admin.post(f"/api/members/{m['id']}/invite").status_code == 409
+    assert admin.post(f"/api/members/{m['id']}/account", json={"password": "Member123!"}).status_code == 409

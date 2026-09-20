@@ -4,7 +4,7 @@ import re
 import secrets
 from datetime import UTC, datetime
 
-USERNAME_RE = re.compile(r"^[A-Za-z0-9_.\-一-鿿]{2,32}$")
+USERNAME_RE = re.compile(r"^[A-Za-z0-9_.\-一-鿿]{1,32}$")
 TEMP_PASSWORD_ALPHABET = "abcdefghjkmnpqrstuvwxyzABCDEFGHJKMNPQRSTUVWXYZ23456789"
 
 

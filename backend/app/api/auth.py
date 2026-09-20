@@ -79,6 +79,7 @@ def change_password(body: PasswordChangeIn, request: Request, db: DB, user: Curr
         raise HTTPException(status_code=400, detail="新密码不能与旧密码相同")
     user.password_hash = hash_password(body.new_password)
     user.password_changed_at = utcnow()
+    user.must_change_password = False
     # 其他设备的会话全部失效,当前会话保留
     revoke_all_sessions(db, user, keep_session_id=getattr(request.state, "session_id", None))
     db.commit()

@@ -1,18 +1,13 @@
-from datetime import timedelta
-
 from fastapi.testclient import TestClient
-from sqlalchemy import select
 
-from app.models import Invite
-from app.utils import utcnow
-from tests.api.conftest import ADMIN, MEMBER_PW, add_member, invite_and_accept
+from tests.api.conftest import ADMIN, MEMBER_PW, add_member, open_account
 
 
 def test_setup_once(anon: TestClient):
     assert anon.get("/api/setup/status").json() == {"needs_setup": True}
     assert anon.get("/api/me").status_code == 401
     r = anon.post("/api/setup", json=ADMIN)
-    assert r.status_code == 201 and r.json()["role"] == "admin"
+    assert r.status_code == 201 and r.json()["role"] == "admin" and r.json()["must_change_password"] is False
     assert anon.get("/api/me").json()["username"] == "captain"
     assert anon.get("/api/setup/status").json() == {"needs_setup": False}
     assert TestClient(anon.app).post("/api/setup", json={"username": "x2", "password": "Passw0rd!"}).status_code == 404
@@ -35,12 +30,8 @@ def test_login_logout_and_rate_limit(app, admin: TestClient):
         c.post("/api/auth/login", json={"username": "captain", "password": "wrong"})
     r = c.post("/api/auth/login", json={"username": "captain", "password": ADMIN["password"]})
     assert r.status_code == 429 and "Retry-After" in r.headers
-    assert anon_can_login_other_user(app)
-
-
-def anon_can_login_other_user(app) -> bool:
     # 限流按用户名计,不影响其他账号
-    return TestClient(app).post("/api/auth/login", json={"username": "nobody", "password": "x"}).status_code == 401
+    assert TestClient(app).post("/api/auth/login", json={"username": "nobody", "password": "x"}).status_code == 401
 
 
 def test_change_password_revokes_other_sessions(app, admin: TestClient):
@@ -53,61 +44,59 @@ def test_change_password_revokes_other_sessions(app, admin: TestClient):
     assert TestClient(app).post("/api/auth/login", json={"username": "captain", "password": "NewPassw0rd!"}).status_code == 200
 
 
-def test_invite_flow(app, admin: TestClient):
+def test_open_account_flow(app, admin: TestClient):
     m = add_member(admin, "小红")
-    inv = admin.post(f"/api/members/{m['id']}/invite").json()
-    assert inv["url"] == f"http://test/invite/{inv['token']}"
-    anon = TestClient(app)
-    assert anon.get(f"/api/invites/{inv['token']}").json()["member_name"] == "小红"
-    assert anon.get("/api/invites/not-a-token").status_code == 404
-    assert anon.post(f"/api/invites/{inv['token']}/accept", json={"username": "captain", "password": MEMBER_PW}).status_code == 409
-    r = anon.post(f"/api/invites/{inv['token']}/accept", json={"username": "xiaohong", "password": MEMBER_PW})
+    r = admin.post(f"/api/members/{m['id']}/account", json={"password": MEMBER_PW})
     assert r.status_code == 201
-    assert r.json()["role"] == "member" and r.json()["member_id"] == m["id"] and r.json()["member_name"] == "小红"
-    assert anon.get("/api/me").status_code == 200
-    # 一次性
-    assert TestClient(app).get(f"/api/invites/{inv['token']}").status_code == 410
-    # 已有账号的成员不能再邀请
-    assert admin.post(f"/api/members/{m['id']}/invite").status_code == 409
+    cred = r.json()
+    assert cred["username"] == "小红" and cred["password"] == MEMBER_PW
+    assert "http://test" in cred["copy_text"] and "小红" in cred["copy_text"]
+    # 再开一次 → 409
+    assert admin.post(f"/api/members/{m['id']}/account", json={"password": MEMBER_PW}).status_code == 409
+    # 成员登录,首次登录需要改密码
+    c = TestClient(app)
+    login = c.post("/api/auth/login", json={"username": "小红", "password": MEMBER_PW})
+    assert login.status_code == 200 and login.json()["must_change_password"] is True
+    assert login.json()["role"] == "member" and login.json()["member_id"] == m["id"] and login.json()["member_name"] == "小红"
+    assert c.post("/api/me/password", json={"old_password": MEMBER_PW, "new_password": "MyOwnPass1"}).status_code == 204
+    assert c.get("/api/me").json()["must_change_password"] is False
     account = admin.get("/api/members").json()[0]["account"]
-    assert account["username"] == "xiaohong" and account["is_active"]
+    assert account["username"] == "小红" and account["is_active"] and account["must_change_password"] is False
 
 
-def test_expired_invite(app, admin: TestClient):
-    m = add_member(admin, "小刚")
-    token = admin.post(f"/api/members/{m['id']}/invite").json()["token"]
-    with app.state.session_factory() as db:
-        inv = db.scalar(select(Invite))
-        inv.expires_at = utcnow() - timedelta(minutes=1)
-        db.commit()
-    r = TestClient(app).get(f"/api/invites/{token}")
-    assert r.status_code == 410 and "过期" in r.json()["detail"]
-    # 重新生成后旧链接作废、新链接可用
-    new_token = admin.post(f"/api/members/{m['id']}/invite").json()["token"]
-    assert TestClient(app).get(f"/api/invites/{token}").status_code == 404
-    assert TestClient(app).get(f"/api/invites/{new_token}").status_code == 200
+def test_open_account_username_rules(app, admin: TestClient):
+    a = add_member(admin, "Ash")
+    b = add_member(admin, "ash2")
+    assert admin.post(f"/api/members/{a['id']}/account", json={"username": "captain", "password": MEMBER_PW}).status_code == 409
+    assert admin.post(f"/api/members/{a['id']}/account", json={"username": "bad name", "password": MEMBER_PW}).status_code == 422
+    assert admin.post(f"/api/members/{a['id']}/account", json={"username": "ash_official", "password": MEMBER_PW}).status_code == 201
+    # 昵称与已有用户名冲突时自动加序号
+    add_member(admin, "captain2")
+    c = add_member(admin, "Captain")
+    r = admin.post(f"/api/members/{c['id']}/account", json={"password": MEMBER_PW})
+    assert r.status_code == 201 and r.json()["username"].lower() != "captain"
+    assert admin.post(f"/api/members/{b['id']}/account", json={"password": "short"}).status_code == 422
 
 
 def test_reset_password_and_deactivate(app, admin: TestClient):
     m = add_member(admin, "小丽")
-    client = invite_and_accept(app, admin, m, "xiaoli")
-    r = admin.post(f"/api/members/{m['id']}/reset-password")
-    assert r.status_code == 200 and len(r.json()["temp_password"]) >= 10
+    client = open_account(app, admin, m, "xiaoli")
+    r = admin.post(f"/api/members/{m['id']}/account/reset", json={"password": "ResetPass1"})
+    assert r.status_code == 200 and r.json()["password"] == "ResetPass1"
     assert client.get("/api/me").status_code == 401  # 旧会话失效
-    login = TestClient(app).post("/api/auth/login", json={"username": "xiaoli", "password": r.json()["temp_password"]})
-    assert login.status_code == 200
+    login = TestClient(app).post("/api/auth/login", json={"username": "xiaoli", "password": "ResetPass1"})
+    assert login.status_code == 200 and login.json()["must_change_password"] is True
 
     fresh = TestClient(app)
-    fresh.post("/api/auth/login", json={"username": "xiaoli", "password": r.json()["temp_password"]})
+    fresh.post("/api/auth/login", json={"username": "xiaoli", "password": "ResetPass1"})
     assert admin.patch(f"/api/members/{m['id']}/account", json={"is_active": False}).json()["is_active"] is False
     assert fresh.get("/api/me").status_code == 401  # 停用后立即失效
-    again = TestClient(app).post("/api/auth/login", json={"username": "xiaoli", "password": r.json()["temp_password"]})
-    assert again.status_code == 403
+    assert TestClient(app).post("/api/auth/login", json={"username": "xiaoli", "password": "ResetPass1"}).status_code == 403
     assert admin.patch(f"/api/members/{m['id']}/account", json={"is_active": True}).status_code == 200
-    assert TestClient(app).post("/api/auth/login", json={"username": "xiaoli", "password": r.json()["temp_password"]}).status_code == 200
+    assert TestClient(app).post("/api/auth/login", json={"username": "xiaoli", "password": "ResetPass1"}).status_code == 200
 
 
 def test_member_without_account_cannot_reset(admin: TestClient):
     m = add_member(admin, "无账号")
-    assert admin.post(f"/api/members/{m['id']}/reset-password").status_code == 404
+    assert admin.post(f"/api/members/{m['id']}/account/reset", json={"password": "ResetPass1"}).status_code == 404
     assert admin.patch(f"/api/members/{m['id']}/account", json={"is_active": False}).status_code == 404

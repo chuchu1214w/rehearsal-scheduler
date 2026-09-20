@@ -142,7 +142,7 @@ def validate_schedule(
     unexcused: list[Session] = []
     for s in formal:
         for m in s.absent_members:
-            if rules.attendance_cap(m, s.song_code or "") is None:
+            if not rules.planned_absence(m, s.song_code or ""):
                 unexcused.append(s)
     if level.strict:
         for s in unexcused:
@@ -172,6 +172,10 @@ def validate_schedule(
         attended = sum(1 for s in by_song.get(code, []) if m not in s.absent_members)
         if attended > cap:
             err(f"V-09 成员 {m} 在曲目 {code} 出勤 {attended} 场,超过上限 {cap}")
+    for (m, code), allowance in rules.member_song_max_absent.items():
+        absent_n = sum(1 for s in by_song.get(code, []) if m in s.absent_members)
+        if absent_n > allowance:
+            err(f"V-09 成员 {m} 在曲目 {code} 缺席 {absent_n} 次,超过允许的 {allowance} 次")
     for d, limit in rules.max_sessions_per_date.items():
         n = sum(1 for s in formal if s.date == d)
         if n > limit:

@@ -28,7 +28,9 @@ def build_candidates(
 
     - 全员到齐的候选总是生成;
     - ``allow_absent=True``(降级层级 ≥ 1)时,额外生成“恰好缺席 1 人”的候选;
-    - 有“出勤上限”规则的成员,其缺席候选在任何层级都生成,并标记 ``excused``。
+    - 有“出勤上限”规则的成员,其缺席候选在任何层级都生成,并标记 ``excused``;
+    - 有“允许缺席 N 次”规则的成员,在其不可用的时段也在任何层级生成缺席候选(不标记 excused,
+      由 model.py 按 (成员, 曲目) 的次数上限约束)。
     """
     config = problem.config
     rules = problem.rules
@@ -38,6 +40,7 @@ def build_candidates(
         song = problem.song(task.song_code)
         members = song.members
         excusable = {m for m in members if rules.attendance_cap(m, song.code) is not None}
+        allowed = {m for m in members if rules.absence_allowance(m, song.code) is not None}
         choices: list[Candidate] = []
         for di, d in enumerate(dates):
             for start in range(0, config.slots_per_day - task.duration + 1):
@@ -50,7 +53,7 @@ def build_candidates(
                         choices.append(Candidate(di, start, task.duration, m, excused=True))
                     continue
                 for m in members:
-                    if not (allow_absent or m in excusable):
+                    if not (allow_absent or m in excusable or m in allowed):
                         continue
                     others = [x for x in members if x != m]
                     if others and members_available(problem, others, d, start, task.duration):

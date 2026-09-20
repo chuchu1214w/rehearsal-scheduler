@@ -42,12 +42,13 @@ def add_member(admin: TestClient, name: str, **extra) -> dict:
     return r.json()
 
 
-def invite_and_accept(app, admin: TestClient, member: dict, username: str, password: str = MEMBER_PW) -> TestClient:
-    inv = admin.post(f"/api/members/{member['id']}/invite")
-    assert inv.status_code == 201, inv.text
-    client = TestClient(app)
-    r = client.post(f"/api/invites/{inv.json()['token']}/accept", json={"username": username, "password": password})
+def open_account(app, admin: TestClient, member: dict, username: str | None = None, password: str = MEMBER_PW) -> TestClient:
+    """管理员开通账号,并返回以该成员身份登录的客户端。"""
+    r = admin.post(f"/api/members/{member['id']}/account", json={"username": username, "password": password})
     assert r.status_code == 201, r.text
+    client = TestClient(app)
+    login = client.post("/api/auth/login", json={"username": r.json()["username"], "password": password})
+    assert login.status_code == 200, login.text
     return client
 
 
@@ -57,7 +58,13 @@ def make_event(admin: TestClient, **overrides) -> dict:
     return r.json()
 
 
+def add_song(admin: TestClient, event_id: int, name: str, member_ids: list[int], difficulty: str = "简单", **extra) -> dict:
+    r = admin.post(f"/api/events/{event_id}/songs", json={"name": name, "difficulty": difficulty, "member_ids": member_ids, **extra})
+    assert r.status_code == 201, r.text
+    return r.json()
+
+
 @pytest.fixture
 def member(app, admin) -> tuple[TestClient, dict]:
     m = add_member(admin, "小明", aliases=["ming"])
-    return invite_and_accept(app, admin, m, "xiaoming"), m
+    return open_account(app, admin, m, "xiaoming"), m

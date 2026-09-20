@@ -6,7 +6,7 @@ from datetime import date, datetime
 from typing import Annotated, Literal
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 from .utils import USERNAME_RE, normalize_name
 
@@ -19,7 +19,7 @@ Password = Annotated[str, Field(min_length=8, max_length=128)]
 def _check_username(value: str) -> str:
     value = value.strip()
     if not USERNAME_RE.match(value):
-        raise ValueError("用户名只能包含中英文、数字、下划线、点和短横线,长度 2–32")
+        raise ValueError("用户名只能包含中英文、数字、下划线、点和短横线,长度 1–32")
     return value
 
 
@@ -57,12 +57,11 @@ class PasswordChangeIn(BaseModel):
 
 
 class UserOut(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-
     id: int
     username: str
     role: Literal["admin", "member"]
     is_active: bool
+    must_change_password: bool
     member_id: int | None
     member_name: str | None
     created_at: datetime
@@ -73,16 +72,42 @@ class AccountOut(BaseModel):
     user_id: int
     username: str
     is_active: bool
+    must_change_password: bool
     last_login_at: datetime | None
+
+
+class AccountCreateIn(BaseModel):
+    """管理员为成员开通账号:用户名默认昵称,初始密码由管理员输入。"""
+
+    username: str | None = None
+    password: Password
+
+    @field_validator("username")
+    @classmethod
+    def _username(cls, v: str | None) -> str | None:
+        return None if v is None or not v.strip() else _check_username(v)
+
+
+class AccountCredentialsOut(BaseModel):
+    """开通 / 重置后返回一次,供管理员复制发给成员。"""
+
+    member_id: int
+    display_name: str
+    username: str
+    password: str
+    copy_text: str
+
+
+class BatchAccountsIn(BaseModel):
+    password: Password
+
+
+class AccountResetIn(BaseModel):
+    password: Password
 
 
 class AccountPatch(BaseModel):
     is_active: bool
-
-
-class TempPasswordOut(BaseModel):
-    username: str
-    temp_password: str
 
 
 # ---------- 名册 ----------
@@ -137,28 +162,7 @@ class MemberBrief(BaseModel):
     display_name: str
 
 
-class InviteOut(BaseModel):
-    token: str
-    url: str
-    expires_at: datetime
-
-
-class InviteInfo(BaseModel):
-    member_name: str
-    expires_at: datetime
-
-
-class InviteAcceptIn(BaseModel):
-    username: str
-    password: Password
-
-    @field_validator("username")
-    @classmethod
-    def _username(cls, v: str) -> str:
-        return _check_username(v)
-
-
-# ---------- 活动 ----------
+# ---------- 演出 ----------
 class EventSettings(BaseModel):
     soft_daily_limit: int = Field(default=8, ge=1, le=24)
     hard_daily_limit: int = Field(default=8, ge=1, le=24)
@@ -200,6 +204,7 @@ class EventBase(BaseModel):
     name: str = Field(min_length=1, max_length=120)
     performance_date: date
     formal_start_date: date
+    availability_deadline: date | None = None  # 缺省时取演出前 10 天
     timezone: str = "Asia/Seoul"
     slot_minutes: Literal[60] = 60
     day_start_hour: int = Field(default=10, ge=0, le=23)
@@ -210,7 +215,7 @@ class EventBase(BaseModel):
     def _name(cls, v: str) -> str:
         v = normalize_name(v)
         if not v:
-            raise ValueError("活动名称不能为空")
+            raise ValueError("演出名称不能为空")
         return v
 
     @field_validator("timezone")
@@ -225,12 +230,15 @@ class EventBase(BaseModel):
 
 class EventIn(EventBase):
     settings: EventSettings = EventSettings()
+    member_ids: list[int] = []  # 新建时可直接带入人员(向导「带入上次演出的人员」)
 
 
 class EventPatch(BaseModel):
     name: str | None = Field(default=None, min_length=1, max_length=120)
     performance_date: date | None = None
     formal_start_date: date | None = None
+    availability_deadline: date | None = None
+    clear_availability_deadline: bool = False
     timezone: str | None = None
     day_start_hour: int | None = Field(default=None, ge=0, le=23)
     day_end_hour: int | None = Field(default=None, ge=1, le=24)
@@ -246,6 +254,17 @@ class EventCloneIn(BaseModel):
     formal_start_date: date
 
 
+StepState = Literal["done", "current", "todo"]
+
+
+class StepOut(BaseModel):
+    no: int
+    key: str
+    label: str
+    state: StepState
+    summary: str
+
+
 class EventOut(BaseModel):
     id: int
     name: str
@@ -254,6 +273,8 @@ class EventOut(BaseModel):
     formal_end_date: date
     eval_date: date
     formal_day_count: int
+    availability_deadline: date | None
+    days_until_performance: int
     timezone: str
     slot_minutes: int
     day_start_hour: int
@@ -262,8 +283,13 @@ class EventOut(BaseModel):
     status: EventStatus
     settings: EventSettings
     member_count: int
+    account_count: int
+    submitted_count: int
     song_count: int
     session_count: int
+    rule_count: int
+    current_step: int
+    steps: list[StepOut]
     created_at: datetime
     updated_at: datetime
 
@@ -272,27 +298,55 @@ class EventMemberOut(BaseModel):
     member_id: int
     display_name: str
     active: bool
+    note: str
+    account: AccountOut | None
     availability_submitted_at: datetime | None
+    availability_filled_days: int
+    availability_filled_by: str | None
 
 
 class EventMembersIn(BaseModel):
     member_ids: list[int]
 
 
+class EventMembersAddIn(BaseModel):
+    """按昵称添加人员:已在名册的直接关联,不在的自动创建。"""
+
+    names: list[str] = Field(min_length=1)
+
+    @field_validator("names")
+    @classmethod
+    def _names(cls, v: list[str]) -> list[str]:
+        out: list[str] = []
+        for n in v:
+            n = normalize_name(n)
+            if n and n not in out:
+                out.append(n)
+        if not out:
+            raise ValueError("请输入至少一个昵称")
+        return out
+
+
 # ---------- 曲目 ----------
 class SongIn(BaseModel):
-    code: str = Field(min_length=1, max_length=16)
+    code: str | None = Field(default=None, max_length=16)  # 缺省自动 a、b、c…
     name: str = Field(min_length=1, max_length=120)
     difficulty: Difficulty
     member_ids: list[int] = Field(min_length=1)
     session_plan: list[int] | None = None
 
-    @field_validator("code", "name")
+    @field_validator("code")
+    @classmethod
+    def _code(cls, v: str | None) -> str | None:
+        v = normalize_name(v or "")
+        return v or None
+
+    @field_validator("name")
     @classmethod
     def _strip(cls, v: str) -> str:
         v = normalize_name(v)
         if not v:
-            raise ValueError("不能为空")
+            raise ValueError("曲目名称不能为空")
         return v
 
     @field_validator("session_plan")
@@ -339,3 +393,91 @@ class SongListOut(BaseModel):
     songs: list[SongOut]
     warnings: list[str]
     total_sessions: int
+
+
+# ---------- 特殊排程要求 ----------
+RuleType = Literal[
+    "member_song_max_absent",
+    "member_song_max_attendance",
+    "blocked_day",
+    "blocked_slots",
+    "max_sessions_per_date",
+    "fixed_session",
+    "focus_member",
+]
+
+
+class RuleIn(BaseModel):
+    type: RuleType
+    params: dict = {}
+    enabled: bool = True
+
+
+class RulePatch(BaseModel):
+    params: dict | None = None
+    enabled: bool | None = None
+    sort_order: int | None = None
+
+
+class RuleOut(BaseModel):
+    id: int
+    event_id: int
+    type: RuleType
+    params: dict
+    hardness: Literal["hard", "soft"]
+    enabled: bool
+    sentence: str
+    sort_order: int
+
+
+class RuleTypeOut(BaseModel):
+    type: RuleType
+    hardness: Literal["hard", "soft"]
+    template: str  # 带 {member} {song} {date} 等占位的填空句
+    fields: list[str]
+    description: str
+
+
+# ---------- 空闲填报 ----------
+class AvailabilityOut(BaseModel):
+    event_id: int
+    member_id: int
+    display_name: str
+    dates: list[date]
+    eval_date: date
+    slots_per_day: int
+    day_start_hour: int
+    days: dict[str, str]  # "YYYY-MM-DD" -> "0110…"(缺省全部 0)
+    filled_days: int
+    filled_by: str | None
+    submitted_at: datetime | None
+    deadline: date | None
+    past_deadline: bool
+
+
+class AvailabilityIn(BaseModel):
+    days: dict[str, str]
+    submit: bool = False
+
+
+class HeatOut(BaseModel):
+    dates: list[date]
+    slots_per_day: int
+    day_start_hour: int
+    member_count: int
+    submitted_count: int
+    heat: dict[str, list[int]]  # 日期 -> 每格可排人数(只统计已提交的成员)
+
+
+class PrecheckItem(BaseModel):
+    key: str
+    ok: bool
+    level: Literal["ok", "warn", "error"]
+    label: str
+    detail: str = ""
+
+
+class PrecheckOut(BaseModel):
+    items: list[PrecheckItem]
+    can_solve: bool
+    warnings: int

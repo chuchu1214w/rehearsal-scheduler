@@ -189,9 +189,20 @@ class Rules:
     member_song_max_attendance: dict[tuple[str, str], int] = field(default_factory=dict)  # 规则模板 ①
     focus_members: tuple[str, ...] = ()  # 规则模板 ②(目标 focus_days)
     fixed_sessions: tuple[FixedSession, ...] = ()  # 规则模板 ⑤ / 锁定
+    # 交互设计 §4④:「成员 X 在曲目 Y 最多可缺席 N 次」——尽量全到,排不开时才缺席;任何层级都允许,计入「缺席最少」
+    member_song_max_absent: dict[tuple[str, str], int] = field(default_factory=dict)
 
     def attendance_cap(self, member: str, song_code: str) -> int | None:
         return self.member_song_max_attendance.get((member, song_code))
+
+    def absence_allowance(self, member: str, song_code: str) -> int | None:
+        return self.member_song_max_absent.get((member, song_code))
+
+    def planned_absence(self, member: str | None, song_code: str) -> bool:
+        """该成员在该曲目的缺席是否属于“计划内”(出勤上限或允许缺席),因而不受降级阶梯限制。"""
+        if member is None:
+            return False
+        return self.attendance_cap(member, song_code) is not None or self.absence_allowance(member, song_code) is not None
 
 
 @dataclass(frozen=True)
@@ -371,6 +382,13 @@ class Problem:
                 errors.append(f"出勤上限规则:成员 {m} 不在曲目 {code} 中")
             if cap < 0:
                 errors.append(f"出勤上限规则:{m}/{code} 的上限不能为负")
+        for (m, code), n in self.rules.member_song_max_absent.items():
+            if code not in song_codes:
+                errors.append(f"允许缺席规则引用了不存在的曲目 {code}")
+            elif m not in self.song(code).members:
+                errors.append(f"允许缺席规则:成员 {m} 不在曲目 {code} 中")
+            if n < 1:
+                errors.append(f"允许缺席规则:{m}/{code} 的次数必须 ≥ 1")
         for m in self.rules.focus_members:
             if m not in member_set:
                 errors.append(f"集中排练日规则引用了不存在的成员 {m}")

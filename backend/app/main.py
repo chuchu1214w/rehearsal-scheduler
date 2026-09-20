@@ -10,13 +10,16 @@ from fastapi.staticfiles import StaticFiles
 
 from .api import ROUTERS
 from .config import Settings
-from .db import init_db, make_engine, make_session_factory
+from .db import SchemaOutdated, init_db, make_engine, make_session_factory
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
     settings = settings or Settings.from_env()
     engine = make_engine(settings.database_url)
-    init_db(engine)
+    try:
+        init_db(engine)
+    except SchemaOutdated as exc:
+        raise SystemExit(f"\n❌ {exc}\n") from exc
 
     app = FastAPI(
         title="舞团排练排程系统",

@@ -197,14 +197,14 @@ def build_model(
                     model.add(diff >= 1).only_enforce_if(same_day.negated())
                     spacing_terms.append(100 * same_day + shortfall)
 
-    # 缺席:计划缺席(excused)不计入阶梯限制,但计入 OB-02,使成员在上限内尽量多出勤
+    # 缺席:计划内缺席(出勤上限 excused、允许缺席 allowed)不计入阶梯限制,但计入 OB-02,使成员尽量多出勤
     absent_all: list[cp_model.IntVar] = []
     absent_unexcused: list[cp_model.IntVar] = []
     for t in tasks:
         for ci, c in enumerate(candidates[t.task_id]):
             if c.absent_member is not None:
                 absent_all.append(x[(t.task_id, ci)])
-                if not c.excused:
+                if not rules.planned_absence(c.absent_member, t.song_code):
                     absent_unexcused.append(x[(t.task_id, ci)])
 
     if absent_unexcused:
@@ -217,7 +217,7 @@ def build_model(
                 x[(t.task_id, ci)]
                 for t in song_tasks
                 for ci, c in enumerate(candidates[t.task_id])
-                if c.absent_member is not None and not c.excused
+                if c.absent_member is not None and not rules.planned_absence(c.absent_member, code)
             ]
             if song_unexcused:
                 model.add(sum(song_unexcused) <= n - min_full)  # HC-09
@@ -226,10 +226,18 @@ def build_model(
                     x[(t.task_id, ci)]
                     for t in song_tasks
                     for ci, c in enumerate(candidates[t.task_id])
-                    if c.absent_member == m and not c.excused
+                    if c.absent_member == m and not rules.planned_absence(m, code)
                 ]
                 if member_unexcused:
                     model.add(sum(member_unexcused) <= level.per_member_per_song_max_absent)  # HC-10
+
+    # HC-13 规则「允许缺席 N 次」:该成员在该曲目的缺席场次 ≤ N
+    for (m, code), n in rules.member_song_max_absent.items():
+        absent_vars = [
+            x[(t.task_id, ci)] for t in tasks_by_song.get(code, []) for ci, c in enumerate(candidates[t.task_id]) if c.absent_member == m
+        ]
+        if absent_vars:
+            model.add(sum(absent_vars) <= n)
 
     # HC-13 规则模板 ①:成员–曲目出勤上限
     for (m, code), cap in rules.member_song_max_attendance.items():

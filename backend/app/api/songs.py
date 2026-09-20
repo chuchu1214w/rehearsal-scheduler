@@ -8,7 +8,7 @@ from sqlalchemy import func, select
 from ..deps import DB, AdminUser, CurrentUser
 from ..models import Event, Member, Song
 from ..schemas import SongIn, SongListOut, SongOut, SongPatch
-from ..services import event_settings, serialize_song, song_durations, song_warnings
+from ..services import event_settings, next_song_code, serialize_song, song_durations, song_warnings
 from .events import load_event
 
 router = APIRouter(tags=["songs"])
@@ -18,7 +18,7 @@ def _resolve_members(db, event: Event, member_ids: list[int]) -> list[Member]:  
     participant_ids = {p.member_id for p in event.participants}
     outside = [i for i in member_ids if i not in participant_ids]
     if outside:
-        raise HTTPException(status_code=422, detail=f"成员 {outside} 不是本活动的参与成员,请先在活动中添加")
+        raise HTTPException(status_code=422, detail=f"成员 {outside} 不是本演出的参与人员,请先在演出中添加")
     members = {m.id: m for m in db.scalars(select(Member).where(Member.id.in_(member_ids))).all()}
     return [members[i] for i in member_ids]
 
@@ -43,12 +43,13 @@ def list_songs(event_id: int, db: DB, user: CurrentUser) -> SongListOut:
 @router.post("/events/{event_id}/songs", response_model=SongOut, status_code=201)
 def create_song(event_id: int, body: SongIn, db: DB, admin: AdminUser) -> SongOut:
     event = load_event(db, event_id, admin)
-    _check_code(event, body.code, None)
+    code = body.code or next_song_code(event)
+    _check_code(event, code, None)
     members = _resolve_members(db, event, body.member_ids)
     max_order = db.scalar(select(func.max(Song.sort_order)).where(Song.event_id == event.id)) or 0
     song = Song(
         event_id=event.id,
-        code=body.code,
+        code=code,
         name=body.name,
         difficulty=body.difficulty,
         session_plan=body.session_plan,
