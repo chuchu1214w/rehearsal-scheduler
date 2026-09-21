@@ -1,0 +1,36 @@
+# Fly.io 配置(部署指南.md 方案 A)。把 app 改成你自己的应用名(全球唯一),PUBLIC_BASE_URL 跟着改。
+app = "season-rehearsal"
+primary_region = "nrt"  # 东京,离首尔最近
+
+[build]
+
+[env]
+  DATABASE_URL = "sqlite:////data/app.db"
+  APP_TIMEZONE = "Asia/Seoul"
+  PUBLIC_BASE_URL = "https://season-rehearsal.fly.dev"
+  COOKIE_SECURE = "true"
+  SOLVER_WORKERS = "2"
+  REMINDERS_INTERVAL_MINUTES = "30"
+  BACKUP_KEEP_DAYS = "14"
+
+[[mounts]]
+  source = "data"
+  destination = "/data"
+
+[http_service]
+  internal_port = 8000
+  force_https = true
+  auto_stop_machines = "off"   # 保持常驻:定时提醒与日历订阅需要服务一直在
+  auto_start_machines = true
+  min_machines_running = 1
+
+  [[http_service.checks]]
+    interval = "30s"
+    timeout = "5s"
+    grace_period = "20s"
+    method = "GET"
+    path = "/api/health"
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "512mb"

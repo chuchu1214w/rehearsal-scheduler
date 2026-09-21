@@ -22,6 +22,7 @@ def settings(tmp_path) -> Settings:
         solver_mode="inline",
         solver_workers=4,
         reminders_interval_minutes=0,
+        backup_keep_days=0,
     )
 
 

@@ -44,6 +44,17 @@ def resolve_sqlite_url(url: str) -> str:
     return f"sqlite:///{p}"
 
 
+def sqlite_path(url: str) -> Path | None:
+    """SQLite 数据库文件的绝对路径;不是文件型 SQLite 时返回 None。"""
+    url = resolve_sqlite_url(url)
+    if not url.startswith("sqlite:///"):
+        return None
+    path = url.removeprefix("sqlite:///")
+    if not path or path == ":memory:":
+        return None
+    return Path(path)
+
+
 def make_engine(url: str) -> Engine:
     kwargs: dict = {}
     url = resolve_sqlite_url(url)

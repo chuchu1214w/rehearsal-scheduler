@@ -12,6 +12,7 @@ PUBLIC = {
     ("get", "/api/setup/status"),
     ("post", "/api/setup"),
     ("post", "/api/auth/login"),
+    ("get", "/api/health"),
 }
 MEMBER_OK = {
     ("post", "/api/auth/logout"),

@@ -1,0 +1,5 @@
+# Caddy 会自动申请并续期 Let's Encrypt 证书;DOMAIN 来自 docker compose 的环境变量。
+{$DOMAIN} {
+	encode gzip
+	reverse_proxy app:8000
+}

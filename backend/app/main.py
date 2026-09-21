@@ -13,9 +13,10 @@ from fastapi.staticfiles import StaticFiles
 from sqlalchemy import select
 
 from .api import PUBLIC_ROUTERS, ROUTERS
+from .backup import backup_sqlite
 from .config import Settings
 from .db import SchemaOutdated, init_db, make_engine, make_session_factory
-from .models import SolveJob
+from .models import SCHEMA_VERSION, SolveJob
 from .utils import utcnow
 
 
@@ -39,6 +40,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.engine = engine
     app.state.session_factory = make_session_factory(engine)
     _fail_stale_jobs(app.state.session_factory)
+
+    @app.get("/api/health", tags=["health"])
+    def _health() -> dict:
+        return {"ok": True, "version": app.version, "schema_version": SCHEMA_VERSION}
+
     for router in ROUTERS:
         app.include_router(router, prefix="/api")
     for router in PUBLIC_ROUTERS:
@@ -49,18 +55,31 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
 @contextlib.asynccontextmanager
 async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
-    """后台定时提醒(NOTIF-02):每隔 N 分钟检查一次填报截止与明天的排练。"""
+    """后台任务:定时提醒(NOTIF-02,每 N 分钟)与每日自动备份(§10.4)。"""
     settings: Settings = app.state.settings
-    task = (
-        asyncio.create_task(_reminder_loop(app, settings.reminders_interval_minutes)) if settings.reminders_interval_minutes > 0 else None
-    )
+    tasks = []
+    if settings.reminders_interval_minutes > 0:
+        tasks.append(asyncio.create_task(_reminder_loop(app, settings.reminders_interval_minutes)))
+    if settings.backup_keep_days > 0:
+        tasks.append(asyncio.create_task(_backup_loop(settings)))
     try:
         yield
     finally:
-        if task is not None:
+        for task in tasks:
             task.cancel()
             with contextlib.suppress(asyncio.CancelledError):
                 await task
+
+
+async def _backup_loop(settings: Settings) -> None:
+    """每天自动备份一次 SQLite:启动 1 分钟后做第一次,之后每 24 小时。"""
+    await asyncio.sleep(60)
+    while True:
+        try:
+            await asyncio.to_thread(backup_sqlite, settings.database_url, settings.backup_keep_days)
+        except Exception:  # noqa: BLE001
+            pass
+        await asyncio.sleep(24 * 3600)
 
 
 async def _reminder_loop(app: FastAPI, minutes: int) -> None:
