@@ -36,7 +36,7 @@ export function CalendarPanel({ compact = false }: { compact?: boolean }) {
       <h3 className="card-title" style={{ fontSize: 15 }}>
         订阅到手机日历
       </h3>
-      <p className="card-copy">{compact ? '订阅后排练表有变动会自动更新,每场提前 1 小时提醒。' : 'iPhone 直接点「添加」;Android / Google 日历用「复制链接」,在日历里「通过网址添加」。订阅后排练表有变动会自动更新,每场提前 1 小时提醒。'}</p>
+      <p className="card-copy">{compact ? '订阅后排练表有变动会自动更新,每场提前 1 天和 2 小时提醒。' : 'iPhone 直接点「添加」;Android / Google 日历用「复制链接」,在日历里「通过网址添加」。订阅后排练表有变动会自动更新,每场提前 1 天和 2 小时提醒。'}</p>
       {cal.isPending ? (
         <Spinner />
       ) : cal.data ? (
