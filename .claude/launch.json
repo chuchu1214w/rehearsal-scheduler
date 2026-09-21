@@ -2,6 +2,10 @@
   "version": "0.0.1",
   "configurations": [
     {
+      "name": "app-running",
+      "url": "http://localhost:8000"
+    },
+    {
       "name": "backend",
       "runtimeExecutable": ".venv/bin/uvicorn",
       "runtimeArgs": [

@@ -1,5 +1,5 @@
 # Fly.io 配置(部署指南.md 方案 A)。把 app 改成你自己的应用名(全球唯一),PUBLIC_BASE_URL 跟着改。
-app = "season-rehearsal"
+app = "timetomeet"
 primary_region = "nrt"  # 东京,离首尔最近
 
 [build]
@@ -7,7 +7,7 @@ primary_region = "nrt"  # 东京,离首尔最近
 [env]
   DATABASE_URL = "sqlite:////data/app.db"
   APP_TIMEZONE = "Asia/Seoul"
-  PUBLIC_BASE_URL = "https://season-rehearsal.fly.dev"
+  PUBLIC_BASE_URL = "https://timetomeet.fly.dev"
   COOKIE_SECURE = "true"
   SOLVER_WORKERS = "2"
   REMINDERS_INTERVAL_MINUTES = "30"
