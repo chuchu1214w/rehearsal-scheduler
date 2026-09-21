@@ -12,6 +12,7 @@ from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy import select
 
+from . import push
 from .api import PUBLIC_ROUTERS, ROUTERS
 from .backup import backup_sqlite
 from .config import Settings
@@ -37,6 +38,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         lifespan=_lifespan,
     )
     app.state.settings = settings
+    push.CONTACT = settings.push_contact
     app.state.engine = engine
     app.state.session_factory = make_session_factory(engine)
     _fail_stale_jobs(app.state.session_factory)

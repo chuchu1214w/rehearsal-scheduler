@@ -5,6 +5,7 @@ import { useNavigate } from 'react-router-dom'
 import { api } from '../api/client'
 import { useAction, useEvents } from '../api/hooks'
 import { CalendarPanel } from '../components/CalendarPanel'
+import { InstallPushPanel } from '../components/InstallPushPanel'
 import { useAuth } from '../auth/AuthContext'
 import { pickCurrentEvent } from '../layout/currentEvent'
 import { Back, Button, Field, Heading, Note, Panel, PrimaryBar } from '../ui'
@@ -91,6 +92,7 @@ export function AccountPage() {
           </div>
         </form>
       </Panel>
+      <InstallPushPanel />
       <CalendarPanel />
       <PrimaryBar>
         <Button full onClick={() => void logout().then(() => navigate('/login', { replace: true }))}>

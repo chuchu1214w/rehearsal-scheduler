@@ -11,6 +11,7 @@ from zoneinfo import ZoneInfo
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from . import push
 from .models import Event, EventMember, Notification, ScheduleVersion, User
 from .schedule_edit import diff_versions, schedule_conflicts
 from .services import fmt_md, published_version, sorted_participants
@@ -30,6 +31,7 @@ def notify(
 ) -> int:
     """给一组用户各发一条通知;dedupe_key 已存在的用户跳过。返回实际发出的条数。"""
     sent = 0
+    delivered: list[int] = []
     for uid in dict.fromkeys(user_ids):
         if dedupe_key and db.scalar(select(Notification.id).where(Notification.user_id == uid, Notification.dedupe_key == dedupe_key)):
             continue
@@ -38,7 +40,10 @@ def notify(
                 user_id=uid, type=type, title=title[:200], body=body[:1000], link=link[:200], event_id=event_id, dedupe_key=dedupe_key
             )
         )
+        delivered.append(uid)
         sent += 1
+    if delivered:
+        push.send_to_users(db, delivered, {"title": title[:200], "body": body[:300], "link": link, "tag": f"{type}:{dedupe_key or ''}"})
     return sent
 
 

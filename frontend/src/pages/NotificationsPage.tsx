@@ -5,6 +5,7 @@ import { api } from '../api/client'
 import { keys, useAction, useNotifications } from '../api/hooks'
 import type { Notification } from '../api/types'
 import { useAuth } from '../auth/AuthContext'
+import { InstallPushPanel } from '../components/InstallPushPanel'
 import { Back, Badge, Button, Empty, Heading, Panel, Spinner } from '../ui'
 import { fmtDateTime } from '../utils'
 
@@ -51,6 +52,7 @@ export function NotificationsPage() {
           ) : undefined
         }
       />
+      <InstallPushPanel compact />
       {list.isPending ? (
         <Spinner />
       ) : items.length === 0 ? (

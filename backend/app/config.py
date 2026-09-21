@@ -29,7 +29,8 @@ class Settings(BaseModel):
     solver_mode: str = "subprocess"  # subprocess:独立子进程(生产);inline:同步执行(测试)
     solver_workers: int = 0
     reminders_interval_minutes: int = 30  # 定时提醒检查间隔;0 = 关闭(测试用)
-    backup_keep_days: int = 14  # 每日自动备份保留天数;0 = 不自动备份  # 0 = min(8, CPU 核数)
+    backup_keep_days: int = 14  # 每日自动备份保留天数;0 = 不自动备份
+    push_contact: str = "mailto:season@example.com"  # Web Push 的 VAPID 联系方式(推送服务出问题时联系用)  # 0 = min(8, CPU 核数)
 
     @classmethod
     def from_env(cls) -> Settings:
@@ -57,4 +58,6 @@ class Settings(BaseModel):
             kwargs["reminders_interval_minutes"] = int(v)
         if v := env.get("BACKUP_KEEP_DAYS"):
             kwargs["backup_keep_days"] = int(v)
+        if v := env.get("PUSH_CONTACT"):
+            kwargs["push_contact"] = v
         return cls(**kwargs)

@@ -30,6 +30,10 @@ MEMBER_OK = {
     ("get", "/api/notifications"),
     ("get", "/api/notifications/unread-count"),
     ("post", "/api/notifications/read"),
+    ("get", "/api/push/public-key"),
+    ("post", "/api/push/subscribe"),
+    ("post", "/api/push/unsubscribe"),
+    ("get", "/api/push/status"),
     ("get", "/api/me/calendar"),
     ("post", "/api/me/calendar/rotate"),
 }

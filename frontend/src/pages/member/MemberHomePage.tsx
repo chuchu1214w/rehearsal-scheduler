@@ -6,6 +6,7 @@ import { useAvailability, useEventMembers, useEvents, usePublishedSchedule, useS
 import type { RehearsalEvent } from '../../api/types'
 import { useAuth } from '../../auth/AuthContext'
 import { pickCurrentEvent } from '../../layout/currentEvent'
+import { InstallPushPanel } from '../../components/InstallPushPanel'
 import { sessionsForMember } from '../../components/ScheduleViews'
 import { Badge, Button, Empty, Note, Panel, PrimaryBar, Spinner } from '../../ui'
 import { daysUntilText, fmtMd, hourLabel, planText } from '../../utils'
@@ -97,6 +98,7 @@ function HomeForEvent({ event, memberId, name, others }: { event: RehearsalEvent
           每天 {hourLabel(event.day_start_hour)}–{hourLabel(event.day_end_hour)} · {daysUntilText(event.days_until_performance)}
         </div>
       </Panel>
+      <InstallPushPanel compact />
       <Panel>
         <div className="card-top" style={{ marginBottom: 10 }}>
           <h3 className="card-title" style={{ fontSize: 16 }}>

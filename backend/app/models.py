@@ -10,7 +10,7 @@ from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 from .utils import utcnow
 
 # 每次改表结构 +1;启动时与 meta 表比对,不一致就提示删库重建(开发阶段;有真实数据后改用 Alembic)
-SCHEMA_VERSION = 6  # 3:新增 solve_jobs / schedule_versions / rehearsal_sessions(可从 2 自动迁移)
+SCHEMA_VERSION = 7  # 3:新增 solve_jobs / schedule_versions / rehearsal_sessions(可从 2 自动迁移)
 
 
 class Base(DeclarativeBase):
@@ -270,3 +270,18 @@ class Notification(Base):
     dedupe_key: Mapped[str | None] = mapped_column(String(160), nullable=True, index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
     read_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+
+class PushSubscription(Base):
+    """PWA 推送订阅(一台设备一条)。"""
+
+    __tablename__ = "push_subscriptions"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    endpoint: Mapped[str] = mapped_column(String(600), unique=True)
+    p256dh: Mapped[str] = mapped_column(String(200))
+    auth: Mapped[str] = mapped_column(String(100))
+    user_agent: Mapped[str] = mapped_column(String(200), default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+    last_used_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)

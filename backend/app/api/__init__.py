@@ -1,4 +1,4 @@
-from . import auth, availability, calendar, events, members, notifications, rules, schedule, setup, solve, songs
+from . import auth, availability, calendar, events, members, notifications, push, rules, schedule, setup, solve, songs
 
 ROUTERS = [
     setup.router,
@@ -12,5 +12,6 @@ ROUTERS = [
     schedule.router,
     calendar.router,
     notifications.router,
+    push.router,
 ]
 PUBLIC_ROUTERS = [calendar.public_router]  # 不带 /api 前缀

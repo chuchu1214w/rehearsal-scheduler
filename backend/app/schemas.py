@@ -690,3 +690,26 @@ class LocationIn(BaseModel):
 class LocationOut(BaseModel):
     version: VersionDetailOut
     notified: int  # 已通知的成员数(仅已发布版本会通知)
+
+
+# ---------- PWA 推送 ----------
+class PushKeys(BaseModel):
+    p256dh: str = Field(max_length=200)
+    auth: str = Field(max_length=100)
+
+
+class PushSubscribeIn(BaseModel):
+    endpoint: str = Field(max_length=600)
+    keys: PushKeys
+
+
+class PushUnsubscribeIn(BaseModel):
+    endpoint: str = Field(max_length=600)
+
+
+class PushPublicKeyOut(BaseModel):
+    public_key: str
+
+
+class PushStatusOut(BaseModel):
+    devices: int
