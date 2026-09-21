@@ -98,6 +98,7 @@ def _session_events(event: Event, sessions: list[RehearsalSession], member_id: i
                 f"DTEND:{_utc(end)}",
                 f"SUMMARY:{_esc(summary)}",
                 f"DESCRIPTION:{_esc('人员:' + people)}",
+                *([f"LOCATION:{_esc(s.location)}"] if s.location else []),
                 "BEGIN:VALARM",
                 "TRIGGER:-P1D",
                 "ACTION:DISPLAY",

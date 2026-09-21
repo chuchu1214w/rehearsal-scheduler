@@ -4,7 +4,7 @@ import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 
 import { api } from '../../api/client'
 import { keys, useAction, useConflicts, useDiff, useEvent, useEventMembers, useInvalidateEvent, useVersion, useVersions } from '../../api/hooks'
-import type { DiffItem, EditResult, ScheduleSession, ScheduleVersion } from '../../api/types'
+import type { DiffItem, EditResult, ScheduleSession, ScheduleVersion, ScheduleVersionDetail } from '../../api/types'
 import { MemberTable, SessionsByDate, WeekView, sessionsForMember } from '../../components/ScheduleViews'
 import { Back, Badge, Button, Heading, LinkButton, Note, Panel, Spinner, Tabs } from '../../ui'
 import { Modal } from '../../ui/Modal'
@@ -62,6 +62,15 @@ export function SchedulePage() {
   const lock = useAction(
     (vars: { vid: number; s: ScheduleSession; locked: boolean }) => api<EditResult>(`/api/schedules/${vars.vid}/sessions/${vars.s.id}/lock`, { method: 'POST', json: { locked: vars.locked } }),
     (r, vars) => afterEdit(r, vars.locked ? `已锁定 ${vars.s.song_code} 第 ${vars.s.task_no} 场` : `已解锁 ${vars.s.song_code} 第 ${vars.s.task_no} 场`),
+  )
+  const setLocation = useAction(
+    (vars: { vid: number; s: ScheduleSession; location: string }) =>
+      api<{ version: ScheduleVersionDetail; notified: number }>(`/api/schedules/${vars.vid}/sessions/${vars.s.id}/location`, { method: 'POST', json: { location: vars.location } }),
+    (r, vars) => {
+      qc.setQueryData(keys.version(r.version.id), r.version)
+      void qc.invalidateQueries({ queryKey: keys.published(id) })
+      toast(vars.location ? `已保存地点${r.notified ? `,已通知 ${r.notified} 人` : current.status === 'published' ? '' : '(发布后成员可见)'}` : '已清空地点')
+    },
   )
   const publish = useAction(
     (vid: number) => api<ScheduleVersion>(`/api/schedules/${vid}/publish`, { method: 'POST' }),
@@ -240,6 +249,7 @@ export function SchedulePage() {
             editable={editable && !busy}
             onMove={(s, date, start) => move.mutate({ vid: current.id, s, date, start })}
             onLock={(s, locked) => lock.mutate({ vid: current.id, s, locked })}
+            onLocation={(s, location) => setLocation.mutate({ vid: current.id, s, location })}
           />
         ) : view === 'list' ? (
           <SessionsByDate sessions={sessions} allSessions={detail.data.sessions} />

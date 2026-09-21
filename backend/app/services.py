@@ -472,6 +472,7 @@ def serialize_session(event: Event, s: RehearsalSession) -> SessionOut:
         absent=[MemberBrief(id=i, display_name=names.get(i, "?")) for i in absent_ids],
         attendance=attendance,
         locked=s.locked,
+        location=s.location or "",
     )
 
 

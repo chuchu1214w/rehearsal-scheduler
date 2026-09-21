@@ -55,6 +55,7 @@ function HomeForEvent({ event, memberId, name, others }: { event: RehearsalEvent
     copy = next ? (
       <>
         下一场:{fmtMd(next.date)} {next.weekday} {next.time} · {next.kind === 'evaluation' ? '全员评估' : `${next.song_code} ${next.song_name}`}
+        {next.location && ` · 📍 ${next.location}`}
         <br />
         共 {sessionsForMember(published.sessions, memberId).filter((s) => s.kind === 'formal').length} 场排练 + 1 场全员评估,可订阅到手机日历。
       </>

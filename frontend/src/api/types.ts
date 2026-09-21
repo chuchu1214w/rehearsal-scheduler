@@ -272,6 +272,7 @@ export interface ScheduleSession {
   absent: MemberBrief[]
   attendance: Record<string, string> | null
   locked: boolean
+  location: string
 }
 
 export interface MemberStat {

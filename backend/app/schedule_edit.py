@@ -101,6 +101,7 @@ def fork_as_draft(db: DbSession, event: Event, base: ScheduleVersion, actor_id: 
                 absent_member_ids=list(s.absent_member_ids or []),
                 attendance=dict(s.attendance) if s.attendance else None,
                 locked=s.locked,
+                location=s.location or "",
             )
         )
     db.flush()
@@ -213,6 +214,18 @@ def locked_fixed_sessions(event: Event, version: ScheduleVersion) -> tuple[Fixed
         absent = [names[i] for i in (s.absent_member_ids or []) if i in names]
         out.append(FixedSession(s.song.code, s.date, s.start_slot, s.duration_slots, absent[0] if absent else None))
     return tuple(out)
+
+
+def copy_locations(source: ScheduleVersion, target: ScheduleVersion) -> int:
+    """把 source 里已填的排练地点带到 target 中时间、曲目都相同的场次上。返回带过去的数量。"""
+    where = {(s.kind, s.song_id, s.date, s.start_slot, s.duration_slots): s.location for s in source.sessions if s.location}
+    n = 0
+    for s in target.sessions:
+        loc = where.get((s.kind, s.song_id, s.date, s.start_slot, s.duration_slots))
+        if loc and not s.location:
+            s.location = loc
+            n += 1
+    return n
 
 
 def copy_locks(base: ScheduleVersion, target: ScheduleVersion) -> None:

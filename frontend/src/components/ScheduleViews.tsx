@@ -1,5 +1,5 @@
 import dayjs from 'dayjs'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 
 import type { MemberBrief, ScheduleSession, ScheduleVersionDetail } from '../api/types'
 import { Badge, Button } from '../ui'
@@ -36,6 +36,7 @@ export function WeekView({
   editable = false,
   onMove,
   onLock,
+  onLocation,
 }: {
   sessions: ScheduleSession[]
   range: ScheduleRange
@@ -45,12 +46,14 @@ export function WeekView({
   editable?: boolean
   onMove?: (s: ScheduleSession, date: string, startSlot: number) => void
   onLock?: (s: ScheduleSession, locked: boolean) => void
+  onLocation?: (s: ScheduleSession, location: string) => void
 }) {
   const weeks = weekStarts(range.formal_start_date, range.eval_date)
   const today = dayjs().format('YYYY-MM-DD')
   const preferred = initialDate ?? (today >= range.formal_start_date && today <= range.eval_date ? today : range.formal_start_date)
   const [week, setWeek] = useState(() => (weeks.includes(weekOf(preferred)) ? weekOf(preferred) : weeks[0]))
   const [open, setOpen] = useState<ScheduleSession | null>(null)
+  const current = open ? (sessions.find((s) => s.id === open.id) ?? open) : null
   const idx = weeks.indexOf(week)
   const order = songOrderOf(sessions)
   const inWeek = sessions.filter((s) => weekOf(s.date) === week)
@@ -99,7 +102,7 @@ export function WeekView({
         {editable && <span className="muted">拖动色块可移动场次;<i className="lock" /> 已锁定</span>}
       </div>
       <SessionModal
-        s={open}
+        s={current}
         onClose={() => setOpen(null)}
         onLock={
           editable && onLock
@@ -109,12 +112,25 @@ export function WeekView({
               }
             : undefined
         }
+        onLocation={onLocation}
       />
     </>
   )
 }
 
-export function SessionModal({ s, onClose, onLock }: { s: ScheduleSession | null; onClose: () => void; onLock?: (s: ScheduleSession, locked: boolean) => void }) {
+export function SessionModal({
+  s,
+  onClose,
+  onLock,
+  onLocation,
+}: {
+  s: ScheduleSession | null
+  onClose: () => void
+  onLock?: (s: ScheduleSession, locked: boolean) => void
+  onLocation?: (s: ScheduleSession, location: string) => void
+}) {
+  const [loc, setLoc] = useState(s?.location ?? '')
+  useEffect(() => setLoc(s?.location ?? ''), [s?.id, s?.location])
   if (!s) return null
   const absent = new Set(s.absent.map((m) => m.id))
   return (
@@ -134,6 +150,20 @@ export function SessionModal({ s, onClose, onLock }: { s: ScheduleSession | null
         {fmtMd(s.date)} {s.weekday} · {s.time} · {s.duration_slots}h
         {s.locked && <Badge tone="orange">已锁定</Badge>}
       </p>
+      {onLocation ? (
+        <div className="inline" style={{ marginTop: 10, gap: 8 }}>
+          <input value={loc} onChange={(e) => setLoc(e.target.value)} placeholder="排练地点,如 三楼排练厅" maxLength={200} style={{ flex: 1 }} aria-label="排练地点" />
+          <Button small disabled={loc.trim() === (s.location ?? '')} onClick={() => onLocation(s, loc.trim())}>
+            保存地点
+          </Button>
+        </div>
+      ) : (
+        s.location && (
+          <p style={{ marginTop: 8, fontSize: 13 }}>
+            📍 {s.location}
+          </p>
+        )
+      )}
       {onLock && s.kind === 'formal' && <p className="muted">在周日历里拖动色块可移动这场;锁定后不会被拖动,「锁定后重排」时也保持不变。时长由曲目的排练方案决定。</p>}
       {s.kind === 'evaluation' ? (
         <div style={{ marginTop: 8 }}>
@@ -198,7 +228,10 @@ export function EvaluationBlock({ s, memberId = null }: { s: ScheduleSession; me
   const partial = s.attendance ? Object.entries(s.attendance).filter(([, t]) => t !== s.time) : []
   return (
     <div className="evaluation" style={{ margin: '8px 0 12px' }}>
-      <strong>全员评估 · {s.time}</strong>
+      <strong>
+        全员评估 · {s.time}
+        {s.location && ` · 📍 ${s.location}`}
+      </strong>
       <p>
         {mine && mine !== s.time ? `你的到场时间:${mine};` : ''}
         {partial.length > 0 ? partial.map(([m, t]) => `${m} ${t}`).join(' · ') + ';其余全程到场' : `${s.members.length} 人全程到场`}
@@ -224,6 +257,7 @@ export function SessionRow({ s, total }: { s: ScheduleSession; total: number }) 
             第 {s.task_no} / {total} 场 · {s.duration_slots}h
           </small>
         </div>
+        {s.location && <p style={{ color: 'var(--ink)' }}>📍 {s.location}</p>}
         <p>
           {s.members.map((m: MemberBrief, i) => (
             <span key={m.id} className={absentIds.has(m.id) ? 'absent' : undefined}>

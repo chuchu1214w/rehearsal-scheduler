@@ -172,6 +172,34 @@ def on_joined(db: Session, event: Event, members: list[EventMember]) -> int:
     return sent
 
 
+def on_location_set(db: Session, event: Event, version: ScheduleVersion, session) -> int:  # noqa: ANN001
+    """已发布版本的某场填了地点:通知这场的到场成员。同一场同一地点只通知一次。"""
+    if version.status != "published" or not session.location:
+        return 0
+    if session.kind == "evaluation":
+        ids = {int(k) for k in (session.attendance or {})}
+        what = "全员评估"
+    else:
+        if session.song is None:
+            return 0
+        absent = set(session.absent_member_ids or [])
+        ids = {m.id for m in session.song.members if m.id not in absent}
+        what = f"{session.song.code} {session.song.name}"
+    users = [uid for p, uid in participants_with_accounts(event) if p.member_id in ids]
+    start_h = event.day_start_hour + session.start_slot
+    when = f"{fmt_md(session.date)} {start_h:02d}:00–{start_h + session.duration_slots:02d}:00"
+    return notify(
+        db,
+        users,
+        type="location",
+        title=f"排练地点:{session.location}",
+        body=f"{when} {what} · {event.name}",
+        link=f"/schedule/day/{session.date.isoformat()}?event={event.id}",
+        event_id=event.id,
+        dedupe_key=f"location:{session.id}:{session.location}",
+    )
+
+
 def remind_unsubmitted(db: Session, event: Event) -> tuple[list[str], list[str]]:
     """一键催办(AVAIL-06):给未提交且有账号的成员发通知。返回 (已通知, 没有账号)。"""
     notified: list[str] = []

@@ -20,10 +20,19 @@ def _migrate_3_to_4(engine: Engine) -> None:
         conn.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS ix_users_calendar_token ON users (calendar_token)"))
 
 
+def _migrate_5_to_6(engine: Engine) -> None:
+    """场次增加排练地点列。"""
+    with engine.begin() as conn:
+        cols = {row[1] for row in conn.execute(text("PRAGMA table_info(rehearsal_sessions)"))}
+        if "location" not in cols:
+            conn.execute(text("ALTER TABLE rehearsal_sessions ADD COLUMN location VARCHAR(200) NOT NULL DEFAULT ''"))
+
+
 MIGRATIONS: dict[int, Callable[[Engine], None]] = {
     2: lambda engine: None,  # 2 → 3:新增 solve_jobs / schedule_versions / rehearsal_sessions
     3: _migrate_3_to_4,  # 3 → 4:users.calendar_token
     4: lambda engine: None,  # 4 → 5:新增 notifications(create_all 已建)
+    5: _migrate_5_to_6,  # 5 → 6:rehearsal_sessions.location
 }
 
 

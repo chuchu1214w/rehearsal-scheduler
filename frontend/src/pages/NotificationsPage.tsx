@@ -17,6 +17,7 @@ const TYPE_TEXT: Record<string, { label: string; tone: 'accent' | 'green' | 'ora
   tomorrow: { label: '明天', tone: 'accent' },
   conflict: { label: '受影响', tone: 'red' },
   all_submitted: { label: '可排程', tone: 'green' },
+  location: { label: '地点', tone: 'accent' },
 }
 
 export function NotificationsPage() {

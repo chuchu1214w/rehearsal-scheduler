@@ -8,9 +8,9 @@ from fastapi import APIRouter, HTTPException
 
 from ..deps import DB, AdminUser, CurrentUser
 from ..models import ScheduleVersion
-from ..notify import on_publish, on_unpublish
+from ..notify import on_location_set, on_publish, on_unpublish
 from ..schedule_edit import apply_move, diff_versions, ensure_draft, find_session, participants_brief, schedule_conflicts
-from ..schemas import ConflictsOut, DiffOut, EditResultOut, LockIn, MoveIn, PublishedScheduleOut, VersionOut
+from ..schemas import ConflictsOut, DiffOut, EditResultOut, LocationIn, LocationOut, LockIn, MoveIn, PublishedScheduleOut, VersionOut
 from ..services import published_version, serialize_version
 from ..utils import utcnow
 from .events import load_event
@@ -144,3 +144,17 @@ def schedule_conflict_list(event_id: int, db: DB, admin: AdminUser, version_id: 
         items=items,
         members=[m for m in participants_brief(event) if m.id in ids],
     )
+
+
+@router.post("/schedules/{version_id}/sessions/{session_id}/location", response_model=LocationOut)
+def set_location(version_id: int, session_id: int, body: LocationIn, db: DB, admin: AdminUser) -> LocationOut:
+    """填写 / 修改排练地点:地点是附加信息,任何版本都原地改、不产生新版本;已发布版本会通知这场的成员。"""
+    version = _get_version(db, version_id, admin)
+    event = version.event
+    session = find_session(version, session_id)
+    session.location = body.location.strip()
+    db.flush()
+    notified = on_location_set(db, event, version, session)
+    db.commit()
+    db.refresh(version)
+    return LocationOut(version=serialize_version(event, version, detail=True), notified=notified)  # type: ignore[arg-type]

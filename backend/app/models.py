@@ -10,7 +10,7 @@ from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 from .utils import utcnow
 
 # 每次改表结构 +1;启动时与 meta 表比对,不一致就提示删库重建(开发阶段;有真实数据后改用 Alembic)
-SCHEMA_VERSION = 5  # 3:新增 solve_jobs / schedule_versions / rehearsal_sessions(可从 2 自动迁移)
+SCHEMA_VERSION = 6  # 3:新增 solve_jobs / schedule_versions / rehearsal_sessions(可从 2 自动迁移)
 
 
 class Base(DeclarativeBase):
@@ -249,6 +249,7 @@ class RehearsalSession(Base):
     absent_member_ids: Mapped[list] = mapped_column(JSON, default=list)
     attendance: Mapped[dict | None] = mapped_column(JSON, nullable=True)  # 评估场:member_id -> [start_slot, end_slot]
     locked: Mapped[bool] = mapped_column(Boolean, default=False)
+    location: Mapped[str] = mapped_column(String(200), default="")  # 排练地点(管理员填写)
 
     version: Mapped[ScheduleVersion] = relationship(back_populates="sessions")
     song: Mapped[Song | None] = relationship()

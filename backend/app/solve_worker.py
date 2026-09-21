@@ -18,8 +18,8 @@ from solver.validator import compute_metrics
 
 from .db import make_engine, make_session_factory
 from .models import Event, RehearsalSession, ScheduleVersion, SolveJob
-from .schedule_edit import copy_locks, locked_fixed_sessions
-from .services import event_problem, ready_song_codes, summarize_diagnosis
+from .schedule_edit import copy_locations, copy_locks, locked_fixed_sessions
+from .services import event_problem, published_version, ready_song_codes, summarize_diagnosis
 from .utils import utcnow
 
 
@@ -81,9 +81,12 @@ def store_result(db: Session, job: SolveJob, problem: Problem, result: SolveResu
                 )
             )
         db.flush()
+        db.refresh(version)
         if base is not None:
-            db.refresh(version)
             copy_locks(base, version)
+        source = base or published_version(event)
+        if source is not None:
+            copy_locations(source, version)  # 时间没变的场次,地点沿用
         job.status = "succeeded"
         job.version_id = version.id
         level = f"层级 L{result.level_used}" if result.level_used is not None else ""

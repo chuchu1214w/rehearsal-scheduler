@@ -547,6 +547,7 @@ class SessionOut(BaseModel):
     absent: list[MemberBrief]
     attendance: dict[str, str] | None  # 评估场:成员名 -> "14:00–17:00"
     locked: bool
+    location: str = ""
 
 
 class MemberStatOut(BaseModel):
@@ -679,3 +680,13 @@ class ObjectiveOut(BaseModel):
     key: str
     label: str
     default_on: bool
+
+
+# ---------- 排练地点 ----------
+class LocationIn(BaseModel):
+    location: str = Field(default="", max_length=200)
+
+
+class LocationOut(BaseModel):
+    version: VersionDetailOut
+    notified: int  # 已通知的成员数(仅已发布版本会通知)
