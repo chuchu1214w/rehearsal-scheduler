@@ -37,7 +37,7 @@ export function LoginPage() {
         <p className="lead">登录后,继续你的演出准备。</p>
         <form onSubmit={submit} className="fields">
           <Field label="用户名">
-            <input value={username} onChange={(e) => setUsername(e.target.value)} autoComplete="username" autoCapitalize="none" placeholder="输入用户名" autoFocus />
+            <input value={username} onChange={(e) => setUsername(e.target.value)} autoComplete="username" autoCapitalize="none" placeholder="输入用户名" autoFocus={!isNative()} />
           </Field>
           <Field label="密码">
             <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="current-password" placeholder="输入密码" />

@@ -5,12 +5,14 @@ const config: CapacitorConfig = {
   appId: 'app.timetomeet.season',
   appName: 'Season',
   webDir: 'dist',
+  loggingBehavior: 'debug',
+  backgroundColor: '#fef0fb',
   ios: {
     contentInset: 'automatic',
   },
   plugins: {
     PushNotifications: { presentationOptions: ['badge', 'sound', 'banner', 'list'] },
-    SystemBars: { insetsHandling: 'css', style: 'DARK' },
+    SystemBars: { insetsHandling: 'css', style: 'LIGHT' } // LIGHT = 浅色背景、深色文字,
     Keyboard: { resize: 'native' },
   },
 }

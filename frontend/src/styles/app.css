@@ -3,6 +3,7 @@
  * 命名:布局 .shell-*;组件 .btn .panel .card .badge .note .field …;成员端在 .shell-member 下覆盖变量。 */
 
 :root {
+  color-scheme: light;
   --bg: #fef0fb;
   --paper: #ffffff;
   --ink: #2f3f78;
@@ -2273,4 +2274,9 @@ i.lock::before {
 
 .primary-bar {
   padding-bottom: calc(12px + var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px)));
+}
+
+/* 登录 / 首次设置页在原生 App 里要避开状态栏 */
+.auth {
+  padding-top: calc(12px + var(--safe-area-inset-top, env(safe-area-inset-top, 0px)));
 }
