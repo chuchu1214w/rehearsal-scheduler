@@ -34,8 +34,19 @@ DB = Annotated[Session, Depends(get_db)]
 SettingsDep = Annotated[Settings, Depends(get_settings)]
 
 
-def optional_user(request: Request, db: DB, settings: SettingsDep) -> User | None:
+def session_token_from_request(request: Request) -> str | None:
+    """网页用 Cookie;原生 App(WKWebView 里第三方 Cookie 不可靠)用 Authorization: Bearer <令牌>。"""
     token = request.cookies.get(COOKIE_NAME)
+    if token:
+        return token
+    auth = request.headers.get("authorization", "")
+    if auth[:7].lower() == "bearer ":
+        return auth[7:].strip() or None
+    return None
+
+
+def optional_user(request: Request, db: DB, settings: SettingsDep) -> User | None:
+    token = session_token_from_request(request)
     if not token:
         return None
     sess = db.scalar(select(AuthSession).where(AuthSession.token_hash == token_hash(token)))

@@ -6,9 +6,9 @@ from fastapi import APIRouter, Request
 from sqlalchemy import select
 
 from ..deps import DB, CurrentUser
-from ..models import PushSubscription
-from ..push import upsert_subscription, vapid_keys
-from ..schemas import PushPublicKeyOut, PushStatusOut, PushSubscribeIn, PushUnsubscribeIn
+from ..models import NativePushToken, PushSubscription
+from ..push import upsert_native_token, upsert_subscription, vapid_keys
+from ..schemas import NativeTokenIn, NativeTokenOut, PushPublicKeyOut, PushStatusOut, PushSubscribeIn, PushUnsubscribeIn
 
 router = APIRouter(tags=["push"])
 
@@ -37,4 +37,20 @@ def unsubscribe(body: PushUnsubscribeIn, db: DB, user: CurrentUser) -> PushStatu
 @router.get("/push/status", response_model=PushStatusOut)
 def status(db: DB, user: CurrentUser) -> PushStatusOut:
     n = len(db.scalars(select(PushSubscription.id).where(PushSubscription.user_id == user.id)).all())
-    return PushStatusOut(devices=n)
+    m = len(db.scalars(select(NativePushToken.id).where(NativePushToken.user_id == user.id)).all())
+    return PushStatusOut(devices=n, native=m)
+
+
+@router.post("/push/native", response_model=PushStatusOut)
+def register_native(body: NativeTokenIn, db: DB, user: CurrentUser) -> PushStatusOut:
+    upsert_native_token(db, user.id, body.platform, body.token)
+    return status(db, user)
+
+
+@router.post("/push/native/unregister", response_model=PushStatusOut)
+def unregister_native(body: NativeTokenOut, db: DB, user: CurrentUser) -> PushStatusOut:
+    row = db.scalar(select(NativePushToken).where(NativePushToken.token == body.token, NativePushToken.user_id == user.id))
+    if row is not None:
+        db.delete(row)
+        db.commit()
+    return status(db, user)

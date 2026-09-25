@@ -1,3 +1,5 @@
+import { API_BASE, getSessionToken } from '../native'
+
 export class ApiError extends Error {
   status: number
   detail: unknown
@@ -11,14 +13,16 @@ export class ApiError extends Error {
 
 type Method = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE'
 
-export async function api<T>(path: string, options: { method?: Method; json?: unknown } = {}): Promise<T> {
-  const headers: Record<string, string> = { Accept: 'application/json' }
+export async function api<T>(path: string, options: { method?: Method; json?: unknown; headers?: Record<string, string> } = {}): Promise<T> {
+  const headers: Record<string, string> = { Accept: 'application/json', ...(options.headers ?? {}) }
+  const token = await getSessionToken()
+  if (token) headers['Authorization'] = `Bearer ${token}`
   let body: string | undefined
   if (options.json !== undefined) {
     headers['Content-Type'] = 'application/json'
     body = JSON.stringify(options.json)
   }
-  const res = await fetch(path, { method: options.method ?? 'GET', headers, body, credentials: 'same-origin' })
+  const res = await fetch(API_BASE + path, { method: options.method ?? 'GET', headers, body, credentials: API_BASE ? 'include' : 'same-origin' })
   if (res.status === 204) return undefined as T
   const text = await res.text()
   let data: unknown = null

@@ -1,6 +1,6 @@
 import { QueryClient, QueryClientProvider, useQuery } from '@tanstack/react-query'
-import type { ReactNode } from 'react'
-import { BrowserRouter, Navigate, Route, Routes, useLocation } from 'react-router-dom'
+import { useEffect, type ReactNode } from 'react'
+import { BrowserRouter, Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom'
 
 import { api } from './api/client'
 import { AuthProvider, useAuth } from './auth/AuthContext'
@@ -22,10 +22,21 @@ import { WorkbenchPage } from './pages/admin/WorkbenchPage'
 import { MemberAvailabilityPage } from './pages/member/MemberAvailabilityPage'
 import { MemberHomePage } from './pages/member/MemberHomePage'
 import { MemberScheduleDayPage, MemberSchedulePage } from './pages/member/MemberSchedulePage'
+import { attachNativeListeners, isNative } from './native'
 import { Spinner } from './ui'
 import { ToastProvider } from './ui/Toast'
 
 const queryClient = new QueryClient({ defaultOptions: { queries: { retry: 1, refetchOnWindowFocus: false } } })
+
+/** 原生 App:推送 token 上报、点通知 / 深链接跳转 */
+function NativeBridge() {
+  const navigate = useNavigate()
+  useEffect(() => {
+    if (isNative()) attachNativeListeners(api, navigate)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+  return null
+}
 
 function FullSpin() {
   return (
@@ -94,6 +105,7 @@ export function App() {
       <ToastProvider>
         <AuthProvider>
           <BrowserRouter>
+        <NativeBridge />
             <SetupGate>
               <Routes>
                 <Route path="/setup" element={<SetupPage />} />

@@ -2,6 +2,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { createContext, useContext, type ReactNode } from 'react'
 
 import { api, ApiError } from '../api/client'
+import { setSessionToken } from '../native'
 import type { User } from '../api/types'
 
 interface AuthValue {
@@ -17,7 +18,10 @@ async function fetchMe(): Promise<User | null> {
   try {
     return await api<User>('/api/me')
   } catch (err) {
-    if (err instanceof ApiError && err.status === 401) return null
+    if (err instanceof ApiError && err.status === 401) {
+      await setSessionToken(null)
+      return null
+    }
     throw err
   }
 }
@@ -33,6 +37,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       try {
         await api('/api/auth/logout', { method: 'POST' })
       } finally {
+        await setSessionToken(null)
         qc.clear()
         qc.setQueryData(['me'], null)
       }

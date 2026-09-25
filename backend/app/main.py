@@ -8,12 +8,14 @@ from collections.abc import AsyncIterator
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy import select
 
 from . import push
 from .api import PUBLIC_ROUTERS, ROUTERS
+from .apns import ApnsConfig
 from .backup import backup_sqlite
 from .config import Settings
 from .db import SchemaOutdated, init_db, make_engine, make_session_factory
@@ -39,6 +41,15 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     )
     app.state.settings = settings
     push.CONTACT = settings.push_contact
+    push.APNS = ApnsConfig.from_settings(settings)
+    # 原生 App 的 WebView 源是 capacitor://localhost,跨域调用 API 需要显式白名单(带凭据时不能用 *)
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=settings.cors_origins,
+        allow_credentials=True,
+        allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+        allow_headers=["Authorization", "Content-Type", "Accept", "X-Client"],
+    )
     app.state.engine = engine
     app.state.session_factory = make_session_factory(engine)
     _fail_stale_jobs(app.state.session_factory)

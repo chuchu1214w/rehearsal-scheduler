@@ -14,10 +14,11 @@ from ..deps import (
     clear_session_cookie,
     create_session,
     revoke_all_sessions,
+    session_token_from_request,
     set_session_cookie,
 )
 from ..models import AuthSession, LoginFailure, User
-from ..schemas import LoginIn, PasswordChangeIn, UserOut
+from ..schemas import LoginIn, LoginOut, PasswordChangeIn, UserOut
 from ..security import hash_password, token_hash, verify_password
 from ..services import serialize_user
 from ..utils import utcnow
@@ -25,8 +26,12 @@ from ..utils import utcnow
 router = APIRouter(tags=["auth"])
 
 
-@router.post("/auth/login", response_model=UserOut)
-def login(body: LoginIn, db: DB, settings: SettingsDep, response: Response) -> UserOut:
+def is_native_client(request: Request) -> bool:
+    return request.headers.get("x-client", "").lower() == "native"
+
+
+@router.post("/auth/login", response_model=LoginOut)
+def login(body: LoginIn, request: Request, db: DB, settings: SettingsDep, response: Response) -> LoginOut:
     username_lower = body.username.strip().lower()
     now = utcnow()
     cutoff = now - timedelta(minutes=settings.login_window_minutes)
@@ -53,12 +58,15 @@ def login(body: LoginIn, db: DB, settings: SettingsDep, response: Response) -> U
     token = create_session(db, user, settings)
     db.commit()
     set_session_cookie(response, token, settings)
-    return serialize_user(user)
+    out = LoginOut(**serialize_user(user).model_dump())
+    if is_native_client(request):
+        out.token = token  # 原生 App 存本地,之后用 Authorization: Bearer
+    return out
 
 
 @router.post("/auth/logout", status_code=204)
 def logout(request: Request, db: DB, response: Response, _user: CurrentUser) -> Response:
-    token = request.cookies.get("rs_session")
+    token = session_token_from_request(request)
     if token:
         db.execute(delete(AuthSession).where(AuthSession.token_hash == token_hash(token)))
         db.commit()

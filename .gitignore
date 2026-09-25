@@ -45,3 +45,8 @@ build/
 
 # Word 打开文档时的临时锁文件(含编辑者姓名)
 ~$*
+
+# iOS 工程构建产物(frontend/ios 本身入库;Capacitor 会另生成 ios/.gitignore)
+*.xcarchive
+/frontend/ios/build/
+/frontend/build/

@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react'
 
 import { Button, Note, Panel } from '../ui'
 import { useToast } from '../ui/Toast'
+import { api } from '../api/client'
+import { disableNativePush, enableNativePush, isNative, nativePushEnabled } from '../native'
 import { currentSubscription, disablePush, enablePush, isIOS, isStandalone, pushSupported } from '../push'
 
 /** 「安装到手机」+「开启推送」:账号页完整版;首页 / 通知页用 compact(可关闭,记在本机) */
@@ -22,7 +24,8 @@ export function InstallPushPanel({ compact = false }: { compact?: boolean }) {
   useEffect(() => {
     const on = () => setInstallable(true)
     window.addEventListener('season:installable', on)
-    void currentSubscription().then((s) => setSubscribed(!!s))
+    if (isNative()) void nativePushEnabled().then(setSubscribed)
+    else void currentSubscription().then((s) => setSubscribed(!!s))
     return () => window.removeEventListener('season:installable', on)
   }, [])
 
@@ -41,11 +44,12 @@ export function InstallPushPanel({ compact = false }: { compact?: boolean }) {
     setBusy(true)
     try {
       if (subscribed) {
-        await disablePush()
+        if (isNative()) await disableNativePush(api)
+        else await disablePush()
         setSubscribed(false)
         toast('已关闭这台设备的推送')
       } else {
-        const err = await enablePush()
+        const err = isNative() ? await enableNativePush() : await enablePush()
         if (err) toast(err, 'error')
         else {
           setSubscribed(true)
@@ -68,6 +72,29 @@ export function InstallPushPanel({ compact = false }: { compact?: boolean }) {
   }
 
   if (hidden) return null
+  if (isNative()) {
+    if (compact && subscribed) return null
+    return (
+      <Panel>
+        <div className="section">
+          <h3 className="card-title" style={{ fontSize: 15 }}>
+            推送通知
+          </h3>
+          {compact && (
+            <Button small variant="ghost" onClick={dismiss}>
+              不再提示
+            </Button>
+          )}
+        </div>
+        <p className="card-copy">开启后,排练表发布、排练地点更新、明天的排练会直接弹到手机。</p>
+        <div className="actions" style={{ justifyContent: 'flex-start' }}>
+          <Button variant={subscribed ? 'ghost' : 'primary'} loading={busy} onClick={() => void toggle()} disabled={subscribed === null}>
+            {subscribed ? '关闭推送' : '开启推送通知'}
+          </Button>
+        </div>
+      </Panel>
+    )
+  }
   if (compact && standalone && subscribed) return null // 都弄好了就不打扰
 
   const ios = isIOS()

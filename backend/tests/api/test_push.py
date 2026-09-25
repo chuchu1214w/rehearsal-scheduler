@@ -22,10 +22,10 @@ def test_public_key_and_subscribe(app, admin: TestClient):
     k1 = admin.get("/api/push/public-key").json()["public_key"]
     assert len(k1) > 60 and "=" not in k1 and "+" not in k1
     assert admin.get("/api/push/public-key").json()["public_key"] == k1  # 稳定
-    assert admin.get("/api/push/status").json() == {"devices": 0}
-    assert admin.post("/api/push/subscribe", json=SUB).json() == {"devices": 1}
-    assert admin.post("/api/push/subscribe", json=SUB).json() == {"devices": 1}  # 同一设备重复订阅不翻倍
-    assert admin.post("/api/push/unsubscribe", json={"endpoint": SUB["endpoint"]}).json() == {"devices": 0}
+    assert admin.get("/api/push/status").json()["devices"] == 0
+    assert admin.post("/api/push/subscribe", json=SUB).json()["devices"] == 1
+    assert admin.post("/api/push/subscribe", json=SUB).json()["devices"] == 1  # 同一设备重复订阅不翻倍
+    assert admin.post("/api/push/unsubscribe", json={"endpoint": SUB["endpoint"]}).json()["devices"] == 0
 
 
 def test_notification_triggers_push_and_dead_endpoint_cleanup(app, admin: TestClient, monkeypatch):

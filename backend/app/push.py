@@ -10,12 +10,14 @@ from typing import Any
 from sqlalchemy import select
 from sqlalchemy.orm import Session, sessionmaker
 
-from .models import Meta, PushSubscription
+from . import apns
+from .models import Meta, NativePushToken, PushSubscription
 from .utils import utcnow
 
 _VAPID_CACHE: dict[str, str] = {}
 _LOCK = threading.Lock()
 CONTACT = "mailto:season@example.com"  # 由 create_app 按 settings.push_contact 覆盖
+APNS: apns.ApnsConfig | None = None  # 由 create_app 按 settings 配置;None = 不发原生推送
 BACKGROUND = True  # 测试时设为 False,同步投递
 
 
@@ -86,27 +88,45 @@ def send_to_users(db: Session, user_ids: list[int], payload: dict, contact: str 
     if not user_ids:
         return 0
     rows = db.scalars(select(PushSubscription).where(PushSubscription.user_id.in_(user_ids))).all()
-    if not rows:
+    native_rows = db.scalars(select(NativePushToken).where(NativePushToken.user_id.in_(user_ids))).all() if APNS is not None else []
+    ios_tokens = [r.token for r in native_rows if r.platform == "ios"]
+    if not rows and not ios_tokens:
         return 0
-    private_pem, _ = vapid_keys(db)
+    private_pem = vapid_keys(db)[0] if rows else ""
     contact = contact or CONTACT
     background = BACKGROUND if background is None else background
     subs = [{"endpoint": r.endpoint, "p256dh": r.p256dh, "auth": r.auth} for r in rows]
     factory = sessionmaker(bind=db.get_bind(), expire_on_commit=False)
+    cfg = APNS
 
-    def run() -> None:
-        dead = DELIVER(subs, payload, private_pem, contact)
+    def cleanup(d: Session, dead: list[str], dead_native: list[str]) -> None:
         if dead:
-            with factory() as d:
-                for r in d.scalars(select(PushSubscription).where(PushSubscription.endpoint.in_(dead))).all():
-                    d.delete(r)
-                d.commit()
+            for r in d.scalars(select(PushSubscription).where(PushSubscription.endpoint.in_(dead))).all():
+                d.delete(r)
+        if dead_native:
+            for r in d.scalars(select(NativePushToken).where(NativePushToken.token.in_(dead_native))).all():
+                d.delete(r)
+
+    def run(sync_db: Session | None = None) -> None:
+        dead = DELIVER(subs, payload, private_pem, contact) if subs else []
+        native_payload = apns.apns_payload(
+            payload.get("title", ""), payload.get("body", ""), payload.get("link", ""), payload.get("tag", "")
+        )
+        dead_native = apns.DELIVER(cfg, ios_tokens, native_payload) if cfg is not None and ios_tokens else []
+        if not (dead or dead_native):
+            return
+        if sync_db is not None:  # 同步模式(测试):用请求自己的会话,由请求统一提交,避免 SQLite 写锁冲突
+            cleanup(sync_db, dead, dead_native)
+            return
+        with factory() as d:
+            cleanup(d, dead, dead_native)
+            d.commit()
 
     if background:
         threading.Thread(target=run, daemon=True).start()
     else:
-        run()
-    return len(subs)
+        run(db)
+    return len(subs) + len(ios_tokens)
 
 
 def upsert_subscription(db: Session, user_id: int, endpoint: str, p256dh: str, auth: str, user_agent: str = "") -> PushSubscription:
@@ -120,5 +140,18 @@ def upsert_subscription(db: Session, user_id: int, endpoint: str, p256dh: str, a
         row.auth = auth
         row.user_agent = user_agent[:200]
         row.last_used_at = utcnow()
+    db.commit()
+    return row
+
+
+def upsert_native_token(db: Session, user_id: int, platform: str, token: str) -> NativePushToken:
+    row = db.scalar(select(NativePushToken).where(NativePushToken.token == token))
+    if row is None:
+        row = NativePushToken(user_id=user_id, platform=platform, token=token)
+        db.add(row)
+    else:
+        row.user_id = user_id
+        row.platform = platform
+        row.last_seen_at = utcnow()
     db.commit()
     return row

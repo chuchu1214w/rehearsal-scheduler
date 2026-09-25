@@ -30,7 +30,21 @@ class Settings(BaseModel):
     solver_workers: int = 0
     reminders_interval_minutes: int = 30  # 定时提醒检查间隔;0 = 关闭(测试用)
     backup_keep_days: int = 14  # 每日自动备份保留天数;0 = 不自动备份
-    push_contact: str = "mailto:season@example.com"  # Web Push 的 VAPID 联系方式(推送服务出问题时联系用)  # 0 = min(8, CPU 核数)
+    push_contact: str = "mailto:season@example.com"  # Web Push 的 VAPID 联系方式(推送服务出问题时联系用)
+    # 原生 App(Capacitor)相关
+    cors_origins: list[str] = [
+        "capacitor://localhost",
+        "https://localhost",
+        "http://localhost",
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+    ]
+    apple_team_id: str = ""  # Apple Developer Team ID(Universal Links 的 AASA 需要)
+    ios_bundle_id: str = ""  # 如 app.timetomeet.season
+    apns_key_p8: str = ""  # APNs Auth Key 的 PEM 内容(优先)
+    apns_key_path: str = ""  # 或 .p8 文件路径(本机调试用)
+    apns_key_id: str = ""
+    apns_sandbox: bool = False  # Xcode 直装的 Debug 包走沙箱;TestFlight / App Store 走生产  # 0 = min(8, CPU 核数)
 
     @classmethod
     def from_env(cls) -> Settings:
@@ -60,4 +74,17 @@ class Settings(BaseModel):
             kwargs["backup_keep_days"] = int(v)
         if v := env.get("PUSH_CONTACT"):
             kwargs["push_contact"] = v
+        if v := env.get("CORS_ORIGINS"):
+            kwargs["cors_origins"] = [x.strip() for x in v.split(",") if x.strip()]
+        for key, name in (
+            ("apple_team_id", "APPLE_TEAM_ID"),
+            ("ios_bundle_id", "IOS_BUNDLE_ID"),
+            ("apns_key_p8", "APNS_KEY_P8"),
+            ("apns_key_path", "APNS_KEY_PATH"),
+            ("apns_key_id", "APNS_KEY_ID"),
+        ):
+            if v := env.get(name):
+                kwargs[key] = v
+        if "APNS_SANDBOX" in env:
+            kwargs["apns_sandbox"] = _bool(env.get("APNS_SANDBOX"), False)
         return cls(**kwargs)

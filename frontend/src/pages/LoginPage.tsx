@@ -5,6 +5,7 @@ import { api } from '../api/client'
 import { useAction } from '../api/hooks'
 import type { User } from '../api/types'
 import { useAuth } from '../auth/AuthContext'
+import { isNative, reRegisterNativePushIfEnabled, setSessionToken } from '../native'
 import { Button, Field, PrimaryBar, Wordmark } from '../ui'
 
 export function LoginPage() {
@@ -15,8 +16,9 @@ export function LoginPage() {
   const [password, setPassword] = useState('')
   const from = (location.state as { from?: string } | null)?.from ?? '/'
   const login = useAction(
-    () => api<User>('/api/auth/login', { method: 'POST', json: { username, password } }),
+    () => api<User & { token?: string | null }>('/api/auth/login', { method: 'POST', json: { username, password }, headers: isNative() ? { 'X-Client': 'native' } : undefined }),
     (u) => {
+      void setSessionToken(u.token ?? null).then(() => reRegisterNativePushIfEnabled())
       setUser(u)
       navigate(from === '/login' ? '/' : from, { replace: true })
     },

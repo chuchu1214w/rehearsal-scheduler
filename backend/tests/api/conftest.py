@@ -23,6 +23,8 @@ def settings(tmp_path) -> Settings:
         solver_workers=4,
         reminders_interval_minutes=0,
         backup_keep_days=0,
+        apple_team_id="TEAM123456",
+        ios_bundle_id="app.test.season",
     )
 
 

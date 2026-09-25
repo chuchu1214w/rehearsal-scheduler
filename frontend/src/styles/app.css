@@ -2260,3 +2260,17 @@ i.lock::before {
   display: inline-flex;
   gap: 4px;
 }
+
+
+/* ---------- 原生 App 安全区(刘海 / 底部指示条) ---------- */
+.shell__top {
+  padding-top: calc(18px + var(--safe-area-inset-top, env(safe-area-inset-top, 0px)));
+}
+
+.shell__nav {
+  padding-bottom: calc(14px + var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px)));
+}
+
+.primary-bar {
+  padding-bottom: calc(12px + var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px)));
+}

@@ -34,6 +34,7 @@ MIGRATIONS: dict[int, Callable[[Engine], None]] = {
     4: lambda engine: None,  # 4 → 5:新增 notifications(create_all 已建)
     5: _migrate_5_to_6,  # 5 → 6:rehearsal_sessions.location
     6: lambda engine: None,  # 6 → 7:新增 push_subscriptions(create_all 已建)
+    7: lambda engine: None,  # 7 → 8:新增 native_push_tokens(create_all 已建)
 }
 
 

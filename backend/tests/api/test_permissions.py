@@ -34,6 +34,8 @@ MEMBER_OK = {
     ("post", "/api/push/subscribe"),
     ("post", "/api/push/unsubscribe"),
     ("get", "/api/push/status"),
+    ("post", "/api/push/native"),
+    ("post", "/api/push/native/unregister"),
     ("get", "/api/me/calendar"),
     ("post", "/api/me/calendar/rotate"),
 }

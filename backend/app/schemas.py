@@ -712,4 +712,19 @@ class PushPublicKeyOut(BaseModel):
 
 
 class PushStatusOut(BaseModel):
-    devices: int
+    devices: int  # 网页推送订阅数
+    native: int = 0  # 原生 App 设备数
+
+
+# ---------- 原生 App(Capacitor) ----------
+class LoginOut(UserOut):
+    token: str | None = None  # 仅请求头 X-Client: native 时返回
+
+
+class NativeTokenIn(BaseModel):
+    platform: Literal["ios", "android"]
+    token: str = Field(min_length=8, max_length=400)
+
+
+class NativeTokenOut(BaseModel):
+    token: str = Field(min_length=8, max_length=400)

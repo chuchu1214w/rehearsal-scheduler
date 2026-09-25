@@ -6,6 +6,7 @@ import { api } from '../api/client'
 import { useAction } from '../api/hooks'
 import type { User } from '../api/types'
 import { useAuth } from '../auth/AuthContext'
+import { isNative, setSessionToken } from '../native'
 import { Button, Field, Heading, Panel, Wordmark } from '../ui'
 import { USERNAME_PATTERN } from '../utils'
 
@@ -18,8 +19,9 @@ export function SetupPage() {
   const [confirm, setConfirm] = useState('')
   const [err, setErr] = useState('')
   const create = useAction(
-    () => api<User>('/api/setup', { method: 'POST', json: { username, password } }),
+    () => api<User & { token?: string | null }>('/api/setup', { method: 'POST', json: { username, password }, headers: isNative() ? { 'X-Client': 'native' } : undefined }),
     async (user) => {
+      await setSessionToken(user.token ?? null)
       setUser(user)
       await qc.invalidateQueries({ queryKey: ['setup-status'] })
       navigate('/events/new', { replace: true })
