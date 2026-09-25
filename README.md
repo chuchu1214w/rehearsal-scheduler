@@ -50,6 +50,10 @@ cd frontend && npm run build
 
 网页本身是 PWA:手机浏览器打开后「添加到主屏幕」即可像 App 一样使用;在「账号」页开启推送后,排练表发布、地点更新、明天的排练会直接弹到手机(iPhone 需从主屏幕图标打开,iOS 16.4+)。不需要上架应用商店,也不需要任何第三方推送服务。
 
+## iOS App
+
+仓库 `frontend/ios` 是用 Capacitor 8 打包的 iOS 工程(界面打进 App,数据走线上,推送走 APNs)。改完前端后跑 `./scripts/ios-release.sh` 即可构建并上传 TestFlight;团员通过 TestFlight 公开链接安装,上架与 Unlisted 申请步骤见 [部署指南.md](部署指南.md) 方案 C,上架文案见 `store/ios-listing.md`。
+
 ## 上线部署
 
 仓库自带 `Dockerfile`、`fly.toml`(Fly.io,推荐,每月约 $3)和 `deploy/docker-compose.yml` + `Caddyfile`(自己的云主机,自动 HTTPS)。逐步操作、日常运维命令与上线检查清单见 [部署指南.md](部署指南.md)。服务每天自动备份数据库到 `data/backups/`,也可手动 `python scripts/backup.py`。
