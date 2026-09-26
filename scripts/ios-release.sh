@@ -7,8 +7,8 @@
 # 导出签名:默认 ios/ExportOptions-manual.plist(手动签名:钥匙串里的「Apple Distribution」证书 +
 #   描述文件「Season App Store」,均已用 API 密钥创建,有效至 2027-09-26);
 #   若换成「管理员」角色的 API 密钥或 Xcode 已登录账号,可用 EXPORT_OPTIONS=ios/ExportOptions.plist 走云端自动签名。
-# 注意:① 桌面文件夹由 iCloud 托管,会把 node_modules 等挪到云端、给构建产物加附加属性导致签名失败——
-#       请在桌面以外的克隆里运行(如 ~/Developer/season-release);archive / export 放在 ~/Library/Developer/Xcode 下。
+# 注意:① 不要把项目放在 iCloud 托管的桌面 / 文稿里(会把 node_modules 等挪到云端、给构建产物加附加属性导致签名失败);
+#       项目现在在 ~/Developer/时间调度代码。archive / export 放在 ~/Library/Developer/Xcode 下。
 #       ② 第一次签名时 macOS 会弹钥匙串对话框,输入开机密码并点「始终允许」。
 set -euo pipefail
 cd "$(dirname "$0")/../frontend"
