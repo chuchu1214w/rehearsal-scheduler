@@ -28,6 +28,14 @@ def _migrate_5_to_6(engine: Engine) -> None:
             conn.execute(text("ALTER TABLE rehearsal_sessions ADD COLUMN location VARCHAR(200) NOT NULL DEFAULT ''"))
 
 
+def _migrate_8_to_9(engine: Engine) -> None:
+    """原生推送 token 记住 APNs 环境(生产 / 沙箱)。"""
+    with engine.begin() as conn:
+        cols = {row[1] for row in conn.execute(text("PRAGMA table_info(native_push_tokens)"))}
+        if cols and "env" not in cols:
+            conn.execute(text("ALTER TABLE native_push_tokens ADD COLUMN env VARCHAR(12)"))
+
+
 MIGRATIONS: dict[int, Callable[[Engine], None]] = {
     2: lambda engine: None,  # 2 → 3:新增 solve_jobs / schedule_versions / rehearsal_sessions
     3: _migrate_3_to_4,  # 3 → 4:users.calendar_token
@@ -35,6 +43,7 @@ MIGRATIONS: dict[int, Callable[[Engine], None]] = {
     5: _migrate_5_to_6,  # 5 → 6:rehearsal_sessions.location
     6: lambda engine: None,  # 6 → 7:新增 push_subscriptions(create_all 已建)
     7: lambda engine: None,  # 7 → 8:新增 native_push_tokens(create_all 已建)
+    8: _migrate_8_to_9,  # 8 → 9:native_push_tokens.env
 }
 
 

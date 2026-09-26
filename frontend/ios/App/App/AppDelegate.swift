@@ -1,5 +1,6 @@
 import UIKit
 import Capacitor
+import Security
 
 @UIApplicationMain
 class AppDelegate: UIResponder, UIApplicationDelegate {
@@ -49,5 +50,61 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
 
     func application(_ application: UIApplication, didFailToRegisterForRemoteNotificationsWithError error: Error) {
         NotificationCenter.default.post(name: .capacitorDidFailToRegisterForRemoteNotifications, object: error)
+    }
+}
+
+// MARK: - 自定义 Bridge 控制器:注册 App 内置插件(Main.storyboard 指向这里)
+class MainViewController: CAPBridgeViewController {
+    override func capacitorDidLoad() {
+        bridge?.registerPluginInstance(SecureStorePlugin())
+    }
+}
+
+// MARK: - 钥匙串存储:登录令牌不放 UserDefaults(会进备份),只存本机钥匙串、不随备份迁移
+@objc(SecureStorePlugin)
+public class SecureStorePlugin: CAPPlugin, CAPBridgedPlugin {
+    public let identifier = "SecureStorePlugin"
+    public let jsName = "SecureStore"
+    public let pluginMethods: [CAPPluginMethod] = [
+        CAPPluginMethod(name: "get", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "set", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "remove", returnType: CAPPluginReturnPromise),
+    ]
+    private let service = "app.timetomeet.season.secure"
+
+    private func query(_ key: String) -> [String: Any] {
+        [kSecClass as String: kSecClassGenericPassword,
+         kSecAttrService as String: service,
+         kSecAttrAccount as String: key]
+    }
+
+    @objc func get(_ call: CAPPluginCall) {
+        guard let key = call.getString("key") else { return call.reject("缺少 key") }
+        var q = query(key)
+        q[kSecReturnData as String] = true
+        q[kSecMatchLimit as String] = kSecMatchLimitOne
+        var item: CFTypeRef?
+        if SecItemCopyMatching(q as CFDictionary, &item) == errSecSuccess,
+           let data = item as? Data, let value = String(data: data, encoding: .utf8) {
+            call.resolve(["value": value])
+        } else {
+            call.resolve([:])
+        }
+    }
+
+    @objc func set(_ call: CAPPluginCall) {
+        guard let key = call.getString("key"), let value = call.getString("value") else { return call.reject("缺少 key 或 value") }
+        SecItemDelete(query(key) as CFDictionary)
+        var q = query(key)
+        q[kSecValueData as String] = Data(value.utf8)
+        q[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
+        let status = SecItemAdd(q as CFDictionary, nil)
+        if status == errSecSuccess { call.resolve() } else { call.reject("钥匙串写入失败 \(status)") }
+    }
+
+    @objc func remove(_ call: CAPPluginCall) {
+        guard let key = call.getString("key") else { return call.reject("缺少 key") }
+        SecItemDelete(query(key) as CFDictionary)
+        call.resolve()
     }
 }

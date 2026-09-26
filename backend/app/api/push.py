@@ -5,6 +5,7 @@ from __future__ import annotations
 from fastapi import APIRouter, Request
 from sqlalchemy import select
 
+from .. import push as push_module
 from ..deps import DB, CurrentUser
 from ..models import NativePushToken, PushSubscription
 from ..push import upsert_native_token, upsert_subscription, vapid_keys
@@ -38,7 +39,7 @@ def unsubscribe(body: PushUnsubscribeIn, db: DB, user: CurrentUser) -> PushStatu
 def status(db: DB, user: CurrentUser) -> PushStatusOut:
     n = len(db.scalars(select(PushSubscription.id).where(PushSubscription.user_id == user.id)).all())
     m = len(db.scalars(select(NativePushToken.id).where(NativePushToken.user_id == user.id)).all())
-    return PushStatusOut(devices=n, native=m)
+    return PushStatusOut(devices=n, native=m, native_available=push_module.APNS is not None)
 
 
 @router.post("/push/native", response_model=PushStatusOut)

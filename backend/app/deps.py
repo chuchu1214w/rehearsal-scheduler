@@ -53,7 +53,7 @@ def optional_user(request: Request, db: DB, settings: SettingsDep) -> User | Non
     now = utcnow()
     if sess is None:
         return None
-    if sess.expires_at <= now:
+    if sess.expires_at <= now or now - sess.created_at > timedelta(days=settings.session_max_days):
         db.delete(sess)
         db.commit()
         return None

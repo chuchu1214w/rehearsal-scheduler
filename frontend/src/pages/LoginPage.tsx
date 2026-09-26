@@ -5,7 +5,8 @@ import { api } from '../api/client'
 import { useAction } from '../api/hooks'
 import type { User } from '../api/types'
 import { useAuth } from '../auth/AuthContext'
-import { isNative, reRegisterNativePushIfEnabled, setSessionToken } from '../native'
+import { isNative, setSessionToken } from '../native'
+import { resyncWebPush } from '../push'
 import { Button, Field, PrimaryBar, Wordmark } from '../ui'
 
 export function LoginPage() {
@@ -16,9 +17,13 @@ export function LoginPage() {
   const [password, setPassword] = useState('')
   const from = (location.state as { from?: string } | null)?.from ?? '/'
   const login = useAction(
-    () => api<User & { token?: string | null }>('/api/auth/login', { method: 'POST', json: { username, password }, headers: isNative() ? { 'X-Client': 'native' } : undefined }),
+    async () => {
+      const u = await api<User & { token?: string | null }>('/api/auth/login', { method: 'POST', json: { username, password }, headers: isNative() ? { 'X-Client': 'native' } : undefined })
+      await setSessionToken(u.token ?? null) // 原生:令牌进钥匙串;推送重新绑定由 NativeBridge 在 user 变化时完成
+      if (!isNative()) void resyncWebPush().catch(() => undefined)
+      return u
+    },
     (u) => {
-      void setSessionToken(u.token ?? null).then(() => reRegisterNativePushIfEnabled())
       setUser(u)
       navigate(from === '/login' ? '/' : from, { replace: true })
     },

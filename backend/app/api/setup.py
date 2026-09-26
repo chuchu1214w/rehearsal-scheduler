@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import threading
+
 from fastapi import APIRouter, HTTPException, Request, Response
 from sqlalchemy import func, select
 
@@ -13,6 +15,7 @@ from ..services import serialize_user
 from ..utils import utcnow
 
 router = APIRouter(tags=["setup"])
+_SETUP_LOCK = threading.Lock()  # 防止两个请求同时通过「还没有用户」的检查
 
 
 def _user_count(db) -> int:  # noqa: ANN001
@@ -26,14 +29,15 @@ def setup_status(db: DB) -> SetupStatus:
 
 @router.post("/setup", response_model=LoginOut, status_code=201)
 def run_setup(body: SetupIn, request: Request, db: DB, settings: SettingsDep, response: Response) -> LoginOut:
-    if _user_count(db) > 0:
-        raise HTTPException(status_code=404, detail="系统已初始化")
-    now = utcnow()
-    user = User(username=body.username, password_hash=hash_password(body.password), role="admin", last_login_at=now)
-    db.add(user)
-    db.flush()
-    token = create_session(db, user, settings)
-    db.commit()
+    with _SETUP_LOCK:
+        if _user_count(db) > 0:
+            raise HTTPException(status_code=404, detail="系统已初始化")
+        now = utcnow()
+        user = User(username=body.username, password_hash=hash_password(body.password), role="admin", last_login_at=now)
+        db.add(user)
+        db.flush()
+        token = create_session(db, user, settings)
+        db.commit()
     set_session_cookie(response, token, settings)
     out = LoginOut(**serialize_user(user).model_dump())
     if request.headers.get("x-client", "").lower() == "native":

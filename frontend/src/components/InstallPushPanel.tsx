@@ -13,6 +13,7 @@ export function InstallPushPanel({ compact = false }: { compact?: boolean }) {
   const [standalone] = useState(isStandalone())
   const [subscribed, setSubscribed] = useState<boolean | null>(null)
   const [busy, setBusy] = useState(false)
+  const [nativeAvailable, setNativeAvailable] = useState(true)
   const [hidden, setHidden] = useState(() => {
     try {
       return compact && localStorage.getItem('season:hide-install-panel') === '1'
@@ -24,7 +25,10 @@ export function InstallPushPanel({ compact = false }: { compact?: boolean }) {
   useEffect(() => {
     const on = () => setInstallable(true)
     window.addEventListener('season:installable', on)
-    if (isNative()) void nativePushEnabled().then(setSubscribed)
+    if (isNative()) {
+      void nativePushEnabled().then(setSubscribed)
+      void api<{ native_available: boolean }>('/api/push/status').then((st) => setNativeAvailable(st.native_available)).catch(() => undefined)
+    }
     else void currentSubscription().then((s) => setSubscribed(!!s))
     return () => window.removeEventListener('season:installable', on)
   }, [])
@@ -49,7 +53,7 @@ export function InstallPushPanel({ compact = false }: { compact?: boolean }) {
         setSubscribed(false)
         toast('已关闭这台设备的推送')
       } else {
-        const err = isNative() ? await enableNativePush() : await enablePush()
+        const err = isNative() ? await enableNativePush(api) : await enablePush()
         if (err) toast(err, 'error')
         else {
           setSubscribed(true)
@@ -87,6 +91,7 @@ export function InstallPushPanel({ compact = false }: { compact?: boolean }) {
           )}
         </div>
         <p className="card-copy">开启后,排练表发布、排练地点更新、明天的排练会直接弹到手机。</p>
+        {!nativeAvailable && <Note tone="warning">服务器暂未配置 App 推送,开启后暂时收不到通知;可先用站内通知。</Note>}
         <div className="actions" style={{ justifyContent: 'flex-start' }}>
           <Button variant={subscribed ? 'ghost' : 'primary'} loading={busy} onClick={() => void toggle()} disabled={subscribed === null}>
             {subscribed ? '关闭推送' : '开启推送通知'}

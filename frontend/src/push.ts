@@ -62,3 +62,18 @@ export async function disablePush(): Promise<void> {
   await api('/api/push/unsubscribe', { method: 'POST', json: { endpoint: sub.endpoint } })
   await sub.unsubscribe()
 }
+
+/** 登出前:服务器上解绑这个浏览器的订阅(浏览器本身的订阅保留,下次登录自动重新绑定) */
+export async function unbindWebPush(): Promise<void> {
+  const sub = await currentSubscription()
+  if (sub) await api('/api/push/unsubscribe', { method: 'POST', json: { endpoint: sub.endpoint } })
+}
+
+/** 登录后:浏览器里已有订阅就重新绑定到当前账号 */
+export async function resyncWebPush(): Promise<void> {
+  if (!pushSupported() || Notification.permission !== 'granted') return
+  const sub = await currentSubscription()
+  if (!sub) return
+  const json = sub.toJSON()
+  await api('/api/push/subscribe', { method: 'POST', json: { endpoint: sub.endpoint, keys: { p256dh: json.keys?.p256dh, auth: json.keys?.auth } } })
+}

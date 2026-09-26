@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import logging
 from collections.abc import AsyncIterator
 from pathlib import Path
 
@@ -24,6 +25,11 @@ from .utils import utcnow
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
+    if not logging.getLogger("season").handlers:
+        handler = logging.StreamHandler()
+        handler.setFormatter(logging.Formatter("%(levelname)s:     [%(name)s] %(message)s"))
+        logging.getLogger("season").addHandler(handler)
+        logging.getLogger("season").setLevel(logging.INFO)
     settings = settings or Settings.from_env()
     engine = make_engine(settings.database_url)
     try:

@@ -32,7 +32,7 @@ def is_native_client(request: Request) -> bool:
 
 @router.post("/auth/login", response_model=LoginOut)
 def login(body: LoginIn, request: Request, db: DB, settings: SettingsDep, response: Response) -> LoginOut:
-    username_lower = body.username.strip().lower()
+    username_lower = body.username.strip().lower()[:32]  # 与 login_failures.username_lower 列宽一致
     now = utcnow()
     cutoff = now - timedelta(minutes=settings.login_window_minutes)
     db.execute(delete(LoginFailure).where(LoginFailure.at < cutoff))

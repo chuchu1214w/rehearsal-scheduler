@@ -22,6 +22,7 @@ class Settings(BaseModel):
     public_base_url: str = "http://localhost:8000"  # 生成邀请链接、日历订阅链接时使用
     cookie_secure: bool = False  # 上线启用 HTTPS 后设为 true
     session_days: int = 14
+    session_max_days: int = 90  # 会话最长寿命(不论是否一直在用),到期必须重新登录
     invite_days: int = 7
     login_max_failures: int = 5
     login_window_minutes: int = 15
@@ -60,6 +61,8 @@ class Settings(BaseModel):
             kwargs["cookie_secure"] = _bool(env.get("COOKIE_SECURE"), False)
         if v := env.get("SESSION_DAYS"):
             kwargs["session_days"] = int(v)
+        if v := env.get("SESSION_MAX_DAYS"):
+            kwargs["session_max_days"] = int(v)
         if v := env.get("INVITE_DAYS"):
             kwargs["invite_days"] = int(v)
         if v := env.get("FRONTEND_DIST"):

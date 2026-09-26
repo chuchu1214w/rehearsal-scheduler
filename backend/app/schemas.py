@@ -714,6 +714,7 @@ class PushPublicKeyOut(BaseModel):
 class PushStatusOut(BaseModel):
     devices: int  # 网页推送订阅数
     native: int = 0  # 原生 App 设备数
+    native_available: bool = False  # 服务器是否配置了 APNs;False 时 App 里开了推送也收不到
 
 
 # ---------- 原生 App(Capacitor) ----------

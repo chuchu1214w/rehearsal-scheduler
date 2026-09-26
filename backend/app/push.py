@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import threading
 from collections.abc import Callable
 from typing import Any
@@ -13,6 +14,8 @@ from sqlalchemy.orm import Session, sessionmaker
 from . import apns
 from .models import Meta, NativePushToken, PushSubscription
 from .utils import utcnow
+
+log = logging.getLogger("season.push")
 
 _VAPID_CACHE: dict[str, str] = {}
 _LOCK = threading.Lock()
@@ -84,12 +87,15 @@ DELIVER: Callable[[list[dict[str, Any]], dict, str, str], list[str]] = _deliver
 
 
 def send_to_users(db: Session, user_ids: list[int], payload: dict, contact: str | None = None, *, background: bool | None = None) -> int:
-    """给这些用户的所有订阅推送 payload(title / body / link / tag)。返回订阅数。"""
+    """给这些用户的所有设备推送 payload(title / body / link / tag):网页推送 + iOS 原生(APNs)。返回设备数。"""
     if not user_ids:
         return 0
-    rows = db.scalars(select(PushSubscription).where(PushSubscription.user_id.in_(user_ids))).all()
+    rows = list(db.scalars(select(PushSubscription).where(PushSubscription.user_id.in_(user_ids))).all())
     native_rows = db.scalars(select(NativePushToken).where(NativePushToken.user_id.in_(user_ids))).all() if APNS is not None else []
-    ios_tokens = [r.token for r in native_rows if r.platform == "ios"]
+    ios_tokens = [(r.token, r.env) for r in native_rows if r.platform == "ios"]
+    # 装了 App 的人,iPhone 上的 Safari / 主屏幕网页推送就不再发,避免同一台手机弹两次
+    has_app = {r.user_id for r in native_rows if r.platform == "ios"}
+    rows = [r for r in rows if not (r.user_id in has_app and "web.push.apple.com" in r.endpoint)]
     if not rows and not ios_tokens:
         return 0
     private_pem = vapid_keys(db)[0] if rows else ""
@@ -98,29 +104,45 @@ def send_to_users(db: Session, user_ids: list[int], payload: dict, contact: str 
     subs = [{"endpoint": r.endpoint, "p256dh": r.p256dh, "auth": r.auth} for r in rows]
     factory = sessionmaker(bind=db.get_bind(), expire_on_commit=False)
     cfg = APNS
+    tag = payload.get("tag", "")
 
-    def cleanup(d: Session, dead: list[str], dead_native: list[str]) -> None:
+    def apply(d: Session, dead: list[str], native: apns.DeliveryResult) -> None:
         if dead:
             for r in d.scalars(select(PushSubscription).where(PushSubscription.endpoint.in_(dead))).all():
                 d.delete(r)
-        if dead_native:
-            for r in d.scalars(select(NativePushToken).where(NativePushToken.token.in_(dead_native))).all():
-                d.delete(r)
+        touched = set(native.dead) | set(native.env)
+        if touched:
+            for r in d.scalars(select(NativePushToken).where(NativePushToken.token.in_(touched))).all():
+                if r.token in native.dead:
+                    d.delete(r)
+                elif r.env != native.env[r.token]:
+                    r.env = native.env[r.token]
 
     def run(sync_db: Session | None = None) -> None:
-        dead = DELIVER(subs, payload, private_pem, contact) if subs else []
-        native_payload = apns.apns_payload(
-            payload.get("title", ""), payload.get("body", ""), payload.get("link", ""), payload.get("tag", "")
-        )
-        dead_native = apns.DELIVER(cfg, ios_tokens, native_payload) if cfg is not None and ios_tokens else []
-        if not (dead or dead_native):
+        dead: list[str] = []
+        native = apns.DeliveryResult()
+        try:
+            if subs:
+                dead = DELIVER(subs, payload, private_pem, contact)
+        except Exception:  # noqa: BLE001
+            log.exception("网页推送失败")
+        try:
+            if cfg is not None and ios_tokens:
+                native_payload = apns.apns_payload(payload.get("title", ""), payload.get("body", ""), payload.get("link", ""), tag)
+                native = apns.DELIVER(cfg, ios_tokens, native_payload, apns.collapse_id(tag))
+        except Exception:  # noqa: BLE001
+            log.exception("APNs 推送失败")
+        if not (dead or native.dead or native.env):
             return
         if sync_db is not None:  # 同步模式(测试):用请求自己的会话,由请求统一提交,避免 SQLite 写锁冲突
-            cleanup(sync_db, dead, dead_native)
+            apply(sync_db, dead, native)
             return
-        with factory() as d:
-            cleanup(d, dead, dead_native)
-            d.commit()
+        try:
+            with factory() as d:
+                apply(d, dead, native)
+                d.commit()
+        except Exception:  # noqa: BLE001
+            log.exception("清理失效推送设备失败")
 
     if background:
         threading.Thread(target=run, daemon=True).start()

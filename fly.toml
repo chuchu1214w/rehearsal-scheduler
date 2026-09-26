@@ -8,6 +8,7 @@ primary_region = "nrt"  # 东京,离首尔最近
   DATABASE_URL = "sqlite:////data/app.db"
   APP_TIMEZONE = "Asia/Seoul"
   PUBLIC_BASE_URL = "https://timetomeet.fly.dev"
+  CORS_ORIGINS = "capacitor://localhost"  # 只放行 iOS App 的 WebView;开发来源不上线
   COOKIE_SECURE = "true"
   SOLVER_WORKERS = "2"
   REMINDERS_INTERVAL_MINUTES = "30"

@@ -31,6 +31,10 @@ export async function api<T>(path: string, options: { method?: Method; json?: un
   } catch {
     data = text
   }
+  if (res.status === 401 && !path.startsWith('/api/auth/login') && !path.startsWith('/api/setup')) {
+    // 会话过期 / 被吊销:清掉本地令牌,让界面回到登录页
+    window.dispatchEvent(new Event('season:unauthorized'))
+  }
   if (!res.ok) {
     const detail = data && typeof data === 'object' && 'detail' in data ? (data as { detail: unknown }).detail : data
     throw new ApiError(res.status, detail ?? res.statusText)
