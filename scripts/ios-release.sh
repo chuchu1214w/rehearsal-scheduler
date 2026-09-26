@@ -4,8 +4,12 @@
 # 签名 / 上传的身份二选一:
 #   A) Xcode → Settings → Accounts 已登录开发者账号(自动签名);
 #   B) App Store Connect API 密钥:ASC_KEY_PATH(.p8 路径)、ASC_KEY_ID、ASC_ISSUER_ID(三个都要,xcodebuild 强制要求 Issuer ID)。
-# 注意:桌面文件夹由 iCloud 文件提供程序托管,写在这里的构建产物会带附加属性导致签名失败,
-#       所以 archive / export 放在 ~/Library/Developer/Xcode 下。
+# 导出签名:默认 ios/ExportOptions-manual.plist(手动签名:钥匙串里的「Apple Distribution」证书 +
+#   描述文件「Season App Store」,均已用 API 密钥创建,有效至 2027-09-26);
+#   若换成「管理员」角色的 API 密钥或 Xcode 已登录账号,可用 EXPORT_OPTIONS=ios/ExportOptions.plist 走云端自动签名。
+# 注意:① 桌面文件夹由 iCloud 托管,会把 node_modules 等挪到云端、给构建产物加附加属性导致签名失败——
+#       请在桌面以外的克隆里运行(如 ~/Developer/season-release);archive / export 放在 ~/Library/Developer/Xcode 下。
+#       ② 第一次签名时 macOS 会弹钥匙串对话框,输入开机密码并点「始终允许」。
 set -euo pipefail
 cd "$(dirname "$0")/../frontend"
 BUILD_NO="${1:-$(date +%Y%m%d%H%M)}"
@@ -13,6 +17,7 @@ OUT="${HOME}/Library/Developer/Xcode/Archives/Season"
 ARCHIVE="${OUT}/App-${BUILD_NO}.xcarchive"
 EXPORT="${OUT}/export-${BUILD_NO}"
 LOG="${OUT}/release-${BUILD_NO}.log"
+EXPORT_OPTIONS="${EXPORT_OPTIONS:-ios/ExportOptions-manual.plist}"
 mkdir -p "$OUT"
 
 AUTH=()
@@ -40,7 +45,7 @@ fi
 echo "✓ Archive 完成"
 
 echo "▶ 导出并上传到 App Store Connect"
-if ! xcodebuild -exportArchive -archivePath "$ARCHIVE" -exportOptionsPlist ios/ExportOptions.plist \
+if ! xcodebuild -exportArchive -archivePath "$ARCHIVE" -exportOptionsPlist "$EXPORT_OPTIONS" \
   -exportPath "$EXPORT" -allowProvisioningUpdates ${AUTH[@]+"${AUTH[@]}"} >> "$LOG" 2>&1; then
   grep -E "error|Error|failed" "$LOG" | tail -20
   echo "❌ 上传失败,完整日志见 ${LOG}"
