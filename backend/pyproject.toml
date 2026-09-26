@@ -26,6 +26,7 @@ dev = [
     "pytest>=8",
     "ruff>=0.6",
     "httpx>=0.27",
+    "markdown>=3.5",  # scripts/md2pdf.py(文档转 PDF)
 ]
 
 [tool.setuptools.packages.find]
