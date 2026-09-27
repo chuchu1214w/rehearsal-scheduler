@@ -1447,6 +1447,15 @@ summary {
   padding: 24px 16px;
 }
 
+/* 公开页没有底部导航:按钮跟在表单后面,不粘底(否则悬在半空,键盘弹出时还会挡住密码框) */
+.auth .primary-bar {
+  position: static;
+  margin: 20px 0 0;
+  padding: 0;
+  background: transparent;
+  border: 0;
+}
+
 .auth__box {
   width: 100%;
   max-width: 440px;
@@ -2275,8 +2284,35 @@ i.lock::before {
 
 
 /* ---------- 原生 App 安全区(刘海 / 底部指示条) ---------- */
+/* 底部导航的实际高度含指示条区域:粘底按钮、Toast 都以它为基准 */
+:root {
+  --nav-h: calc(66px + var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px)));
+}
+
 .shell__top {
   padding-top: calc(18px + var(--safe-area-inset-top, env(safe-area-inset-top, 0px)));
+}
+
+/* 状态栏背后垫一条底色:页面滚动时内容不会压在时间 / 电量上(网页版高度为 0,不占位) */
+body::before {
+  content: '';
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: var(--safe-area-inset-top, env(safe-area-inset-top, 0px));
+  background: var(--bg);
+  z-index: 1000;
+  pointer-events: none;
+}
+
+body:has(.shell-member)::before {
+  background: var(--paper);
+}
+
+/* 成员端顶栏的 padding 简写优先级更高,要单独补上状态栏高度 */
+.shell-member .shell__top {
+  padding-top: calc(13px + var(--safe-area-inset-top, env(safe-area-inset-top, 0px)));
 }
 
 .shell__nav {

@@ -1,6 +1,6 @@
 import { QueryClient, QueryClientProvider, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useEffect, type ReactNode } from 'react'
-import { BrowserRouter, Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom'
+import { BrowserRouter, Navigate, Route, Routes, useLocation, useNavigate, useNavigationType } from 'react-router-dom'
 
 import { api } from './api/client'
 import { AuthProvider, useAuth } from './auth/AuthContext'
@@ -46,6 +46,16 @@ function NativeBridge() {
   useEffect(() => {
     if (isNative() && userId != null) void reRegisterNativePushIfEnabled().catch(() => undefined)
   }, [userId])
+  return null
+}
+
+/** 换页时回到顶部(浏览器前进 / 后退仍由浏览器恢复原位置) */
+function ScrollToTop() {
+  const { pathname } = useLocation()
+  const navType = useNavigationType()
+  useEffect(() => {
+    if (navType !== 'POP') window.scrollTo(0, 0)
+  }, [pathname, navType])
   return null
 }
 
@@ -129,7 +139,8 @@ export function App() {
       <ToastProvider>
         <AuthProvider>
           <BrowserRouter>
-        <NativeBridge />
+            <NativeBridge />
+            <ScrollToTop />
             <SetupGate>
               <Routes>
                 <Route path="/setup" element={<SetupPage />} />

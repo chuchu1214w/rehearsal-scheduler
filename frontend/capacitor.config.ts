@@ -7,7 +7,7 @@ const config: CapacitorConfig = {
   webDir: 'dist',
   backgroundColor: '#fef0fb',
   ios: {
-    contentInset: 'automatic',
+    contentInset: 'never', // 安全区全部交给 CSS env(safe-area-inset-*);automatic 会再加一层内边距,滚到底时底部导航被抬高
   },
   plugins: {
     PushNotifications: { presentationOptions: ['badge', 'sound', 'banner', 'list'] },
