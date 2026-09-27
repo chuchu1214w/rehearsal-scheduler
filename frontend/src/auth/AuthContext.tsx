@@ -1,4 +1,4 @@
-import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query'
 import { createContext, useContext, useEffect, type ReactNode } from 'react'
 
 import { api, ApiError } from '../api/client'
@@ -14,6 +14,7 @@ interface AuthValue {
   retry: () => void
   setUser: (user: User | null) => void
   logout: () => Promise<void>
+  deleteAccount: (password: string) => Promise<void>
 }
 
 const AuthContext = createContext<AuthValue | null>(null)
@@ -30,16 +31,22 @@ async function fetchMe(): Promise<User | null> {
   }
 }
 
+/**
+ * 本机进入"未登录":先把 me 置空,再丢掉其他账号数据的缓存。
+ * 不能用 qc.clear():它连 me 查询一起删掉,AuthProvider 的 useQuery 还挂在旧查询上,页面会一直显示旧用户。
+ */
+function signedOut(qc: QueryClient): void {
+  qc.setQueryData(['me'], null)
+  qc.removeQueries({ predicate: (q) => q.queryKey[0] !== 'me' })
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const qc = useQueryClient()
   const query = useQuery({ queryKey: ['me'], queryFn: fetchMe, staleTime: 60_000, retry: 1 })
   useEffect(() => {
     const onUnauthorized = () => {
       void setSessionToken(null)
-      if (qc.getQueryData(['me'])) {
-        qc.clear()
-        qc.setQueryData(['me'], null)
-      }
+      if (qc.getQueryData(['me'])) signedOut(qc)
     }
     window.addEventListener('season:unauthorized', onUnauthorized)
     return () => window.removeEventListener('season:unauthorized', onUnauthorized)
@@ -64,9 +71,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         /* 同上 */
       } finally {
         await setSessionToken(null)
-        qc.clear()
-        qc.setQueryData(['me'], null)
+        signedOut(qc)
       }
+    },
+    deleteAccount: async (password) => {
+      // 密码错会抛错,留在页面上;成功后服务器已删掉会话和推送订阅,本机只需清掉令牌与缓存
+      await api('/api/me/delete', { method: 'POST', json: { password } })
+      if (!isNative()) await unbindWebPush().catch(() => undefined)
+      await setSessionToken(null)
+      signedOut(qc)
     },
   }
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>

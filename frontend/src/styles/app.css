@@ -625,6 +625,17 @@ a {
   box-shadow: 2px 3px 0 var(--red);
 }
 
+/* 长得像链接的按钮(次要、危险操作的入口,不抢主按钮) */
+.linklike {
+  border: 0;
+  padding: 0;
+  background: none;
+  font: inherit;
+  color: var(--muted);
+  text-decoration: underline;
+  cursor: pointer;
+}
+
 /* ---------- 表单 ---------- */
 .fields {
   display: grid;

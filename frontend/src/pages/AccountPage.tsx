@@ -9,11 +9,12 @@ import { InstallPushPanel } from '../components/InstallPushPanel'
 import { useAuth } from '../auth/AuthContext'
 import { pickCurrentEvent } from '../layout/currentEvent'
 import { Back, Button, Field, Heading, Note, Panel, PrimaryBar } from '../ui'
+import { Modal } from '../ui/Modal'
 import { useToast } from '../ui/Toast'
 import { fmtDateTime } from '../utils'
 
 export function AccountPage() {
-  const { user, setUser, logout } = useAuth()
+  const { user, setUser, logout, deleteAccount } = useAuth()
   const navigate = useNavigate()
   const qc = useQueryClient()
   const { toast } = useToast()
@@ -22,6 +23,22 @@ export function AccountPage() {
   const [newPw, setNewPw] = useState('')
   const [confirm, setConfirm] = useState('')
   const [err, setErr] = useState('')
+  const [delOpen, setDelOpen] = useState(false)
+  const [delPw, setDelPw] = useState('')
+  const [delErr, setDelErr] = useState('')
+  const [deleting, setDeleting] = useState(false)
+  const confirmDelete = async (e: FormEvent) => {
+    e.preventDefault()
+    setDeleting(true)
+    setDelErr('')
+    try {
+      await deleteAccount(delPw)
+      navigate('/login', { replace: true })
+    } catch (ex) {
+      setDelErr(ex instanceof Error ? ex.message : '注销失败,请稍后再试')
+      setDeleting(false)
+    }
+  }
   const change = useAction(
     () => api('/api/me/password', { method: 'POST', json: { old_password: oldPw, new_password: newPw } }),
     () => {
@@ -94,6 +111,43 @@ export function AccountPage() {
       </Panel>
       <InstallPushPanel />
       <CalendarPanel />
+      <p className="muted" style={{ fontSize: 13, textAlign: 'center' }}>
+        <a href="https://timetomeet.fly.dev/privacy" target="_blank" rel="noreferrer">
+          隐私政策
+        </a>
+        {!isAdmin && (
+          <>
+            {' · '}
+            <button type="button" className="linklike" onClick={() => setDelOpen(true)}>
+              注销账号
+            </button>
+          </>
+        )}
+      </p>
+      <Modal
+        open={delOpen}
+        title="注销账号"
+        onClose={() => {
+          setDelOpen(false)
+          setDelPw('')
+          setDelErr('')
+        }}
+      >
+        <form onSubmit={(e) => void confirmDelete(e)} className="fields">
+          <p style={{ margin: 0, lineHeight: 1.6 }}>
+            注销后,你的登录账号、通知、推送和日历订阅会立即删除,无法恢复。你在名册里的名字、已填的空闲和排练表属于舞团排程,会保留给管理员;需要一并删除请联系管理员。
+          </p>
+          <Field label="输入密码确认" full>
+            <input type="password" value={delPw} onChange={(e) => setDelPw(e.target.value)} autoComplete="current-password" />
+          </Field>
+          {delErr && <p className="error-text">{delErr}</p>}
+          <div className="actions">
+            <Button type="submit" variant="danger" loading={deleting} disabled={!delPw}>
+              永久注销
+            </Button>
+          </div>
+        </form>
+      </Modal>
       <PrimaryBar>
         <Button full onClick={() => void logout().then(() => navigate('/login', { replace: true }))}>
           退出登录

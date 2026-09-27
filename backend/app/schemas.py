@@ -58,6 +58,10 @@ class PasswordChangeIn(BaseModel):
     new_password: Password
 
 
+class AccountDeleteIn(BaseModel):
+    password: str
+
+
 class UserOut(BaseModel):
     id: int
     username: str

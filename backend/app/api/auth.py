@@ -1,4 +1,4 @@
-"""AUTH-02 登录 / 登出 / 当前用户;AUTH-05 修改密码。"""
+"""AUTH-02 登录 / 登出 / 当前用户;AUTH-05 修改密码;成员自助注销账号(App Store 审核 5.1.1(v))。"""
 
 from __future__ import annotations
 
@@ -18,7 +18,8 @@ from ..deps import (
     set_session_cookie,
 )
 from ..models import AuthSession, LoginFailure, User
-from ..schemas import LoginIn, LoginOut, PasswordChangeIn, UserOut
+from ..notify import admin_ids, notify
+from ..schemas import AccountDeleteIn, LoginIn, LoginOut, PasswordChangeIn, UserOut
 from ..security import hash_password, token_hash, verify_password
 from ..services import serialize_user
 from ..utils import utcnow
@@ -92,3 +93,24 @@ def change_password(body: PasswordChangeIn, request: Request, db: DB, user: Curr
     revoke_all_sessions(db, user, keep_session_id=getattr(request.state, "session_id", None))
     db.commit()
     return Response(status_code=204)
+
+
+@router.post("/me/delete", status_code=204)
+def delete_account(body: AccountDeleteIn, db: DB, user: CurrentUser, response: Response) -> Response:
+    """成员注销自己的登录账号:会话、通知、推送订阅、日历订阅随账号一起删除(外键级联)。
+
+    名册里的名字、已填的空闲和排练表属于舞团的排程数据,留给管理员处理;管理员账号不能自助注销。
+    """
+    if user.role == "admin":
+        raise HTTPException(status_code=400, detail="管理员账号不能在这里注销")
+    if not verify_password(user.password_hash, body.password):
+        raise HTTPException(status_code=400, detail="密码不正确")
+    name = user.member.display_name if user.member else user.username
+    if user.member is not None:
+        user.member.user = None
+    db.delete(user)
+    db.flush()
+    notify(db, admin_ids(db), type="account_deleted", title=f"{name} 注销了 App 账号", body="名册和已填的空闲仍保留;如需重新开通,在「人员」里操作。")
+    db.commit()
+    clear_session_cookie(response)
+    return Response(status_code=204, headers=response.headers)

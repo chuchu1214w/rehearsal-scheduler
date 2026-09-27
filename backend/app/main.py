@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import html
 import logging
 from collections.abc import AsyncIterator
 from pathlib import Path
@@ -64,6 +65,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     def _health() -> dict:
         return {"ok": True, "version": app.version, "schema_version": SCHEMA_VERSION}
 
+    _mount_static_pages(app, settings)
     for router in ROUTERS:
         app.include_router(router, prefix="/api")
     for router in PUBLIC_ROUTERS:
@@ -124,6 +126,36 @@ def _fail_stale_jobs(session_factory) -> None:  # noqa: ANN001
             job.finished_at = utcnow()
         if stale:
             db.commit()
+
+
+PAGES = Path(__file__).parent / "pages"
+PAGES_UPDATED = "2026 年 9 月 27 日"
+
+
+def _mount_static_pages(app: FastAPI, settings: Settings) -> None:
+    """隐私政策 / 支持页:不依赖前端构建和登录,App Store Connect 填的网址指向这里。"""
+    email = html.escape(settings.support_email)
+    contact = (
+        f'如有问题或删除请求,请联系你所在舞团的管理员,或发邮件至 <a href="mailto:{email}">{email}</a>。'
+        if email
+        else "如有问题或删除请求,请联系你所在舞团的管理员。"
+    )
+
+    def render(name: str) -> str:
+        text = (PAGES / name).read_text(encoding="utf-8")
+        return (
+            text.replace("{{contact}}", contact)
+            .replace("{{updated}}", PAGES_UPDATED)
+            .replace("{{base_url}}", html.escape(settings.public_base_url))
+        )
+
+    @app.get("/privacy", include_in_schema=False)
+    def _privacy() -> HTMLResponse:
+        return HTMLResponse(render("privacy.html"))
+
+    @app.get("/support", include_in_schema=False)
+    def _support() -> HTMLResponse:
+        return HTMLResponse(render("support.html"))
 
 
 def _mount_frontend(app: FastAPI, dist: Path | None) -> None:

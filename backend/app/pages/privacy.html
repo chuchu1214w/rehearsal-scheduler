@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="color-scheme" content="light" />
+<title>隐私政策 · Season</title>
+<style>
+  :root { --ink: #262a33; --muted: #6b7080; --accent: #5369af; --bg: #fef0fb; --card: #fff; --line: #ecdde8; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.75 -apple-system, BlinkMacSystemFont, "PingFang SC", "Noto Sans SC", sans-serif; }
+  main { max-width: 720px; margin: 0 auto; padding: 32px 16px 64px; }
+  article { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 24px 22px; }
+  h1 { font-size: 24px; margin: 0 0 4px; }
+  h2 { font-size: 17px; margin: 28px 0 6px; }
+  p, li { margin: 6px 0; }
+  ul { padding-left: 20px; }
+  .muted { color: var(--muted); font-size: 13px; }
+  a { color: var(--accent); }
+  table { width: 100%; border-collapse: collapse; font-size: 14px; margin: 8px 0; }
+  th, td { text-align: left; vertical-align: top; padding: 8px 6px; border-top: 1px solid var(--line); }
+  th { color: var(--muted); font-weight: 500; white-space: nowrap; }
+</style>
+</head>
+<body>
+<main>
+<article>
+<h1>隐私政策</h1>
+<p class="muted">Season(舞团排练排程)· 最近更新:{{updated}}</p>
+
+<p>Season 是一个舞团内部使用的排练排程工具,包括网页 {{base_url}} 和 iOS App「Season」。账号由舞团管理员开通,不开放公开注册。本政策说明我们收集哪些信息、怎么用、存在哪里,以及你可以怎样删除。</p>
+
+<h2>我们收集的信息</h2>
+<table>
+  <tr><th>账号信息</th><td>用户名、密码(只保存不可逆的哈希值)、管理员为你登记的名字 / 昵称、最近登录时间。</td></tr>
+  <tr><th>排程信息</th><td>你填写的空闲时间、你参加的演出与曲目、据此生成的排练表和排练地点。</td></tr>
+  <tr><th>通知与设备</th><td>站内通知记录;你开启推送后,设备的推送令牌(iOS 为 Apple 推送令牌,网页为浏览器推送地址)。</td></tr>
+  <tr><th>日历订阅</th><td>你生成日历订阅链接时,一串随机的订阅令牌。</td></tr>
+  <tr><th>运行日志</th><td>服务器为排查故障会短期记录访问日志(可能包含 IP 地址),以及登录失败记录(用于防止暴力破解,15 分钟后自动清除)。</td></tr>
+</table>
+<p>我们<strong>不</strong>收集位置、通讯录、照片、健康、支付等信息;没有广告,不使用第三方统计或追踪工具,不把数据出售或用于追踪你。</p>
+
+<h2>我们怎么使用</h2>
+<ul>
+  <li>让你登录、填写空闲,并让管理员据此自动排出排练表;</li>
+  <li>在排练表发布、地点变更、截止前和排练前一天给你发通知 / 推送;</li>
+  <li>向你的系统日历提供排练日程订阅。</li>
+</ul>
+<p>你的名字、所在曲目和排练安排会被同一舞团的成员和管理员看到,这是排练表本身的用途。</p>
+
+<h2>存储与第三方服务</h2>
+<ul>
+  <li>数据存放在 Fly.io 的服务器(日本东京)上,通过 HTTPS 加密传输;</li>
+  <li>iOS 推送通过 Apple 推送服务(APNs)发送,网页推送通过你浏览器厂商的推送服务发送,只传递通知标题和内容;</li>
+  <li>服务器每天自动备份一次,备份保留 14 天后覆盖。</li>
+</ul>
+
+<h2>保存期限与删除</h2>
+<ul>
+  <li><strong>注销账号</strong>:在 App 或网页的「账号」页点「注销账号」,输入密码确认后,你的登录账号、会话、通知、推送令牌和日历订阅会立即删除;</li>
+  <li>你在名册里的名字、已填的空闲和排练表属于舞团的排程记录,由管理员管理。需要一并删除时,请联系舞团管理员或下方邮箱,我们会在 30 天内处理;</li>
+  <li>已删除的数据可能在备份中最多再保留 14 天,之后自动清除。</li>
+</ul>
+
+<h2>儿童</h2>
+<p>Season 面向舞团成员,不面向 13 岁以下儿童,也不会有意收集他们的信息。</p>
+
+<h2>政策变更</h2>
+<p>本政策有重要变化时,我们会更新本页日期,并在 App 内通知。</p>
+
+<h2 id="contact">联系我们</h2>
+<p>{{contact}}</p>
+</article>
+</main>
+</body>
+</html>

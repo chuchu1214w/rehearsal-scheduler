@@ -6,8 +6,8 @@
 - 类别:主要「效率」,次要「生活」
 - 年龄分级:4+
 - 价格:免费
-- 支持网址:https://timetomeet.fly.dev
-- 隐私政策网址:https://timetomeet.fly.dev/privacy(待做;若审核要求可先用同一页面)
+- 支持网址:https://timetomeet.fly.dev/support
+- 隐私政策网址:https://timetomeet.fly.dev/privacy
 
 ## 描述(App Store)
 Season 是舞团内部使用的排练排程工具:

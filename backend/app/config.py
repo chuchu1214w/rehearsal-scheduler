@@ -32,6 +32,7 @@ class Settings(BaseModel):
     reminders_interval_minutes: int = 30  # 定时提醒检查间隔;0 = 关闭(测试用)
     backup_keep_days: int = 14  # 每日自动备份保留天数;0 = 不自动备份
     push_contact: str = "mailto:season@example.com"  # Web Push 的 VAPID 联系方式(推送服务出问题时联系用)
+    support_email: str = ""  # 隐私政策 / 支持页上公开的联系邮箱;空 = 只写"联系舞团管理员"
     # 原生 App(Capacitor)相关
     cors_origins: list[str] = [
         "capacitor://localhost",
@@ -85,6 +86,7 @@ class Settings(BaseModel):
             ("apns_key_p8", "APNS_KEY_P8"),
             ("apns_key_path", "APNS_KEY_PATH"),
             ("apns_key_id", "APNS_KEY_ID"),
+            ("support_email", "SUPPORT_EMAIL"),
         ):
             if v := env.get(name):
                 kwargs[key] = v

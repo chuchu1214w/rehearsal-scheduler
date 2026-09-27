@@ -18,6 +18,7 @@ MEMBER_OK = {
     ("post", "/api/auth/logout"),
     ("get", "/api/me"),
     ("post", "/api/me/password"),
+    ("post", "/api/me/delete"),
     ("get", "/api/events"),
     ("get", "/api/events/{event_id}"),
     ("get", "/api/events/{event_id}/members"),

@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="color-scheme" content="light" />
+<title>支持 · Season</title>
+<style>
+  :root { --ink: #262a33; --muted: #6b7080; --accent: #5369af; --bg: #fef0fb; --card: #fff; --line: #ecdde8; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.75 -apple-system, BlinkMacSystemFont, "PingFang SC", "Noto Sans SC", sans-serif; }
+  main { max-width: 720px; margin: 0 auto; padding: 32px 16px 64px; }
+  article { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 24px 22px; }
+  h1 { font-size: 24px; margin: 0 0 4px; }
+  h2 { font-size: 17px; margin: 28px 0 6px; }
+  p, li { margin: 6px 0; }
+  ul { padding-left: 20px; }
+  .muted { color: var(--muted); font-size: 13px; }
+  a { color: var(--accent); }
+  table { width: 100%; border-collapse: collapse; font-size: 14px; margin: 8px 0; }
+  th, td { text-align: left; vertical-align: top; padding: 8px 6px; border-top: 1px solid var(--line); }
+  th { color: var(--muted); font-weight: 500; white-space: nowrap; }
+</style>
+</head>
+<body>
+<main>
+<article>
+<h1>Season 使用帮助</h1>
+<p class="muted">舞团排练排程 · 网页 {{base_url}} · iOS App「Season」</p>
+
+<h2>怎么登录?</h2>
+<p>账号由舞团管理员开通,管理员会把用户名和初始密码发给你。登录后建议在「账号」页修改密码。忘记密码请找管理员重置。</p>
+
+<h2>收不到推送?</h2>
+<ul>
+  <li>iPhone:打开 App →「账号」→ 开启推送;并在 系统设置 → 通知 → Season 里允许通知;</li>
+  <li>网页:需要先把网页「添加到主屏幕」,再从主屏幕图标打开后开启推送。</li>
+</ul>
+
+<h2>排练表怎么同步到日历?</h2>
+<p>「账号」页 →「订阅到日历」,按提示添加即可;排练表变动后日历会自动更新。</p>
+
+<h2>怎么注销账号?</h2>
+<p>「账号」页底部 →「注销账号」,输入密码确认。详见<a href="/privacy">隐私政策</a>。</p>
+
+<h2 id="contact">联系我们</h2>
+<p>{{contact}}</p>
+</article>
+</main>
+</body>
+</html>
