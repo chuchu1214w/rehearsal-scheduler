@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter
 from sqlalchemy import select
 
 from .. import push as push_module
@@ -21,8 +21,8 @@ def public_key(db: DB, _user: CurrentUser) -> PushPublicKeyOut:
 
 
 @router.post("/push/subscribe", response_model=PushStatusOut)
-def subscribe(body: PushSubscribeIn, request: Request, db: DB, user: CurrentUser) -> PushStatusOut:
-    upsert_subscription(db, user.id, body.endpoint, body.keys.p256dh, body.keys.auth, request.headers.get("user-agent", ""))
+def subscribe(body: PushSubscribeIn, db: DB, user: CurrentUser) -> PushStatusOut:
+    upsert_subscription(db, user.id, body.endpoint, body.keys.p256dh, body.keys.auth)
     return status(db, user)
 
 

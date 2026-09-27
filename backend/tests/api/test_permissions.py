@@ -8,6 +8,8 @@ from __future__ import annotations
 
 from fastapi.testclient import TestClient
 
+from tests.api.conftest import add_member, make_event, open_account
+
 PUBLIC = {
     ("get", "/api/setup/status"),
     ("post", "/api/setup"),
@@ -88,3 +90,22 @@ def test_logout_requires_login_and_member_cannot_escalate(anon: TestClient, memb
         client.post("/api/events", json={"name": "x", "performance_date": "2026-09-20", "formal_start_date": "2026-09-01"}).status_code
         == 403
     )
+
+
+def test_member_cannot_see_admin_notes_or_accounts(app, admin: TestClient, member):
+    """成员查看同演出人员时,看不到管理员备注和任何人的账号信息;管理员看到的不变。"""
+    client, m = member
+    other = add_member(admin, "小红", note="膝伤,别排连续场")
+    open_account(app, admin, other, "xiaohong")
+    admin.patch(f"/api/members/{m['id']}", json={"note": "常迟到"})
+    ev = make_event(admin, member_ids=[m["id"], other["id"]])
+
+    r = client.get(f"/api/events/{ev['id']}/members")
+    assert r.status_code == 200 and [x["display_name"] for x in r.json()] == ["小明", "小红"]
+    assert all(x["note"] == "" and x["account"] is None for x in r.json())
+    for secret in ("xiaohong", "xiaoming", "膝伤", "常迟到", "must_change_password", "last_login_at"):
+        assert secret not in r.text, secret
+
+    full = {x["display_name"]: x for x in admin.get(f"/api/events/{ev['id']}/members").json()}
+    assert full["小红"]["note"] == "膝伤,别排连续场" and full["小红"]["account"]["username"] == "xiaohong"
+    assert full["小明"]["note"] == "常迟到" and full["小明"]["account"]["username"] == "xiaoming"

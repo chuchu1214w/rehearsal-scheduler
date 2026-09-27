@@ -15,8 +15,21 @@ def apple_app_site_association(settings: SettingsDep) -> JSONResponse:
     if not (settings.apple_team_id and settings.ios_bundle_id):
         raise HTTPException(status_code=404)
     app_id = f"{settings.apple_team_id}.{settings.ios_bundle_id}"
-    # 只让「页面」链接打开 App;接口、日历订阅、静态资源仍交给浏览器 / 系统日历
-    excluded = ["/api/*", "/cal/*", "/assets/*", "/.well-known/*", "/sw.js", "/manifest.webmanifest", "/*.png"]
+    # 只让「页面」链接打开 App;接口、日历订阅、静态资源仍交给浏览器 / 系统日历;
+    # 隐私政策 / 支持页是服务端页面,App 里没有,也留在 Safari
+    excluded = [
+        "/api/*",
+        "/cal/*",
+        "/assets/*",
+        "/.well-known/*",
+        "/sw.js",
+        "/manifest.webmanifest",
+        "/*.png",
+        "/privacy",
+        "/privacy/*",
+        "/support",
+        "/support/*",
+    ]
     body = {
         "applinks": {
             "apps": [],

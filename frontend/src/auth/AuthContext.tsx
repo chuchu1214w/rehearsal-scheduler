@@ -75,9 +75,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     },
     deleteAccount: async (password) => {
-      // 密码错会抛错,留在页面上;成功后服务器已删掉会话和推送订阅,本机只需清掉令牌与缓存
+      // 密码错会抛错,留在页面上;成功后服务器已删掉会话和推送订阅(不要再调解绑接口,会话已失效只会 401),本机只需清掉令牌与缓存
       await api('/api/me/delete', { method: 'POST', json: { password } })
-      if (!isNative()) await unbindWebPush().catch(() => undefined)
       await setSessionToken(null)
       signedOut(qc)
     },

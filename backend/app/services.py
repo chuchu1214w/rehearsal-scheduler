@@ -318,7 +318,8 @@ def serialize_event(event: Event) -> EventOut:
     )
 
 
-def serialize_event_members(event: Event) -> list[EventMemberOut]:
+def serialize_event_members(event: Event, *, admin: bool = False) -> list[EventMemberOut]:
+    """备注与账号信息只给管理员;成员看到的同伴列表里这两项为空。"""
     avail = availability_index(event)
     out: list[EventMemberOut] = []
     for p in sorted_participants(event):
@@ -331,8 +332,8 @@ def serialize_event_members(event: Event) -> list[EventMemberOut]:
                 member_id=p.member_id,
                 display_name=p.member.display_name,
                 active=p.member.active,
-                note=p.member.note or "",
-                account=serialize_account(p.member.user),
+                note=(p.member.note or "") if admin else "",
+                account=serialize_account(p.member.user) if admin else None,
                 availability_submitted_at=p.availability_submitted_at,
                 availability_filled_days=sum(1 for r in rows.values() if set(r.slots) != {"0"}),
                 availability_filled_by=filled_by,

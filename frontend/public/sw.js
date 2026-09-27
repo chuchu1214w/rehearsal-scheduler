@@ -19,6 +19,8 @@ self.addEventListener('fetch', (event) => {
   if (req.method !== 'GET') return
   const url = new URL(req.url)
   if (url.origin !== self.location.origin || url.pathname.startsWith('/api/') || url.pathname.startsWith('/cal/')) return
+  // 隐私政策 / 支持页是服务端独立页面,不能当成 App 壳缓存到 '/'
+  if (/^\/(privacy|support)(\/|$)/.test(url.pathname)) return
   // 页面导航:网络优先,断网时用缓存的壳
   if (req.mode === 'navigate') {
     event.respondWith(

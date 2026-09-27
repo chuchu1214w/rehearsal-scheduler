@@ -146,7 +146,7 @@ function HomeForEvent({ event, memberId, name, others }: { event: RehearsalEvent
           ))}
         </Note>
       )}
-      <PrimaryBar note={published ? '有临时变动可在「账号 → 修改空闲时间」或排练表页修改。' : submitted ? '提交后仍可修改;修改后排练表可能受影响。' : '大约 2 分钟 · 支持连续涂格、复制上一天'}>
+      <PrimaryBar note={published ? '有临时变动可在「排练表」页底部点「修改空闲时间」。' : submitted ? '提交后仍可修改;修改后排练表可能受影响。' : '大约 2 分钟 · 支持连续涂格、复制上一天'}>
         {published ? (
           <Button variant="primary" full onClick={() => navigate('/schedule')}>
             查看我的排练表

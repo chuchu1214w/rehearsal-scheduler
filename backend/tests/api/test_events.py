@@ -1,5 +1,7 @@
 from fastapi.testclient import TestClient
+from sqlalchemy import func, select
 
+from app.models import AvailabilityDay
 from tests.api.conftest import EVENT_BODY, MEMBER_PW, add_member, add_song, make_event, open_account
 
 
@@ -50,7 +52,7 @@ def test_member_visibility(app, admin: TestClient, member):
     assert client.get(f"/api/events/{ev2['id']}/members").status_code == 403
     assert client.get(f"/api/events/{ev2['id']}/songs").status_code == 403
     row = client.get(f"/api/events/{ev1['id']}/members").json()[0]
-    assert row["display_name"] == "小明" and row["account"]["username"] == "xiaoming"
+    assert row["display_name"] == "小明" and row["account"] is None and row["note"] == ""  # 账号与备注仅管理员可见
 
 
 def test_add_members_by_name_and_remove(admin: TestClient):
@@ -84,6 +86,29 @@ def test_set_event_members(admin: TestClient):
     r = admin.put(f"/api/events/{ev['id']}/members", json={"member_ids": [a["id"]]})
     assert [x["display_name"] for x in r.json()] == ["A"]
     assert admin.get(f"/api/events/{ev['id']}").json()["member_count"] == 1
+
+
+def test_removing_member_drops_their_availability(app, admin: TestClient):
+    a, b, c = add_member(admin, "A"), add_member(admin, "B"), add_member(admin, "C")
+    ev = make_event(admin, member_ids=[a["id"], b["id"], c["id"]])
+    other = make_event(admin, name="另一场", member_ids=[a["id"]])
+    day = {"2026-09-04": "1" * 13}
+    for e, m in ((ev, a), (ev, b), (ev, c), (other, a)):
+        assert admin.put(f"/api/events/{e['id']}/availability/{m['id']}", json={"days": day}).status_code == 200
+
+    def rows(event_id: int, member_id: int) -> int:
+        with app.state.session_factory() as db:
+            stmt = select(func.count()).select_from(AvailabilityDay)
+            return db.scalar(stmt.where(AvailabilityDay.event_id == event_id, AvailabilityDay.member_id == member_id))
+
+    assert admin.delete(f"/api/events/{ev['id']}/members/{a['id']}").status_code == 204
+    r = admin.put(f"/api/events/{ev['id']}/members", json={"member_ids": [c["id"]]})
+    assert [x["display_name"] for x in r.json()] == ["C"] and r.json()[0]["availability_filled_days"] == 1
+    assert [rows(ev["id"], m["id"]) for m in (a, b, c)] == [0, 0, 1]
+    assert rows(other["id"], a["id"]) == 1  # 其他演出的填报不受影响
+    # 重新加入从空白开始
+    admin.put(f"/api/events/{ev['id']}/members", json={"member_ids": [a["id"], c["id"]]})
+    assert admin.get(f"/api/events/{ev['id']}/availability/{a['id']}").json()["filled_days"] == 0
 
 
 def test_batch_open_accounts(app, admin: TestClient):

@@ -102,8 +102,8 @@ export interface EventMember {
   member_id: number
   display_name: string
   active: boolean
-  note: string
-  account: Account | null
+  note: string // 仅管理员可见,成员端为 ''
+  account: Account | null // 仅管理员可见,成员端为 null
   availability_submitted_at: string | null
   availability_filled_days: number
   availability_filled_by: 'member' | 'admin' | null

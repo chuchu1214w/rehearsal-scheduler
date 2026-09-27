@@ -8,6 +8,7 @@ import { CalendarPanel } from '../components/CalendarPanel'
 import { InstallPushPanel } from '../components/InstallPushPanel'
 import { useAuth } from '../auth/AuthContext'
 import { pickCurrentEvent } from '../layout/currentEvent'
+import { API_BASE, isNative, onExternalLinkClick } from '../native'
 import { Back, Button, Field, Heading, Note, Panel, PrimaryBar } from '../ui'
 import { Modal } from '../ui/Modal'
 import { useToast } from '../ui/Toast'
@@ -112,7 +113,7 @@ export function AccountPage() {
       <InstallPushPanel />
       <CalendarPanel />
       <p className="muted" style={{ fontSize: 13, textAlign: 'center' }}>
-        <a href="https://timetomeet.fly.dev/privacy" target="_blank" rel="noreferrer">
+        <a href={isNative() ? `${API_BASE}/api/go/privacy` : '/privacy'} target="_blank" rel="noreferrer" onClick={onExternalLinkClick}>
           隐私政策
         </a>
         {!isAdmin && (

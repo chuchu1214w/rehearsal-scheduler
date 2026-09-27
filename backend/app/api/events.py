@@ -188,11 +188,16 @@ def clone_event(event_id: int, body: EventCloneIn, db: DB, admin: AdminUser) -> 
 # ---------- 参与人员 ----------
 @router.get("/events/{event_id}/members", response_model=list[EventMemberOut])
 def list_event_members(event_id: int, db: DB, user: CurrentUser) -> list[EventMemberOut]:
-    return serialize_event_members(load_event(db, event_id, user))
+    return serialize_event_members(load_event(db, event_id, user), admin=user.role == "admin")
 
 
 def _blocking_songs(event: Event, removed: set[int]) -> list[str]:
     return [f"{m.display_name}({s.code})" for s in event.songs for m in s.members if m.id in removed]
+
+
+def _drop_availability(event: Event, member_ids: set[int]) -> None:
+    """移出演出时一并删掉其空闲填报(delete-orphan);留着会让之后删除名册成员时外键报错。"""
+    event.availability[:] = [r for r in event.availability if r.member_id not in member_ids]
 
 
 @router.put("/events/{event_id}/members", response_model=list[EventMemberOut])
@@ -206,6 +211,7 @@ def set_event_members(event_id: int, body: EventMembersIn, db: DB, admin: AdminU
         raise HTTPException(status_code=409, detail="以下人员仍在曲目中,请先从曲目移除:" + "、".join(blocking))
     for mid in removed:
         db.delete(current[mid])
+    _drop_availability(event, removed)
     added = [mid for mid in found if mid not in current]
     for mid in added:
         db.add(EventMember(event_id=event.id, member_id=mid))
@@ -214,7 +220,7 @@ def set_event_members(event_id: int, body: EventMembersIn, db: DB, admin: AdminU
     on_joined(db, event, [p for p in event.participants if p.member_id in added])
     db.commit()
     db.refresh(event)
-    return serialize_event_members(event)
+    return serialize_event_members(event, admin=True)
 
 
 @router.post("/events/{event_id}/members", response_model=list[EventMemberOut], status_code=201)
@@ -241,7 +247,7 @@ def add_event_members(event_id: int, body: EventMembersAddIn, db: DB, admin: Adm
     on_joined(db, event, [p for p in event.participants if p.member_id in added])
     db.commit()
     db.refresh(event)
-    return serialize_event_members(event)
+    return serialize_event_members(event, admin=True)
 
 
 @router.delete("/events/{event_id}/members/{member_id}", status_code=204)
@@ -254,6 +260,7 @@ def remove_event_member(event_id: int, member_id: int, db: DB, admin: AdminUser)
     if blocking:
         raise HTTPException(status_code=409, detail="该成员仍在曲目中,请先从曲目移除:" + "、".join(blocking))
     db.delete(row)
+    _drop_availability(event, {member_id})
     db.commit()
 
 

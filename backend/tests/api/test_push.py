@@ -4,6 +4,8 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app import push
+from app.main import _clear_push_user_agents
+from app.models import PushSubscription
 from tests.api.conftest import add_member, make_event, open_account
 from tests.api.test_schedule import SHORT
 
@@ -56,3 +58,16 @@ def test_notification_triggers_push_and_dead_endpoint_cleanup(app, admin: TestCl
     calls.clear()
     admin.post(f"/api/events/{ev['id']}/remind")
     assert len(calls) == 1  # A 还有 1 台设备
+
+
+def test_subscribe_does_not_store_user_agent(app, admin: TestClient):
+    admin.post("/api/push/subscribe", json=SUB, headers={"User-Agent": "Mozilla/5.0 (iPhone) Safari"})
+    with app.state.session_factory() as db:
+        row = db.query(PushSubscription).one()
+        assert row.user_agent == ""
+        # 旧版本存下的 User-Agent 在启动时清空
+        row.user_agent = "Mozilla/5.0 old"
+        db.commit()
+    _clear_push_user_agents(app.state.session_factory)
+    with app.state.session_factory() as db:
+        assert db.query(PushSubscription).one().user_agent == ""

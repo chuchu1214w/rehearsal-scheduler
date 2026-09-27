@@ -151,16 +151,17 @@ def send_to_users(db: Session, user_ids: list[int], payload: dict, contact: str 
     return len(subs) + len(ios_tokens)
 
 
-def upsert_subscription(db: Session, user_id: int, endpoint: str, p256dh: str, auth: str, user_agent: str = "") -> PushSubscription:
+def upsert_subscription(db: Session, user_id: int, endpoint: str, p256dh: str, auth: str) -> PushSubscription:
+    # 不记录浏览器 User-Agent(用不上,隐私政策也没列);旧数据里的值在这里一并清空,列保留
     row = db.scalar(select(PushSubscription).where(PushSubscription.endpoint == endpoint))
     if row is None:
-        row = PushSubscription(user_id=user_id, endpoint=endpoint, p256dh=p256dh, auth=auth, user_agent=user_agent[:200])
+        row = PushSubscription(user_id=user_id, endpoint=endpoint, p256dh=p256dh, auth=auth, user_agent="")
         db.add(row)
     else:
         row.user_id = user_id
         row.p256dh = p256dh
         row.auth = auth
-        row.user_agent = user_agent[:200]
+        row.user_agent = ""
         row.last_used_at = utcnow()
     db.commit()
     return row

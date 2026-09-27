@@ -1,6 +1,10 @@
-from fastapi.testclient import TestClient
+from datetime import date
 
-from tests.api.conftest import add_member, make_event
+from fastapi.testclient import TestClient
+from sqlalchemy import func, select
+
+from app.models import AvailabilityDay
+from tests.api.conftest import MEMBER_PW, add_member, make_event
 
 
 def test_member_crud(admin: TestClient):
@@ -40,3 +44,28 @@ def test_cannot_delete_referenced_member(app, admin: TestClient, member):
 def test_cannot_open_account_for_inactive_member(admin: TestClient):
     m = add_member(admin, "停用者", active=False)
     assert admin.post(f"/api/members/{m['id']}/account", json={"password": "Member123!"}).status_code == 409
+
+
+def test_delete_member_after_self_deleted_account_and_removal(admin: TestClient, member):
+    """成员填过空闲、自行注销账号、被移出演出后,管理员可以把他从名册删除。"""
+    client, m = member
+    ev = make_event(admin, member_ids=[m["id"]])
+    url = f"/api/events/{ev['id']}/availability/{m['id']}"
+    assert client.put(url, json={"days": {"2026-09-04": "1" * 13}, "submit": True}).status_code == 200
+    assert client.post("/api/me/delete", json={"password": MEMBER_PW}).status_code == 204
+    assert admin.delete(f"/api/members/{m['id']}").status_code == 409  # 仍在演出中
+    assert admin.delete(f"/api/events/{ev['id']}/members/{m['id']}").status_code == 204
+    assert admin.delete(f"/api/members/{m['id']}").status_code == 204
+    assert all(x["id"] != m["id"] for x in admin.get("/api/members").json())
+
+
+def test_delete_member_with_leftover_availability(app, admin: TestClient):
+    """旧版本移出演出时留下的空闲行,不应让删除名册成员报 500。"""
+    m = add_member(admin, "旧人")
+    ev = make_event(admin)
+    with app.state.session_factory() as db:
+        db.add(AvailabilityDay(event_id=ev["id"], member_id=m["id"], date=date(2026, 9, 4), slots="1" * 13))
+        db.commit()
+    assert admin.delete(f"/api/members/{m['id']}").status_code == 204
+    with app.state.session_factory() as db:
+        assert db.scalar(select(func.count()).select_from(AvailabilityDay)) == 0

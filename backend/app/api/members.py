@@ -5,12 +5,12 @@ from __future__ import annotations
 import re
 
 from fastapi import APIRouter, HTTPException
-from sqlalchemy import func, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session
 
 from ..config import Settings
 from ..deps import DB, AdminUser, SettingsDep, revoke_all_sessions
-from ..models import EventMember, Member, User, song_members
+from ..models import AvailabilityDay, EventMember, Member, User, song_members
 from ..notify import on_joined
 from ..schemas import (
     AccountCreateIn,
@@ -99,6 +99,8 @@ def delete_member(member_id: int, db: DB, _admin: AdminUser) -> None:
     in_songs = db.scalar(select(func.count()).select_from(song_members).where(song_members.c.member_id == member.id)) or 0
     if in_events or in_songs:
         raise HTTPException(status_code=409, detail="该成员已参加演出或曲目,请改为停用")
+    # 旧版本移出演出时没删空闲填报,残留行会让外键拒绝删除
+    db.execute(delete(AvailabilityDay).where(AvailabilityDay.member_id == member.id))
     db.delete(member)
     db.commit()
 

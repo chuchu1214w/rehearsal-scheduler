@@ -7,13 +7,15 @@ import contextlib
 import html
 import logging
 from collections.abc import AsyncIterator
+from datetime import timedelta
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
-from sqlalchemy import select
+from sqlalchemy import delete, select, update
+from sqlalchemy.orm import Session
 
 from . import push
 from .api import PUBLIC_ROUTERS, ROUTERS
@@ -21,7 +23,7 @@ from .apns import ApnsConfig
 from .backup import backup_sqlite
 from .config import Settings
 from .db import SchemaOutdated, init_db, make_engine, make_session_factory
-from .models import SCHEMA_VERSION, SolveJob
+from .models import SCHEMA_VERSION, LoginFailure, PushSubscription, SolveJob
 from .utils import utcnow
 
 
@@ -60,6 +62,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.engine = engine
     app.state.session_factory = make_session_factory(engine)
     _fail_stale_jobs(app.state.session_factory)
+    _clear_push_user_agents(app.state.session_factory)
 
     @app.get("/api/health", tags=["health"])
     def _health() -> dict:
@@ -106,13 +109,27 @@ async def _backup_loop(settings: Settings) -> None:
 async def _reminder_loop(app: FastAPI, minutes: int) -> None:
     from .notify import run_due_reminders
 
+    settings: Settings = app.state.settings
     while True:
         try:
             with app.state.session_factory() as db:
-                await asyncio.to_thread(run_due_reminders, db, None, app.state.settings.app_timezone)
+                await asyncio.to_thread(run_due_reminders, db, None, settings.app_timezone)
         except Exception:  # noqa: BLE001
             pass  # 提醒失败不影响服务;下一轮再试
+        try:
+            with app.state.session_factory() as db:
+                await asyncio.to_thread(purge_login_failures, db, settings.login_window_minutes)
+        except Exception:  # noqa: BLE001
+            pass
         await asyncio.sleep(minutes * 60)
+
+
+def purge_login_failures(db: Session, window_minutes: int) -> int:
+    """清掉超出限流窗口的登录失败记录。登录接口只在有人登录时顺手清,这里定期兜底(隐私政策承诺)。"""
+    cutoff = utcnow() - timedelta(minutes=window_minutes)
+    n = db.execute(delete(LoginFailure).where(LoginFailure.at < cutoff)).rowcount
+    db.commit()
+    return n or 0
 
 
 def _fail_stale_jobs(session_factory) -> None:  # noqa: ANN001
@@ -125,6 +142,13 @@ def _fail_stale_jobs(session_factory) -> None:  # noqa: ANN001
             job.progress = ""
             job.finished_at = utcnow()
         if stale:
+            db.commit()
+
+
+def _clear_push_user_agents(session_factory) -> None:  # noqa: ANN001
+    """早期版本记录过网页推送订阅的浏览器 User-Agent;现在不再记录,旧值启动时清空。"""
+    with session_factory() as db:
+        if db.execute(update(PushSubscription).where(PushSubscription.user_agent != "").values(user_agent="")).rowcount:
             db.commit()
 
 
@@ -156,6 +180,13 @@ def _mount_static_pages(app: FastAPI, settings: Settings) -> None:
     @app.get("/support", include_in_schema=False)
     def _support() -> HTMLResponse:
         return HTMLResponse(render("support.html"))
+
+    # App 内链接走这里:/api/* 从来不算 Universal Link,Safari 打开后再跳到页面,不受苹果 CDN 缓存的旧 AASA 影响
+    @app.get("/api/go/{page}", include_in_schema=False)
+    def _go(page: str) -> RedirectResponse:
+        if page not in ("privacy", "support"):
+            raise HTTPException(status_code=404)
+        return RedirectResponse(f"/{page}", status_code=302)
 
 
 def _mount_frontend(app: FastAPI, dist: Path | None) -> None:

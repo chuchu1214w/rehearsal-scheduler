@@ -51,6 +51,10 @@ def test_apple_app_site_association(anon: TestClient):
     assert d["appIDs"] == ["TEAM123456.app.test.season"] and d["appID"] == "TEAM123456.app.test.season"
     assert {"/": "/api/*", "exclude": True} in d["components"] and {"/": "/cal/*", "exclude": True} in d["components"]
     assert d["components"][-1] == {"/": "*"} and d["paths"][-1] == "*" and "NOT /cal/*" in d["paths"]
+    # 隐私政策 / 支持页在 Safari 打开,不被 App 接管(排除项必须排在兜底的 "*" 之前)
+    for p in ("/privacy", "/privacy/*", "/support", "/support/*"):
+        assert d["components"].index({"/": p, "exclude": True}) < len(d["components"]) - 1
+        assert d["paths"].index(f"NOT {p}") < len(d["paths"]) - 1
 
 
 def test_native_token_register_and_fanout(app, admin: TestClient, monkeypatch):

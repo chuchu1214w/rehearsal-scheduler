@@ -128,6 +128,46 @@ export async function reRegisterNativePushIfEnabled(): Promise<void> {
   if (await nativePushEnabled()) await PushNotifications.register()
 }
 
+// ---------- 外部网页:交给 Safari ----------
+/** 隐私政策 / 支持页是服务端独立页面,App 里没有对应路由 */
+const SERVER_PAGE = /^\/(privacy|support)(\/|$)/
+let lastExternal: { href: string; at: number } | null = null
+
+/**
+ * 用系统浏览器打开网址。App 里让 WebView 主框架跳过去:Capacitor 发现不是 App 自己的地址,会取消这次导航、
+ * 用 UIApplication.open 交给系统(当前页面不动)。不用 window.open:没有用户手势时(如深链接回调里)会被 WebView 拦掉。
+ * 系统只在 App 前台活跃时才会打开,刚被链接唤起时先等 App 变为活跃。
+ */
+export async function openExternal(url: string): Promise<void> {
+  if (!isNative()) {
+    window.open(url, '_blank', 'noopener')
+    return
+  }
+  const { App } = await import('@capacitor/app')
+  if (!(await App.getState()).isActive) {
+    await new Promise<void>((resolve) => {
+      const done = () => {
+        clearTimeout(timer)
+        void handle.then((h) => h.remove())
+        resolve()
+      }
+      const timer = setTimeout(done, 10_000)
+      const handle = App.addListener('appStateChange', (s) => {
+        if (s.isActive) done()
+      })
+    })
+  }
+  lastExternal = { href: new URL(url).href, at: Date.now() }
+  window.location.assign(url)
+}
+
+/** 外部链接 <a target="_blank"> 的 onClick:App 里改走 openExternal,网页版保持浏览器默认行为 */
+export function onExternalLinkClick(e: { preventDefault: () => void; currentTarget: { href: string } }): void {
+  if (!isNative()) return
+  e.preventDefault()
+  void openExternal(e.currentTarget.href)
+}
+
 // ---------- 启动时挂一次的监听 ----------
 const NON_PAGE_PREFIXES = ['/api/', '/cal/', '/assets/', '/.well-known/']
 
@@ -165,6 +205,13 @@ export function attachNativeListeners(api: Api, navigate: (to: string) => void, 
       App.addListener('appUrlOpen', ({ url }) => {
         try {
           const u = new URL(url)
+          if (SERVER_PAGE.test(u.pathname)) {
+            // 旧版 apple-app-site-association(苹果 CDN 可能还缓存着)把这两个页面也算作 App 链接:交还给 Safari。
+            // 本 App 刚打开过的同一地址又被系统送回来,说明系统仍把它当 App 链接,不再来回弹
+            const bounced = lastExternal?.href === u.href && Date.now() - lastExternal.at < 5_000
+            if (!bounced) void openExternal(u.href)
+            return
+          }
           if (NON_PAGE_PREFIXES.some((p) => u.pathname.startsWith(p))) return
           navigate(u.pathname + u.search)
         } catch {

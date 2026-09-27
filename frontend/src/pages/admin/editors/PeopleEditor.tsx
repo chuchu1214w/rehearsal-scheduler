@@ -79,7 +79,15 @@ export function PeopleEditor({ event, wizard = false }: Props) {
                 {m.display_name}
                 {m.note && <span className="muted"> · {m.note}</span>}
               </button>
-              <button type="button" aria-label={`移除 ${m.display_name}`} onClick={() => remove.mutate(m)}>
+              <button
+                type="button"
+                aria-label={`移除 ${m.display_name}`}
+                onClick={() => {
+                  // 移出会一并删掉本演出已填的空闲(重新加入要重填),填过的先确认
+                  const filled = m.availability_submitted_at || m.availability_filled_days > 0
+                  if (!filled || window.confirm(`移出「${m.display_name}」?已填的空闲会一并删除,重新加入需要重填。`)) remove.mutate(m)
+                }}
+              >
                 ×
               </button>
             </span>

@@ -38,3 +38,10 @@ def test_privacy_and_support_pages(anon: TestClient):
     for path in ("/privacy", "/support"):
         r = anon.get(path)
         assert r.status_code == 200 and "{{" not in r.text and "联系你所在舞团的管理员" in r.text
+
+
+def test_go_redirects_to_static_pages(anon: TestClient):
+    r = anon.get("/api/go/privacy", follow_redirects=False)
+    assert r.status_code == 302 and r.headers["location"] == "/privacy"
+    assert anon.get("/api/go/support", follow_redirects=False).headers["location"] == "/support"
+    assert anon.get("/api/go/elsewhere", follow_redirects=False).status_code == 404

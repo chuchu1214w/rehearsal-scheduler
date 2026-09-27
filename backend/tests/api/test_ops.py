@@ -1,4 +1,4 @@
-"""M7:健康检查与 SQLite 备份。"""
+"""M7:健康检查、SQLite 备份、登录失败记录定期清理。"""
 
 import sqlite3
 from datetime import datetime, timedelta
@@ -6,6 +6,9 @@ from datetime import datetime, timedelta
 from fastapi.testclient import TestClient
 
 from app.backup import backup_sqlite, prune
+from app.main import purge_login_failures
+from app.models import LoginFailure
+from app.utils import utcnow
 
 
 def test_health(anon: TestClient):
@@ -27,3 +30,14 @@ def test_backup_and_prune(tmp_path, settings, admin: TestClient):
     assert prune(out.parent, stem, 14) == 1
     assert not old.exists() and out.exists()
     assert backup_sqlite("postgresql://x/y") is None
+
+
+def test_purge_login_failures(app):
+    # 隐私政策承诺登录失败记录 15 分钟后清除:后台循环定期调用,不依赖有人再登录
+    now = utcnow()
+    with app.state.session_factory() as db:
+        db.add(LoginFailure(username_lower="old", at=now - timedelta(minutes=16)))
+        db.add(LoginFailure(username_lower="new", at=now - timedelta(minutes=5)))
+        db.commit()
+        assert purge_login_failures(db, 15) == 1
+        assert [f.username_lower for f in db.query(LoginFailure).all()] == ["new"]
