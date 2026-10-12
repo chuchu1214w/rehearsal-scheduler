@@ -758,5 +758,9 @@ class AdvisorRunOut(BaseModel):
     cost_usd: float | None
 
 
+class AdvisorStartIn(BaseModel):
+    consent: bool = False  # 管理员已确认:排程数据(含成员昵称与空闲)会发送给 Anthropic
+
+
 class AdvisorApplyIn(BaseModel):
     indices: list[int] = Field(min_length=1, max_length=100)

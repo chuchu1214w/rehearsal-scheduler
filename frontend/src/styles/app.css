@@ -2724,3 +2724,29 @@ body:has(.shell-member)::before {
     animation: none;
   }
 }
+
+.modal p.advisor-consent {
+  font-size: 13px;
+  line-height: 1.7;
+  color: var(--ink);
+}
+
+/* 排练地点 + Naver 地图按钮 */
+.location {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+}
+
+.maplink {
+  border: 1px solid #03c75a;
+  background: #03c75a14;
+  color: #03a64b;
+  border-radius: 999px;
+  padding: 2px 10px;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.6;
+  cursor: pointer;
+}

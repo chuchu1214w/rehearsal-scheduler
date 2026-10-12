@@ -5,7 +5,8 @@ import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { api } from '../../api/client'
 import { keys, useAction, useConflicts, useDiff, useEvent, useEventMembers, useInvalidateEvent, useVersion, useVersions } from '../../api/hooks'
 import type { DiffItem, EditResult, ScheduleSession, ScheduleVersion, ScheduleVersionDetail } from '../../api/types'
-import { MemberTable, SessionsByDate, WeekView, sessionsForMember } from '../../components/ScheduleViews'
+import { MemberTable, SessionsByDate, WeekView, sessionsForMember, songOrderOf } from '../../components/ScheduleViews'
+import { renderScheduleImage, shareImage } from '../../share'
 import { Back, Badge, Button, Heading, LinkButton, Note, Panel, Spinner, Tabs } from '../../ui'
 import { Modal } from '../../ui/Modal'
 import { useToast } from '../../ui/Toast'
@@ -25,6 +26,7 @@ export function SchedulePage() {
   const [view, setView] = useState<View>('week')
   const [memberFilter, setMemberFilter] = useState<number | null>(null)
   const [confirm, setConfirm] = useState<'publish' | 'unpublish' | null>(null)
+  const [sharing, setSharing] = useState(false)
   const ev = useEvent(id)
   const members = useEventMembers(id)
   const versions = useVersions(id)
@@ -124,6 +126,27 @@ export function SchedulePage() {
   const conflictItems = conflicts.data?.items ?? []
   const busy = move.isPending || lock.isPending
 
+  // 一键把这一版画成长图,交给系统分享面板(可选微信)
+  const onShare = async () => {
+    if (!detail.data || sharing) return
+    setSharing(true)
+    try {
+      const memberName = memberFilter != null ? members.data?.find((m) => m.member_id === memberFilter)?.display_name : null
+      const blob = await renderScheduleImage({
+        eventName: `${e.name} · 排练表`,
+        subtitle: `${current.status === 'published' ? '已发布' : '草稿'} v${current.version_no} · ${sessions.length} 场${memberName ? ` · 只看 ${memberName}` : ''} · 演出 ${fmtMd(e.performance_date)}`,
+        sessions,
+        songOrder: songOrderOf(detail.data.sessions),
+      })
+      const how = await shareImage(blob, `排练表-v${current.version_no}.png`, `${e.name} 排练表`)
+      if (how === 'downloaded') toast('已下载排练表图片,可以发到微信')
+    } catch (err) {
+      toast(`生成图片失败:${(err as Error).message}`)
+    } finally {
+      setSharing(false)
+    }
+  }
+
   return (
     <>
       <Back to={`/events/${e.id}`} label={`${e.name} · 工作台`} />
@@ -149,6 +172,14 @@ export function SchedulePage() {
           {current.parent_version_id != null && ` · 来自 v${list.find((v) => v.id === current.parent_version_id)?.version_no ?? '?'}`}
           {current.published_at && ` · 发布于 ${fmtDateTime(current.published_at)}`}
         </p>
+        <div className="actions" style={{ justifyContent: 'flex-start', marginTop: 10 }}>
+          <Button small loading={sharing} disabled={!detail.data} onClick={() => void onShare()}>
+            分享到微信
+          </Button>
+          <span className="muted" style={{ fontSize: 11, alignSelf: 'center' }}>
+            生成排练表长图{memberFilter != null ? '(当前筛选的成员)' : ''},在分享面板里选微信
+          </span>
+        </div>
         {current.skipped_songs.length > 0 && <Note tone="warning">这一版跳过了曲目 {current.skipped_songs.join('、')}(求解时参演人员尚未全部提交空闲)。</Note>}
         {current.validation_errors.length > 0 && (
           <Note tone="error">

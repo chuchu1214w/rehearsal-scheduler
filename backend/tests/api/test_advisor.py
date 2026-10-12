@@ -69,7 +69,7 @@ def test_advisor_raises_absence_and_admin_applies(admin: TestClient, fake):
             _resp(_block(type="tool_use", id="t4", name="submit_proposal", input={"summary": "让 C 缺席第二首", "changes": changes})),
         ]
     )
-    r = admin.post(f"/api/events/{ev['id']}/advisor")
+    r = admin.post(f"/api/events/{ev['id']}/advisor", json={"consent": True})
     assert r.status_code == 202, r.text
     run = r.json()
     assert run["status"] == "done", run["error"]
@@ -117,7 +117,7 @@ def test_advisor_rule_change_and_bad_change_is_reported(admin: TestClient, fake)
             ),
         ]
     )
-    run = admin.post(f"/api/events/{ev['id']}/advisor").json()
+    run = admin.post(f"/api/events/{ev['id']}/advisor", json={"consent": True}).json()
     assert run["status"] == "done", run["error"]
     err = client.calls[1]["messages"][-1]["content"][0]
     assert err["is_error"] and "找不到编号为 99999 的要求" in err["content"]
@@ -131,7 +131,7 @@ def test_advisor_rule_change_and_bad_change_is_reported(admin: TestClient, fake)
 
 def test_advisor_needs_api_key(admin: TestClient):
     ev, *_ = _setup(admin)
-    r = admin.post(f"/api/events/{ev['id']}/advisor")
+    r = admin.post(f"/api/events/{ev['id']}/advisor", json={"consent": True})
     assert r.status_code == 503 and "ANTHROPIC_API_KEY" in r.json()["detail"]
 
 
@@ -181,7 +181,7 @@ def test_advisor_suggests_song_session_plans(admin: TestClient, fake):
             ),
         ]
     )
-    run = admin.post(f"/api/events/{ev['id']}/advisor").json()
+    run = admin.post(f"/api/events/{ev['id']}/advisor", json={"consent": True}).json()
     assert run["status"] == "done", run["error"]
     tried = client.calls[1]["messages"][-1]["content"][0]["content"]
     assert '"当前方案": "1 场:3h"' in tried and '"说明": "1 场:2h", "结果": "全部排完"' in tried
@@ -213,5 +213,12 @@ def test_advisor_and_solve_do_not_run_together(admin: TestClient, fake):
         db.commit()
     r = admin.post(f"/api/events/{ev['id']}/solve", json={})
     assert r.status_code == 409 and "AI 调度员正在工作" in r.json()["detail"]
-    r = admin.post(f"/api/events/{ev['id']}/advisor")
+    r = admin.post(f"/api/events/{ev['id']}/advisor", json={"consent": True})
     assert r.status_code == 409
+
+
+def test_advisor_requires_consent(admin: TestClient, fake):
+    ev, *_ = _setup(admin)
+    fake([])
+    r = admin.post(f"/api/events/{ev['id']}/advisor", json={})
+    assert r.status_code == 422 and "Anthropic" in r.json()["detail"]

@@ -13,7 +13,7 @@ from sqlalchemy.orm import Session
 from .. import advisor
 from ..deps import DB, AdminUser, SettingsDep
 from ..models import AdvisorRun, SolveJob
-from ..schemas import AdvisorApplyIn, AdvisorRunOut
+from ..schemas import AdvisorApplyIn, AdvisorRunOut, AdvisorStartIn
 from ..utils import utcnow
 from .events import load_event
 
@@ -65,8 +65,10 @@ def _get_run(db: Session, run_id: int, admin) -> AdvisorRun:  # noqa: ANN001
 
 
 @router.post("/events/{event_id}/advisor", response_model=AdvisorRunOut, status_code=202)
-def start_advisor(event_id: int, db: DB, admin: AdminUser, settings: SettingsDep) -> AdvisorRunOut:
+def start_advisor(event_id: int, body: AdvisorStartIn, db: DB, admin: AdminUser, settings: SettingsDep) -> AdvisorRunOut:
     event = load_event(db, event_id, admin)
+    if not body.consent:
+        raise HTTPException(status_code=422, detail="请先确认:使用 AI 调度员会把本演出的排程数据(含成员昵称与空闲时间)发送给 Anthropic")
     if not settings.anthropic_api_key and advisor.CLIENT_FACTORY is None:
         raise HTTPException(status_code=503, detail="AI 调度员还没开通:服务器需要配置 Claude API 密钥(ANTHROPIC_API_KEY)")
     if not event.participants or not event.songs:

@@ -159,7 +159,7 @@ def _clear_push_user_agents(session_factory) -> None:  # noqa: ANN001
 
 
 PAGES = Path(__file__).parent / "pages"
-PAGES_UPDATED = "2026 年 9 月 27 日"
+PAGES_UPDATED = "2026 年 10 月 13 日"
 
 
 def _mount_static_pages(app: FastAPI, settings: Settings) -> None:

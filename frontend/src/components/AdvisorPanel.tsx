@@ -5,8 +5,11 @@ import { api } from '../api/client'
 import { keys, useAction, useInvalidateEvent, useLatestAdvisor } from '../api/hooks'
 import type { AdvisorRun } from '../api/types'
 import { Badge, Button, Note, Panel, Spinner } from '../ui'
+import { API_BASE, isNative, onExternalLinkClick } from '../native'
 import { Modal } from '../ui/Modal'
 import { useToast } from '../ui/Toast'
+
+const CONSENT_KEY = 'season.advisor-consent.v1'
 
 const LOG_LABEL: Record<AdvisorRun['log'][number]['kind'], string> = {
   info: '开始',
@@ -27,6 +30,7 @@ export function AdvisorPanel({ eventId, onResolve, resolving }: { eventId: numbe
   const running = !!run && (run.status === 'running' || run.status === 'queued')
   const [picked, setPicked] = useState<Set<number>>(new Set())
   const [confirm, setConfirm] = useState(false)
+  const [consentOpen, setConsentOpen] = useState(false)
   const logRef = useRef<HTMLOListElement>(null)
 
   // 新方案出来时默认全选(已执行的除外)
@@ -41,7 +45,29 @@ export function AdvisorPanel({ eventId, onResolve, resolving }: { eventId: numbe
   }, [run?.log.length])
 
   const setRun = (r: AdvisorRun) => qc.setQueryData(keys.latestAdvisor(eventId), r)
-  const start = useAction(() => api<AdvisorRun>(`/api/events/${eventId}/advisor`, { method: 'POST' }), setRun)
+  const start = useAction(() => api<AdvisorRun>(`/api/events/${eventId}/advisor`, { method: 'POST', json: { consent: true } }), (r) => {
+    setConsentOpen(false)
+    setRun(r)
+  })
+  // 第一次使用前说明数据去向并征得同意;同意过的浏览器 / App 不再重复询问
+  const begin = () => {
+    let agreed = false
+    try {
+      agreed = localStorage.getItem(CONSENT_KEY) === '1'
+    } catch {
+      /* 存储不可用时每次都询问 */
+    }
+    if (agreed) start.mutate(undefined)
+    else setConsentOpen(true)
+  }
+  const agree = () => {
+    try {
+      localStorage.setItem(CONSENT_KEY, '1')
+    } catch {
+      /* 忽略 */
+    }
+    start.mutate(undefined)
+  }
   const cancel = useAction(() => api<AdvisorRun>(`/api/advisor-runs/${run?.id}/cancel`, { method: 'POST' }), setRun)
   const apply = useAction(
     (indices: number[]) => api<AdvisorRun>(`/api/advisor-runs/${run?.id}/apply`, { method: 'POST', json: { indices } }),
@@ -82,7 +108,7 @@ export function AdvisorPanel({ eventId, onResolve, resolving }: { eventId: numbe
           </p>
           {run?.status === 'failed' && <Note tone="error">{run.error?.split('\n')[0] || '出错了'},可以重试。</Note>}
           <div className="actions">
-            <Button variant="primary" loading={start.isPending} onClick={() => start.mutate(undefined)}>
+            <Button variant="primary" loading={start.isPending} onClick={begin}>
               让 AI 调度员想办法
             </Button>
           </div>
@@ -178,7 +204,7 @@ export function AdvisorPanel({ eventId, onResolve, resolving }: { eventId: numbe
             })}
           </ul>
           <div className="actions">
-            <Button variant="ghost" loading={start.isPending} onClick={() => start.mutate(undefined)}>
+            <Button variant="ghost" loading={start.isPending} onClick={begin}>
               再想一次
             </Button>
             <Button disabled={selected.length === 0} loading={apply.isPending} onClick={() => setConfirm(true)}>
@@ -192,6 +218,30 @@ export function AdvisorPanel({ eventId, onResolve, resolving }: { eventId: numbe
           </div>
         </>
       )}
+
+      <Modal
+        open={consentOpen}
+        title="使用 AI 调度员前请确认"
+        onClose={() => setConsentOpen(false)}
+        actions={
+          <>
+            <Button onClick={() => setConsentOpen(false)}>不用了</Button>
+            <Button variant="primary" loading={start.isPending} onClick={agree}>
+              同意并开始
+            </Button>
+          </>
+        }
+      >
+        <p className="advisor-consent">
+          AI 调度员由 Anthropic 公司的 Claude 提供。开始后,服务器会把<b>本演出的排程数据</b>发送给 Anthropic:演出日期、曲目、成员昵称、各人的空闲时间和特殊要求。
+        </p>
+        <p className="advisor-consent">不会发送用户名、密码、推送令牌或联系方式。按 Anthropic 的商业服务条款,这些数据不会被用于训练模型。AI 只给建议,任何改动都要你逐条允许。</p>
+        <p className="advisor-consent">
+          详见 <a href={isNative() ? `${API_BASE}/api/go/privacy` : '/privacy'} target="_blank" rel="noreferrer" onClick={onExternalLinkClick}>
+            隐私政策
+          </a>。
+        </p>
+      </Modal>
 
       <Modal
         open={confirm}

@@ -1,5 +1,6 @@
 import { Link, useNavigate } from 'react-router-dom'
 
+import { Location } from '../../components/MapLink'
 import dayjs from 'dayjs'
 
 import { useAvailability, useEventMembers, useEvents, usePublishedSchedule, useSongs } from '../../api/hooks'
@@ -56,7 +57,12 @@ function HomeForEvent({ event, memberId, name, others }: { event: RehearsalEvent
     copy = next ? (
       <>
         下一场:{fmtMd(next.date)} {next.weekday} {next.time} · {next.kind === 'evaluation' ? '全员评估' : `${next.song_code} ${next.song_name}`}
-        {next.location && ` · 📍 ${next.location}`}
+        {next.location && (
+          <>
+            <br />
+            <Location location={next.location} inline />
+          </>
+        )}
         <br />
         共 {sessionsForMember(published.sessions, memberId).filter((s) => s.kind === 'formal').length} 场排练 + 1 场全员评估,可订阅到手机日历。
       </>
