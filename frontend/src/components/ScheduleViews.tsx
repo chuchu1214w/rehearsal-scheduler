@@ -62,15 +62,19 @@ export function WeekView({
   return (
     <>
       <div className="weeknav">
-        <Button small disabled={idx <= 0} onClick={() => setWeek(weeks[idx - 1])}>
-          ‹ 上周
+        <Button small className="weeknav__btn" disabled={idx <= 0} onClick={() => setWeek(weeks[idx - 1])} aria-label="上周">
+          ‹<span className="weeknav__txt"> 上周</span>
         </Button>
-        <b>
-          {fmtMd(week)} – {fmtMd(dayjs(week).add(6, 'day').format('YYYY-MM-DD'))}
-          <span className="muted"> · 第 {idx + 1} / {weeks.length} 周 · {inWeek.length} 场</span>
-        </b>
-        <Button small disabled={idx >= weeks.length - 1} onClick={() => setWeek(weeks[idx + 1])}>
-          下周 ›
+        <div className="weeknav__title">
+          <b>
+            {fmtMd(week)} – {fmtMd(dayjs(week).add(6, 'day').format('YYYY-MM-DD'))}
+          </b>
+          <span className="muted">
+            第 {idx + 1} / {weeks.length} 周 · {inWeek.length} 场
+          </span>
+        </div>
+        <Button small className="weeknav__btn" disabled={idx >= weeks.length - 1} onClick={() => setWeek(weeks[idx + 1])} aria-label="下周">
+          <span className="weeknav__txt">下周 </span>›
         </Button>
       </div>
       <WeekGrid
@@ -326,18 +330,17 @@ export function DayView({
   return (
     <>
       <div className="weeknav">
-        <Button small disabled={prev < range.formal_start_date} onClick={() => onNavigate(prev)}>
-          ‹ 前一天
+        <Button small className="weeknav__btn" disabled={prev < range.formal_start_date} onClick={() => onNavigate(prev)} aria-label="前一天">
+          ‹<span className="weeknav__txt"> 前一天</span>
         </Button>
-        <b>
-          {dayjs(date).format('M月D日')} 周{['日', '一', '二', '三', '四', '五', '六'][dayjs(date).day()]}
-          <span className="muted">
-            {' '}
-            · {date === range.eval_date ? '全员评估日' : `${today.length} 场${hours ? ` · ${hours}h` : ''}`}
-          </span>
-        </b>
-        <Button small disabled={next > range.eval_date} onClick={() => onNavigate(next)}>
-          后一天 ›
+        <div className="weeknav__title">
+          <b>
+            {dayjs(date).format('M月D日')} 周{['日', '一', '二', '三', '四', '五', '六'][dayjs(date).day()]}
+          </b>
+          <span className="muted">{date === range.eval_date ? '全员评估日' : `${today.length} 场${hours ? ` · ${hours}h` : ''}`}</span>
+        </div>
+        <Button small className="weeknav__btn" disabled={next > range.eval_date} onClick={() => onNavigate(next)} aria-label="后一天">
+          <span className="weeknav__txt">后一天 </span>›
         </Button>
       </div>
       {today.length === 0 ? (

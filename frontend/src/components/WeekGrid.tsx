@@ -216,8 +216,16 @@ export function WeekGrid({
                     {s.locked && <i className="lock" aria-label="已锁定" />}
                     {s.kind === 'evaluation' ? '评估' : s.song_code}
                   </b>
-                  <span>{s.kind === 'evaluation' ? '全员' : s.song_name}</span>
-                  {laneCount === 1 && <small>{s.time}</small>}
+                  {/* 代号与名称相同时不重复显示 */}
+                  {(s.kind === 'evaluation' || s.song_name !== s.song_code) && <span>{s.kind === 'evaluation' ? '全员' : s.song_name}</span>}
+                  {laneCount === 1 && (
+                    <small>
+                      <span className="weekgrid__time-full">{s.time}</span>
+                      <span className="weekgrid__time-short">
+                        {dayStartHour + s.start_slot}–{dayStartHour + s.start_slot + s.duration_slots}
+                      </span>
+                    </small>
+                  )}
                 </button>
               )
             })}

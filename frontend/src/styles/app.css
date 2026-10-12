@@ -2495,3 +2495,185 @@ body:has(.shell-member)::before {
   font-size: 13px;
   line-height: 1.7;
 }
+
+/* ---------- 手机适配:底部弹出面板、紧凑周日历、翻页栏 ---------- */
+.layer {
+  padding-top: calc(24px + var(--safe-area-inset-top, env(safe-area-inset-top, 0px)));
+}
+
+.weeknav__title {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  min-width: 0;
+  line-height: 1.4;
+}
+
+.weeknav__title b {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.weeknav__title .muted {
+  font-size: 11px;
+}
+
+.weekgrid__time-short {
+  display: none;
+}
+
+@media (max-width: 600px) {
+  /* 弹窗改为从底部弹出,避开状态栏与 Home 指示条 */
+  .layer {
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-end;
+    padding: calc(40px + var(--safe-area-inset-top, env(safe-area-inset-top, 0px))) 0 0;
+  }
+
+  .modal {
+    width: 100%;
+    max-width: none;
+    max-height: 100%;
+    overflow-y: auto;
+    border: 0;
+    border-top: 2px solid var(--outline);
+    border-radius: 22px 22px 0 0;
+    box-shadow: 0 -4px 18px #2f3f7830;
+    padding: 10px 20px calc(20px + var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px)));
+    animation: sheet-up 0.18s ease-out;
+  }
+
+  .modal::before {
+    content: "";
+    display: block;
+    width: 38px;
+    height: 4px;
+    border-radius: 2px;
+    background: var(--line);
+    margin: 0 auto 12px;
+  }
+
+  .modal .section {
+    margin-bottom: 14px;
+  }
+
+  /* 成员端:收窄页边距与卡片内边距,把宽度留给内容 */
+  .shell-member .shell__main {
+    padding-left: 14px;
+    padding-right: 14px;
+  }
+
+  .shell-member .panel {
+    padding: 16px 12px;
+  }
+
+  .shell-member .primary-bar {
+    margin-left: -14px;
+    margin-right: -14px;
+    padding-left: 14px;
+    padding-right: 14px;
+  }
+
+  /* 翻页栏:两侧小圆按钮,标题居中 */
+  .weeknav__btn {
+    min-width: 38px;
+    width: 38px;
+    height: 38px;
+    padding: 0;
+    border-radius: 999px;
+    font-size: 18px;
+    flex: none;
+  }
+
+  .weeknav__txt {
+    display: none;
+  }
+
+  /* 紧凑周日历 */
+  .weekgrid {
+    --row-h: 30px;
+    grid-template-columns: 22px repeat(7, minmax(0, 1fr));
+    gap: 0 2px;
+  }
+
+  .weekgrid__day {
+    padding: 2px 0 6px;
+    font-size: 9px;
+  }
+
+  .weekgrid__day b {
+    font-size: 11px;
+  }
+
+  .weekgrid__day.is-today b {
+    padding: 1px 4px;
+  }
+
+  .weekgrid__hours {
+    font-size: 9px;
+    padding-right: 3px;
+  }
+
+  .weekgrid__col {
+    border-radius: 6px;
+    border-color: color-mix(in srgb, var(--line) 40%, transparent);
+    background: repeating-linear-gradient(
+      to bottom,
+      var(--paper) 0,
+      var(--paper) calc(var(--row-h) - 1px),
+      color-mix(in srgb, var(--line) 30%, transparent) calc(var(--row-h) - 1px),
+      color-mix(in srgb, var(--line) 30%, transparent) var(--row-h)
+    );
+  }
+
+  .weekgrid__block {
+    padding: 3px 3px 2px;
+    border-radius: 5px;
+    line-height: 1.2;
+  }
+
+  .weekgrid__block b {
+    font-size: 11px;
+    overflow: hidden;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    word-break: break-all;
+  }
+
+  .weekgrid__block > span {
+    display: none;
+  }
+
+  .weekgrid__block small {
+    font-size: 9px;
+    white-space: nowrap;
+  }
+
+  .weekgrid__time-full {
+    display: none;
+  }
+
+  .weekgrid__time-short {
+    display: inline;
+  }
+}
+
+@keyframes sheet-up {
+  from {
+    transform: translateY(40px);
+    opacity: 0.6;
+  }
+  to {
+    transform: none;
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .modal {
+    animation: none;
+  }
+}
