@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session
 
 from .. import advisor
 from ..deps import DB, AdminUser, SettingsDep
-from ..models import AdvisorRun
+from ..models import AdvisorRun, SolveJob
 from ..schemas import AdvisorApplyIn, AdvisorRunOut
 from ..utils import utcnow
 from .events import load_event
@@ -49,7 +49,7 @@ def _refresh(db: Session, run: AdvisorRun) -> AdvisorRun:
         db.refresh(run)
         if run.status in ("queued", "running"):
             run.status = "failed"
-            run.error = "AI 调度员进程意外退出"
+            run.error = "AI 调度员进程意外退出(多半是服务器内存不足),请重试"
             run.finished_at = utcnow()
             db.commit()
         RUNNING.pop(run.id, None)
@@ -71,9 +71,14 @@ def start_advisor(event_id: int, db: DB, admin: AdminUser, settings: SettingsDep
         raise HTTPException(status_code=503, detail="AI 调度员还没开通:服务器需要配置 Claude API 密钥(ANTHROPIC_API_KEY)")
     if not event.participants or not event.songs:
         raise HTTPException(status_code=422, detail="先添加人员和曲目")
-    active = db.scalar(select(AdvisorRun).where(AdvisorRun.event_id == event.id, AdvisorRun.status.in_(["queued", "running"])))
+    active = db.scalar(select(AdvisorRun).where(AdvisorRun.status.in_(["queued", "running"])))
     if active is not None and _refresh(db, active).status in ("queued", "running"):
-        raise HTTPException(status_code=409, detail="AI 调度员正在工作")
+        raise HTTPException(status_code=409, detail="AI 调度员正在工作(同一时间只能运行一个)")
+    from .solve import _refresh_liveness  # 局部导入,避免循环引用
+
+    job = db.scalar(select(SolveJob).where(SolveJob.status.in_(["queued", "running"])))
+    if job is not None and _refresh_liveness(db, job).status in ("queued", "running"):
+        raise HTTPException(status_code=409, detail="正在求解,等求解结束再让 AI 调度员开始")
     run = AdvisorRun(event_id=event.id, created_by=admin.id)
     db.add(run)
     db.commit()

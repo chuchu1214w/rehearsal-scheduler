@@ -200,3 +200,18 @@ def test_advisor_suggests_song_session_plans(admin: TestClient, fake):
         }
     ]
     assert p["changes"][0]["description"] == f"曲目 {s2['code']} 的场次方案改为 2 小时"
+
+
+def test_advisor_and_solve_do_not_run_together(admin: TestClient, fake):
+    from app.models import AdvisorRun
+
+    ev, *_ = _setup(admin)
+    fake([])
+    # 模拟一个正在运行的 AI 调度员(服务器内存小,两者不同时跑)→ 不能求解,也不能再开一个
+    with admin.app.state.session_factory() as db:
+        db.add(AdvisorRun(event_id=ev["id"], status="running"))
+        db.commit()
+    r = admin.post(f"/api/events/{ev['id']}/solve", json={})
+    assert r.status_code == 409 and "AI 调度员正在工作" in r.json()["detail"]
+    r = admin.post(f"/api/events/{ev['id']}/advisor")
+    assert r.status_code == 409

@@ -1,6 +1,8 @@
 # Fly.io 配置(部署指南.md 方案 A)。把 app 改成你自己的应用名(全球唯一),PUBLIC_BASE_URL 跟着改。
 app = "timetomeet"
 primary_region = "nrt"  # 东京,离首尔最近
+# 512 MB 内存放不下“网站 + 求解 / AI 调度员子进程”(各约 250 MB),用磁盘交换空间兜底,避免进程被系统杀掉
+swap_size_mb = 1024
 
 [build]
 
