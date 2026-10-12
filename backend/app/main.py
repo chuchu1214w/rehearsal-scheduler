@@ -23,7 +23,7 @@ from .apns import ApnsConfig
 from .backup import backup_sqlite
 from .config import Settings
 from .db import SchemaOutdated, init_db, make_engine, make_session_factory
-from .models import SCHEMA_VERSION, LoginFailure, PushSubscription, SolveJob
+from .models import SCHEMA_VERSION, AdvisorRun, LoginFailure, PushSubscription, SolveJob
 from .utils import utcnow
 
 
@@ -141,7 +141,13 @@ def _fail_stale_jobs(session_factory) -> None:  # noqa: ANN001
             job.error = "服务重启,任务中断;请重新求解"
             job.progress = ""
             job.finished_at = utcnow()
-        if stale:
+        runs = db.scalars(select(AdvisorRun).where(AdvisorRun.status.in_(["queued", "running"]))).all()
+        for run in runs:
+            run.status = "failed"
+            run.error = "服务重启,AI 调度员中断;请重新开始"
+            run.progress = ""
+            run.finished_at = utcnow()
+        if stale or runs:
             db.commit()
 
 

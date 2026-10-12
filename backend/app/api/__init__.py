@@ -1,4 +1,4 @@
-from . import auth, availability, calendar, events, members, native, notifications, push, rules, schedule, setup, solve, songs
+from . import advisor, auth, availability, calendar, events, members, native, notifications, push, rules, schedule, setup, solve, songs
 
 ROUTERS = [
     setup.router,
@@ -9,6 +9,7 @@ ROUTERS = [
     rules.router,
     availability.router,
     solve.router,
+    advisor.router,
     schedule.router,
     calendar.router,
     notifications.router,

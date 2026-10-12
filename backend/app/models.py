@@ -10,7 +10,7 @@ from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 from .utils import utcnow
 
 # 每次改表结构 +1;启动时与 meta 表比对,不一致就提示删库重建(开发阶段;有真实数据后改用 Alembic)
-SCHEMA_VERSION = 9  # 3:新增 solve_jobs / schedule_versions / rehearsal_sessions(可从 2 自动迁移)
+SCHEMA_VERSION = 10  # 3:新增 solve_jobs / schedule_versions / rehearsal_sessions(可从 2 自动迁移)
 
 
 class Base(DeclarativeBase):
@@ -118,6 +118,7 @@ class Event(Base):
     versions: Mapped[list[ScheduleVersion]] = relationship(
         back_populates="event", cascade="all, delete-orphan", order_by="ScheduleVersion.version_no"
     )
+    advisor_runs: Mapped[list[AdvisorRun]] = relationship(cascade="all, delete-orphan", order_by="AdvisorRun.id")
 
 
 class EventMember(Base):
@@ -231,6 +232,26 @@ class ScheduleVersion(Base):
     sessions: Mapped[list[RehearsalSession]] = relationship(
         back_populates="version", cascade="all, delete-orphan", order_by="(RehearsalSession.date, RehearsalSession.start_slot)"
     )
+
+
+class AdvisorRun(Base):
+    """AI 调度员的一次运行(开发文档 §5.11):过程记录、最终方案、管理员已允许执行的调整。"""
+
+    __tablename__ = "advisor_runs"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    event_id: Mapped[int] = mapped_column(ForeignKey("events.id", ondelete="CASCADE"), index=True)
+    status: Mapped[str] = mapped_column(String(16), default="queued")  # queued / running / done / failed / cancelled
+    progress: Mapped[str] = mapped_column(String(200), default="")
+    log: Mapped[list] = mapped_column(JSON, default=list)
+    proposal: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    applied: Mapped[list] = mapped_column(JSON, default=list)  # 已执行的调整序号
+    usage: Mapped[dict] = mapped_column(JSON, default=dict)
+    error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_by: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+    started_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
 
 class RehearsalSession(Base):

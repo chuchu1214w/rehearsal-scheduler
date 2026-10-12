@@ -187,7 +187,7 @@ class EventSettings(BaseModel):
         if len(set(v)) != len(v):
             raise ValueError("优化目标不能重复")
         for key in v:
-            if key not in OBJECTIVE_LABELS:
+            if key not in OBJECTIVE_LABELS or key == "missing":
                 raise ValueError(f"未知的优化目标 {key}")
         return v
 
@@ -733,3 +733,23 @@ class NativeTokenIn(BaseModel):
 
 class NativeTokenOut(BaseModel):
     token: str = Field(min_length=8, max_length=400)
+
+
+# ---------- AI 调度员 ----------
+class AdvisorRunOut(BaseModel):
+    id: int
+    event_id: int
+    status: Literal["queued", "running", "done", "failed", "cancelled"]
+    progress: str
+    log: list[dict]
+    proposal: dict | None
+    applied: list[int]
+    error: str | None
+    created_at: datetime
+    finished_at: datetime | None
+    elapsed_seconds: float | None
+    cost_usd: float | None
+
+
+class AdvisorApplyIn(BaseModel):
+    indices: list[int] = Field(min_length=1, max_length=100)

@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 
 import { ApiError, api, errorMessage } from './client'
 import type {
+  AdvisorRun,
   Availability,
   EventMember,
   Heat,
@@ -34,6 +35,7 @@ export const keys = {
   availability: (id: number, memberId: number) => ['availability', id, memberId] as const,
   heat: (id: number) => ['heat', id] as const,
   latestJob: (id: number) => ['latest-job', id] as const,
+  latestAdvisor: (id: number) => ['latest-advisor', id] as const,
   versions: (id: number) => ['versions', id] as const,
   version: (vid: number) => ['version', vid] as const,
   published: (id: number) => ['published', id] as const,
@@ -106,6 +108,24 @@ export function useLatestJob(eventId: number) {
     enabled: Number.isFinite(eventId),
     refetchInterval: (q) => POLL_WHEN_RUNNING(q.state.data),
     refetchIntervalInBackground: true, // 切到别的应用再回来时,求解进度也已更新
+  })
+}
+
+/** 最近一次 AI 调度员运行;没有时为 null。运行中每 2 秒轮询 */
+export function useLatestAdvisor(eventId: number) {
+  return useQuery({
+    queryKey: keys.latestAdvisor(eventId),
+    queryFn: async (): Promise<AdvisorRun | null> => {
+      try {
+        return await api<AdvisorRun>(`/api/events/${eventId}/advisor/latest`)
+      } catch (err) {
+        if (err instanceof ApiError && err.status === 404) return null
+        throw err
+      }
+    },
+    enabled: Number.isFinite(eventId),
+    refetchInterval: (q) => (q.state.data && (q.state.data.status === 'running' || q.state.data.status === 'queued') ? 2000 : false),
+    refetchIntervalInBackground: true,
   })
 }
 

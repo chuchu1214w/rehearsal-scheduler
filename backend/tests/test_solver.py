@@ -60,8 +60,11 @@ def test_ladder_exhausted_returns_diagnosis(problem):
     for d in problem.config.formal_dates:
         problem.availability.set_row("B", d, [UNAVAILABLE] * 13)
     result = solve(problem)
-    assert not result.feasible and result.level_used is None
+    assert not result.feasible
     assert result.diagnosis is not None
+    # 部分排程:在最宽松层级下 B 只能缺席 1 场,于是只差 2 场;排上的场次除“场次不足”外不违反任何约束
+    assert result.partial and result.level_used == 2 and len(result.unscheduled) == 2
+    assert result.validation_errors and all(e.startswith("V-03") for e in result.validation_errors)
     assert set(result.diagnosis["无候选任务"]) == {"s1_1", "s1_2", "s2_1"}
     adj = result.diagnosis["最小调整建议"]
     assert adj["可行"] and adj["受影响成员数"] == 1 and adj["调整小时数"] == 7

@@ -26,6 +26,7 @@ DEFAULT_DIFFICULTY_TEMPLATES: dict[str, tuple[int, ...]] = {
 
 # 优化目标注册表(键 → 中文名)。顺序无意义,真正的顺序由 Problem.objectives 决定。
 OBJECTIVE_LABELS: dict[str, str] = {
+    "missing": "尽量多排场次",  # 仅无解时的部分排程使用,不在可选目标中
     "absent": "缺席最少",
     "eval_attendance": "评估场迟到早退最少",
     "hard_early": "困难曲目尽早",
@@ -299,6 +300,9 @@ class SolveResult:
     warnings: list[str] = field(default_factory=list)
     validation_errors: list[str] = field(default_factory=list)
     elapsed_seconds: float = 0.0
+    # 无解时的部分排程:sessions 为能排上的场次,unscheduled 为排不上的任务(“曲目 第 n 场”)
+    partial: bool = False
+    unscheduled: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -362,7 +366,7 @@ class Problem:
         if len(set(self.objectives)) != len(self.objectives):
             errors.append("优化目标列表有重复")
         for key in self.objectives:
-            if key not in OBJECTIVE_LABELS:
+            if key not in OBJECTIVE_LABELS or key == "missing":
                 errors.append(f"未知的优化目标:{key}")
 
         if not self.ladder:

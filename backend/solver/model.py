@@ -39,6 +39,7 @@ class ModelBundle:
     busy: dict[tuple[str, int, int], cp_model.IntVar]
     objective_terms: dict[str, ObjectiveTerm]
     level: LadderLevel
+    scheduled: dict[str, cp_model.IntVar] | None = None  # 仅“部分排程”模型:任务是否排上
 
 
 def build_model(
@@ -46,22 +47,28 @@ def build_model(
     tasks: list[Task],
     candidates: dict[str, list[Candidate]],
     level: LadderLevel,
+    partial: bool = False,
 ) -> ModelBundle:
+    """partial=True 时放宽 HC-01 为“至多一个候选”,其余硬约束不变,并增加目标项 missing(未排场次)。
+
+    用于无解时先排出能排的场次(开发文档 §5.8)。
+    """
     config, rules = problem.config, problem.rules
     dates = config.formal_dates
     n_days = len(dates)
     slots = config.slots_per_day
 
     zero = [t.task_id for t in tasks if not candidates[t.task_id]]
-    if zero:
+    if zero and not partial:
         raise NoCandidatesError(zero)
 
     model = cp_model.CpModel()
     x: dict[tuple[str, int], cp_model.IntVar] = {}
     day_vars: dict[str, cp_model.IntVar] = {}
     start_abs: dict[str, cp_model.IntVar] = {}
+    scheduled: dict[str, cp_model.IntVar] = {}
 
-    # HC-01:每个任务恰好一个候选;派生日期与绝对开始格
+    # HC-01:每个任务恰好一个候选(部分排程时至多一个);派生日期与绝对开始格
     for task in tasks:
         cands = candidates[task.task_id]
         vars_for_task = []
@@ -69,11 +76,21 @@ def build_model(
             v = model.new_bool_var(f"x_{task.task_id}_{ci}")
             x[(task.task_id, ci)] = v
             vars_for_task.append(v)
-        model.add_exactly_one(vars_for_task)
         day = model.new_int_var(0, n_days - 1, f"day_{task.task_id}")
-        model.add(day == sum(c.date_idx * x[(task.task_id, ci)] for ci, c in enumerate(cands)))
         sa = model.new_int_var(0, n_days * slots - 1, f"start_{task.task_id}")
-        model.add(sa == sum((c.date_idx * slots + c.start) * x[(task.task_id, ci)] for ci, c in enumerate(cands)))
+        day_expr = sum(c.date_idx * x[(task.task_id, ci)] for ci, c in enumerate(cands))
+        sa_expr = sum((c.date_idx * slots + c.start) * x[(task.task_id, ci)] for ci, c in enumerate(cands))
+        if partial:
+            on = model.new_bool_var(f"sched_{task.task_id}")
+            model.add(sum(vars_for_task) == on)
+            # 未排上的任务日期 / 开始格不受约束,不影响其他约束
+            model.add(day == day_expr).only_enforce_if(on)
+            model.add(sa == sa_expr).only_enforce_if(on)
+            scheduled[task.task_id] = on
+        else:
+            model.add_exactly_one(vars_for_task)
+            model.add(day == day_expr)
+            model.add(sa == sa_expr)
         day_vars[task.task_id] = day
         start_abs[task.task_id] = sa
 
@@ -84,7 +101,12 @@ def build_model(
     for group in groups.values():
         group = sorted(group, key=lambda t: t.task_no)
         for left, right in zip(group, group[1:], strict=False):
-            model.add(start_abs[left.task_id] < start_abs[right.task_id])
+            if partial:
+                # 同组任务可互换:编号小的先排上,两者都排上时按开始先后
+                model.add(scheduled[left.task_id] >= scheduled[right.task_id])
+                model.add(start_abs[left.task_id] < start_abs[right.task_id]).only_enforce_if(scheduled[right.task_id])
+            else:
+                model.add(start_abs[left.task_id] < start_abs[right.task_id])
 
     # 覆盖表:成员 × 日 × 格 → 会占用该格的候选变量。缺席成员仍按占用处理(保守)。
     cover: dict[tuple[str, int, int], list[cp_model.IntVar]] = defaultdict(list)
@@ -189,7 +211,12 @@ def build_model(
                 shortfall = model.new_int_var(0, 2, f"shortfall_{left.task_id}_{right.task_id}")
                 model.add_max_equality(shortfall, [2 - diff, 0])
                 if config.same_song_different_days:
-                    model.add(diff >= 1)
+                    if partial:
+                        both = model.new_bool_var(f"both_{left.task_id}_{right.task_id}")
+                        model.add_multiplication_equality(both, [scheduled[left.task_id], scheduled[right.task_id]])
+                        model.add(diff >= 1).only_enforce_if(both)
+                    else:
+                        model.add(diff >= 1)
                     spacing_terms.append(shortfall)
                 else:
                     same_day = model.new_bool_var(f"sameday_{left.task_id}_{right.task_id}")
@@ -294,7 +321,15 @@ def build_model(
             if penalty:
                 soft_terms.append(penalty * x[(t.task_id, ci)])
 
+    # 部分排程:未排场次(困难曲目优先排上,作为同数量时的次序)
+    missing_terms: list = []
+    if partial:
+        weight = {"困难": 3, "一般": 2, "简单": 1}
+        for t in tasks:
+            missing_terms.append((1000 + weight.get(problem.song(t.song_code).difficulty, 1)) * (1 - scheduled[t.task_id]))
+
     objective_terms = {
+        "missing": ObjectiveTerm(sum(missing_terms), len(missing_terms)),
         "absent": ObjectiveTerm(sum(absent_all), len(absent_all)),
         "hard_early": ObjectiveTerm(sum(hard_terms), len(hard_terms)),
         "spacing": ObjectiveTerm(sum(spacing_terms), len(spacing_terms)),
@@ -304,4 +339,4 @@ def build_model(
         "overtime": ObjectiveTerm(sum(overtime_terms), len(overtime_terms)),
         "soft_avoid": ObjectiveTerm(sum(soft_terms), len(soft_terms)),
     }
-    return ModelBundle(model, list(tasks), candidates, x, day_vars, busy, objective_terms, level)
+    return ModelBundle(model, list(tasks), candidates, x, day_vars, busy, objective_terms, level, scheduled if partial else None)

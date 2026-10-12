@@ -41,14 +41,14 @@ def store_result(db: Session, job: SolveJob, problem: Problem, result: SolveResu
     job.ladder_level_used = result.level_used
     job.finished_at = utcnow()
     job.progress = ""
-    if result.feasible:
+    if result.feasible or result.partial:
         next_no = (db.scalar(select(func.max(ScheduleVersion.version_no)).where(ScheduleVersion.event_id == event.id)) or 0) + 1
         base_id = (job.options or {}).get("base_version_id")
         base = db.get(ScheduleVersion, base_id) if base_id else None
         version = ScheduleVersion(
             event_id=event.id,
             version_no=next_no,
-            source="resolve" if base is not None else "solver",
+            source="partial" if not result.feasible else "resolve" if base is not None else "solver",
             parent_version_id=base.id if base is not None else None,
             job_id=job.id,
             status="draft",
@@ -87,10 +87,16 @@ def store_result(db: Session, job: SolveJob, problem: Problem, result: SolveResu
         source = base or published_version(event)
         if source is not None:
             copy_locations(source, version)  # 时间没变的场次,地点沿用
-        job.status = "succeeded"
         job.version_id = version.id
-        level = f"层级 L{result.level_used}" if result.level_used is not None else ""
-        job.summary = f"已生成草稿 v{next_no}({'严格最优' if result.exact else '非严格最优'}{'、' + level if level else ''})"
+        if not result.feasible:
+            # 无解但先排出了能排的场次:任务仍记为无解,草稿供查看与手动补排
+            job.status = "infeasible"
+            job.diagnosis = {**(result.diagnosis or {}), "部分排程": {"版本号": next_no, "未排": list(result.unscheduled)}}
+            job.summary = summarize_diagnosis(result.diagnosis) + f";已先把能排的场次存为草稿 v{next_no}(允许少量缺席时还差 {len(result.unscheduled)} 场)"
+        else:
+            job.status = "succeeded"
+            level = f"层级 L{result.level_used}" if result.level_used is not None else ""
+            job.summary = f"已生成草稿 v{next_no}({'严格最优' if result.exact else '非严格最优'}{'、' + level if level else ''})"
     else:
         job.status = "infeasible"
         job.diagnosis = result.diagnosis

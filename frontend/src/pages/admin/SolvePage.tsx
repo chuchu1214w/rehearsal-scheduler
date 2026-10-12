@@ -7,6 +7,7 @@ import { keys, useAction, useEvent, useInvalidateEvent, useLatestJob, usePrechec
 import type { Diagnosis, SolveJob } from '../../api/types'
 import { Back, Badge, Button, CheckRow, Heading, LinkButton, Note, Panel, Spinner } from '../../ui'
 import { Modal } from '../../ui/Modal'
+import { AdvisorPanel } from '../../components/AdvisorPanel'
 import { fmtDateTime, fmtMd } from '../../utils'
 
 const ATTEMPT_TEXT: Record<string, string> = { 无候选: '有排练没有候选时段', INFEASIBLE: '无解', 可行: '可行', UNKNOWN: '超时未定', MODEL_INVALID: '模型错误' }
@@ -133,6 +134,10 @@ export function SolvePage() {
 
       {job && !running && <ResultPanel job={job} eventId={e.id} evalDate={fmtMd(e.eval_date)} />}
 
+      {job && !running && job.status === 'infeasible' && !base && (
+        <AdvisorPanel eventId={e.id} onResolve={() => start.mutate(false)} resolving={start.isPending} />
+      )}
+
       <Modal
         open={confirm}
         title="检查中有需注意的项目"
@@ -195,8 +200,18 @@ function ResultPanel({ job, eventId, evalDate }: { job: SolveJob; eventId: numbe
           {job.attempts.length > 0 && (
             <p className="muted">已尝试的缺席层级:{job.attempts.map((a) => `${a.层级} ${ATTEMPT_TEXT[a.状态] ?? a.状态}`).join('、')}</p>
           )}
+          {job.version_id != null && (
+            <Note>
+              能排的场次已先存为草稿,可以在排练表里查看{job.diagnosis?.部分排程?.未排?.length ? `;还没排上:${job.diagnosis.部分排程.未排.join('、')}` : ''}。补齐前这一版不能发布。
+            </Note>
+          )}
           {job.diagnosis && <DiagnosisView d={job.diagnosis} evalDate={evalDate} />}
           <div className="actions">
+            {job.version_id != null && (
+              <LinkButton to={`/events/${eventId}/schedule?v=${job.version_id}`} variant="primary">
+                查看已排出的场次
+              </LinkButton>
+            )}
             <LinkButton to={`/events/${eventId}/progress`}>去填报进度协调</LinkButton>
             <LinkButton to={`/events/${eventId}/rules`}>调整特殊要求</LinkButton>
           </div>

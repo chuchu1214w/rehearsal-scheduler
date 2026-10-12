@@ -13,7 +13,7 @@ import { fmtDateTime, fmtMd } from '../../utils'
 
 type View = 'week' | 'list' | 'members'
 
-const SOURCE_TEXT: Record<string, string> = { solver: '求解', manual: '手动修改', resolve: '锁定重排', copy: '复制' }
+const SOURCE_TEXT: Record<string, string> = { solver: '求解', manual: '手动修改', resolve: '锁定重排', copy: '复制', partial: '部分排程' }
 
 export function SchedulePage() {
   const id = Number(useParams().id)

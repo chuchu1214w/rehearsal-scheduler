@@ -235,6 +235,7 @@ export interface SolveJob {
 /** 求解包的诊断报告(键为中文,与命令行输出一致) */
 export interface Diagnosis {
   无候选任务?: string[]
+  部分排程?: { 版本号: number; 未排: string[] }
   最大覆盖?: { 状态: string; 最多可排场次: number; 要求场次: number }
   各曲缺口?: { 曲目: string; 曲目名: string; 要求场次: number; 单曲最多可排: number; 单曲缺口: number; 全局方案已排: number; 全局缺口: number }[]
   只差一人的时段?: { 曲目: string; 曲目名: string; 时长: number; 日期: string; 星期: string; 时间段: string; 只差成员: string; 需开放小时数: number; 需开放的格: string[] }[]
@@ -389,4 +390,32 @@ export interface Objective {
   key: string
   label: string
   default_on: boolean
+}
+
+/** AI 调度员(开发文档 §5.11) */
+export interface AdvisorChange {
+  kind: 'open_slots' | 'add_rule' | 'edit_rule' | 'disable_rule' | 'setting' | 'session_plan'
+  kind_label: string
+  description: string
+  reason: string
+  member?: string
+}
+
+export interface AdvisorRun {
+  id: number
+  event_id: number
+  status: 'queued' | 'running' | 'done' | 'failed' | 'cancelled'
+  progress: string
+  log: { kind: 'info' | 'think' | 'text' | 'tool' | 'result' | 'done'; text: string; at: number }[]
+  proposal: {
+    summary: string
+    changes: AdvisorChange[]
+    check: { 全部排完?: boolean; 使用层级?: string; 缺席场次?: number; 最多能排?: string; 排不上的场次?: string[]; 说明?: string; 注意?: string; 数据问题?: string[] }
+  } | null
+  applied: number[]
+  error: string | null
+  created_at: string
+  finished_at: string | null
+  elapsed_seconds: number | null
+  cost_usd: number | null
 }

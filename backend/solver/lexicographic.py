@@ -33,6 +33,7 @@ class SolveOptions:
     workers: int | None = None
     seed: int | None = None
     diagnose_on_failure: bool = True
+    partial_on_failure: bool = True  # 无解时先排出能排的场次
     progress: Progress | None = None
 
 
@@ -120,6 +121,39 @@ def extract_sessions(problem: Problem, bundle: ModelBundle, solver: cp_model.CpS
     return sessions
 
 
+def solve_partial(
+    problem: Problem, tasks: list[Task], eval_choice: EvalChoice | None, opts: SolveOptions
+) -> tuple[list[Session], list[str], list[StageRecord], bool, int | None]:
+    """无解时:在最宽松的层级下尽量多排场次,其余硬约束全部保留。
+
+    返回(场次, 未排任务说明, 阶段记录, 是否严格最优, 使用层级);一场都排不上时场次为空。
+    """
+    level = problem.ladder[-1]
+    candidates = build_candidates(problem, tasks, allow_absent=not level.strict)
+    try:
+        bundle = build_model(problem, tasks, candidates, level, partial=True)
+    except FixedSessionError:
+        return [], [], [], False, None
+    term = bundle.objective_terms["missing"]
+    bundle.model.minimize(term.expr)
+    solver = new_solver(problem.config, opts)
+    status = solver.solve(bundle.model)
+    if status not in (cp_model.OPTIMAL, cp_model.FEASIBLE):
+        return [], [], [], False, None
+    value = int(round(solver.objective_value))
+    bundle.model.add(term.expr == value)
+    records, exact, last = run_stages(problem, bundle, solver, status, eval_choice, opts)
+    records[0] = StageRecord("missing", OBJECTIVE_LABELS["missing"], value // 1000, solver.status_name(status))
+    sessions = extract_sessions(problem, bundle, last)
+    assert bundle.scheduled is not None
+    unscheduled = []
+    for t in bundle.tasks:
+        if last.value(bundle.scheduled[t.task_id]) == 0:
+            song = problem.song(t.song_code)
+            unscheduled.append(f"{song.code}({song.name})第 {t.task_no} 场 · {t.duration} 小时")
+    return sessions, unscheduled, records, exact, level.level
+
+
 def solve(problem: Problem, opts: SolveOptions | None = None) -> SolveResult:
     opts = opts or SolveOptions()
     t0 = time.perf_counter()
@@ -166,17 +200,36 @@ def solve(problem: Problem, opts: SolveOptions | None = None) -> SolveResult:
         if opts.diagnose_on_failure:
             _say(opts, "无可行解,开始诊断")
             diagnosis = diagnose(problem, tasks, opts)
+        sessions: list[Session] = []
+        unscheduled: list[str] = []
+        records: list[StageRecord] = []
+        exact = False
+        level_used = None
+        errors_: list[str] = []
+        if opts.partial_on_failure:
+            _say(opts, "先排出能排的场次")
+            sessions, unscheduled, records, exact, level_used = solve_partial(problem, tasks, eval_choice, opts)
+            if sessions:
+                if eval_choice is not None:
+                    sessions.append(eval_choice.to_session(problem))
+                report = validate_schedule(problem, sessions, problem.ladder[-1])
+                # 场次数不足(V-03)会保留在校验问题里,使这一版在补齐前不能发布
+                errors_ = list(report.errors)
+                warnings.extend(report.warnings)
         return SolveResult(
             feasible=False,
-            level_used=None,
-            exact=False,
-            stages=[],
-            sessions=[],
-            objective_values={},
+            level_used=level_used,
+            exact=exact,
+            stages=records,
+            sessions=sessions,
+            objective_values={r.key: r.value for r in records if r.value is not None},
             attempts=attempts,
             diagnosis=diagnosis,
             warnings=warnings,
+            validation_errors=errors_,
             elapsed_seconds=time.perf_counter() - t0,
+            partial=bool(sessions),
+            unscheduled=unscheduled,
         )
 
     bundle, last, records, exact = final

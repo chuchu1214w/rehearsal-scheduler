@@ -52,7 +52,7 @@ export function MemberAvailabilityPage() {
           已填 {filled} / {a.dates.length} 天
         </span>
       </div>
-      <p className="lead">选一种画笔,点一下或按住滑过时段。</p>
+      <p className="lead">选一种画笔,点一下或按住滑过色块涂色;在左侧时间栏上下滑动可翻页。</p>
       {pub.data ? (
         <Note tone="warning">排练表已发布(v{pub.data.version_no})。修改后重新提交,管理员会看到哪些场次受影响,并决定是否重排;你的排练表在管理员发布新版本前不变。</Note>
       ) : (

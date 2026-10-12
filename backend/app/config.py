@@ -33,6 +33,8 @@ class Settings(BaseModel):
     backup_keep_days: int = 14  # 每日自动备份保留天数;0 = 不自动备份
     push_contact: str = "mailto:season@example.com"  # Web Push 的 VAPID 联系方式(推送服务出问题时联系用)
     support_email: str = ""  # 隐私政策 / 支持页上公开的联系邮箱;空 = 只写"联系舞团管理员"
+    anthropic_api_key: str = ""  # AI 调度员用的 Claude API 密钥(环境变量 ANTHROPIC_API_KEY);空 = 功能不可用
+    advisor_model: str = "claude-opus-5-5"
     # 原生 App(Capacitor)相关
     cors_origins: list[str] = [
         "capacitor://localhost",
@@ -87,6 +89,8 @@ class Settings(BaseModel):
             ("apns_key_path", "APNS_KEY_PATH"),
             ("apns_key_id", "APNS_KEY_ID"),
             ("support_email", "SUPPORT_EMAIL"),
+            ("anthropic_api_key", "ANTHROPIC_API_KEY"),
+            ("advisor_model", "ADVISOR_MODEL"),
         ):
             if v := env.get(name):
                 kwargs[key] = v

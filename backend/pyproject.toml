@@ -19,6 +19,7 @@ dependencies = [
     "httpx[http2]>=0.28",
     "cryptography>=42",
     "PyJWT>=2.8",
+    "anthropic>=1.10,<2",  # AI 调度员(开发文档 §5.11)
 ]
 
 [project.optional-dependencies]
@@ -42,6 +43,9 @@ target-version = "py312"
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "B", "UP"]
+
+[tool.ruff.lint.per-file-ignores]
+"app/advisor.py" = ["E501"]  # 给 Claude 的提示词与工具说明是长段中文
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

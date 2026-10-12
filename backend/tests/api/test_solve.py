@@ -73,12 +73,18 @@ def test_solve_infeasible_gives_diagnosis(admin: TestClient):
     r = admin.post(f"/api/events/{ev['id']}/solve", json={})
     assert r.status_code == 202
     job = r.json()
-    assert job["status"] == "infeasible" and job["version_id"] is None
+    assert job["status"] == "infeasible"
     assert job["diagnosis"] is not None
     assert job["summary"].startswith("差 1 场") and "b" in job["summary"]
     assert job["diagnosis"]["最小调整建议"]["可行"] and {c_["成员"] for c_ in job["diagnosis"]["最小调整建议"]["调整"]} == {"C"}
     assert job["diagnosis"]["评估场"]["可行"] is False
-    assert admin.get(f"/api/events/{ev['id']}/schedules").json() == []
+    # 能排的第一首(A、B)先存为部分排程草稿;补齐前不能发布
+    assert job["version_id"] is not None and "已先把能排的场次存为草稿" in job["summary"]
+    assert job["diagnosis"]["部分排程"]["未排"] and all(x.startswith("b(") for x in job["diagnosis"]["部分排程"]["未排"])
+    [v] = admin.get(f"/api/events/{ev['id']}/schedules").json()
+    assert v["id"] == job["version_id"] and v["source"] == "partial" and v["status"] == "draft"
+    assert v["validation_errors"]
+    assert admin.post(f"/api/schedules/{v['id']}/publish").status_code == 422
     e = admin.get(f"/api/events/{ev['id']}").json()
     assert e["latest_job_status"] == "infeasible" and "上次无解" in e["steps"][5]["summary"]
 

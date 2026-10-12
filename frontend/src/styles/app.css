@@ -1294,7 +1294,8 @@ summary {
 .hours {
   display: grid;
   gap: 4px;
-  touch-action: none;
+  /* 只有色块本身用来涂色(touch-action: none),左侧时间栏和空隙可以上下滑动页面 */
+  touch-action: pan-y;
   margin-top: 11px;
 }
 
@@ -1321,6 +1322,7 @@ summary {
   font-size: 12px;
   user-select: none;
   -webkit-user-select: none;
+  touch-action: none;
   background: var(--unavailable);
   color: var(--ink);
 }
@@ -2326,4 +2328,100 @@ body:has(.shell-member)::before {
 /* 登录 / 首次设置页在原生 App 里要避开状态栏 */
 .auth {
   padding-top: calc(12px + var(--safe-area-inset-top, env(safe-area-inset-top, 0px)));
+}
+
+/* ---------- AI 调度员 ---------- */
+.advisor-log {
+  margin: 12px 0;
+}
+
+.advisor-log summary {
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.advisor-log ol {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 10px 12px;
+  max-height: 260px;
+  overflow-y: auto;
+  background: var(--tint);
+  border-radius: 12px;
+  display: grid;
+  gap: 6px;
+}
+
+.advisor-log__item {
+  display: grid;
+  grid-template-columns: 36px 1fr;
+  gap: 8px;
+  font-size: 12px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.advisor-log__tag {
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.advisor-log__item--think {
+  color: var(--muted);
+}
+
+.advisor-log__item--result,
+.advisor-log__item--done {
+  color: var(--accent);
+  font-weight: 500;
+}
+
+.advisor-changes {
+  list-style: none;
+  margin: 12px 0;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+}
+
+.advisor-changes li {
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 10px 12px;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.advisor-changes li.is-done {
+  opacity: 0.6;
+}
+
+.advisor-changes label {
+  display: grid;
+  grid-template-columns: 20px 1fr;
+  gap: 8px;
+  align-items: start;
+  cursor: pointer;
+}
+
+.advisor-changes input {
+  margin-top: 4px;
+}
+
+.advisor-changes__reason {
+  display: block;
+  font-size: 12px;
+}
+
+.advisor-changes__done {
+  color: var(--green, var(--accent));
+  font-weight: 500;
+}
+
+.advisor-confirm {
+  margin: 0 0 8px;
+  padding-left: 18px;
+  font-size: 13px;
+  line-height: 1.7;
 }
