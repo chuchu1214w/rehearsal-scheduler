@@ -47,17 +47,18 @@ def fake(monkeypatch):
     monkeypatch.setattr(advisor, "CLIENT_FACTORY", None)
 
 
-def _open_c(day):
-    return {"kind": "open_slots", "member": "C", "date": day, "start_hour": 10, "end_hour": 23, "reason": "C 全程没空"}
-
-
-def test_advisor_proposes_and_admin_applies(admin: TestClient, fake):
+def test_advisor_raises_absence_and_admin_applies(admin: TestClient, fake):
     ev, (a, b, c), (s1, s2) = _setup(admin, availability={})
-    for m, days in ((a, FULL), (b, FULL), (c, NONE)):
+    # C 只有评估日有空:第二首(B、C,只有 1 场)只能让 C 缺席,但默认设置不允许(每首至少 1 场全员、3 场的 25% 不到 1 场)
+    c_days = {**NONE, "2026-09-09": "1" * 13}
+    for m, days in ((a, FULL), (b, FULL), (c, c_days)):
         admin.put(f"/api/events/{ev['id']}/availability/{m['id']}", json={"days": days, "submit": True})
     assert admin.post(f"/api/events/{ev['id']}/solve", json={}).json()["status"] == "infeasible"
 
-    changes = [_open_c("2026-09-05"), _open_c("2026-09-09")]
+    changes = [
+        {"kind": "setting", "key": "max_absent_percent", "value": 40, "reason": "允许约 1 场有人缺席"},
+        {"kind": "setting", "key": "min_full_per_song", "value": 0, "reason": "第二首只有 1 场,C 排练期间都没空"},
+    ]
     client = fake(
         [
             _resp(_block(type="thinking", thinking="先看情况"), _block(type="tool_use", id="t1", name="get_overview", input={})),
@@ -65,7 +66,7 @@ def test_advisor_proposes_and_admin_applies(admin: TestClient, fake):
                 _block(type="tool_use", id="t2", name="get_member_availability", input={"member": "C"}),
                 _block(type="tool_use", id="t3", name="evaluate_changes", input={"changes": changes}),
             ),
-            _resp(_block(type="tool_use", id="t4", name="submit_proposal", input={"summary": "请 C 开放两天", "changes": changes})),
+            _resp(_block(type="tool_use", id="t4", name="submit_proposal", input={"summary": "让 C 缺席第二首", "changes": changes})),
         ]
     )
     r = admin.post(f"/api/events/{ev['id']}/advisor")
@@ -74,28 +75,31 @@ def test_advisor_proposes_and_admin_applies(admin: TestClient, fake):
     assert run["status"] == "done", run["error"]
     assert run["cost_usd"] is not None and any(x["kind"] == "think" for x in run["log"])
 
-    # 工具结果回传给了 Claude:概况里有诊断,沙盘试算成功
+    # 工具结果回传给了 Claude:概况里有诊断与缺席设置,沙盘试算成功
     overview = client.calls[1]["messages"][-1]["content"][0]["content"]
-    assert "上次求解诊断" in overview and "第二首" in overview
+    assert "上次求解诊断" in overview and "第二首" in overview and "max_absent_percent" in overview
     trial = client.calls[2]["messages"][-1]["content"][1]["content"]
-    assert '"全部排完": true' in trial
+    assert '"全部排完": true' in trial and '"缺席场次": 1' in trial
+    # 提示词明确不能请成员改空闲,工具里也没有这个选项
+    assert "不能请成员改空闲" in client.calls[0]["system"]
+    assert "open_slots" not in str(client.calls[0]["tools"])
 
     p = run["proposal"]
-    assert p["summary"] == "请 C 开放两天" and p["check"]["全部排完"] is True
-    assert p["changes"][0]["description"].startswith("请 C 把 9/5 10:00–23:00")
+    assert p["summary"] == "让 C 缺席第二首" and p["check"]["全部排完"] is True
+    assert p["changes"][0]["description"] == "最多允许缺席的场次比例(%):25 → 40"
     # 沙盘没有改数据库
-    assert admin.get(f"/api/events/{ev['id']}/availability/{c['id']}").json()["days"]["2026-09-05"] == "0" * 13
-
+    assert admin.get(f"/api/events/{ev['id']}").json()["settings"]["max_absent_percent"] == 25
     assert admin.get(f"/api/events/{ev['id']}/advisor/latest").json()["id"] == run["id"]
-    # C 没有账号:通知会被跳过
-    assert admin.post(f"/api/advisor-runs/{run['id']}/ask-members", json={"indices": [0, 1]}).json() == {"sent": [], "skipped": ["C"]}
 
-    # 管理员允许后执行 → 空闲被代填,重新求解可行
+    # 管理员允许后执行 → 设置已改,重新求解可行,C 缺席第二首
     r = admin.post(f"/api/advisor-runs/{run['id']}/apply", json={"indices": [0, 1]})
     assert r.status_code == 200 and r.json()["applied"] == [0, 1]
-    got = admin.get(f"/api/events/{ev['id']}/availability/{c['id']}").json()
-    assert got["days"]["2026-09-05"] == "1" * 13 and got["filled_by"] == "admin"
-    assert admin.post(f"/api/events/{ev['id']}/solve", json={}).json()["status"] == "succeeded"
+    settings = admin.get(f"/api/events/{ev['id']}").json()["settings"]
+    assert settings["max_absent_percent"] == 40 and settings["min_full_per_song"] == 0
+    job = admin.post(f"/api/events/{ev['id']}/solve", json={}).json()
+    assert job["status"] == "succeeded"
+    detail = admin.get(f"/api/schedules/{job['version_id']}").json()
+    assert [[m["display_name"] for m in x["absent"]] for x in detail["sessions"] if x["song_code"] == s2["code"]] == [["C"]]
 
 
 def test_advisor_rule_change_and_bad_change_is_reported(admin: TestClient, fake):
@@ -129,3 +133,18 @@ def test_advisor_needs_api_key(admin: TestClient):
     ev, *_ = _setup(admin)
     r = admin.post(f"/api/events/{ev['id']}/advisor")
     assert r.status_code == 503 and "ANTHROPIC_API_KEY" in r.json()["detail"]
+
+
+def test_event_ladder_follows_settings():
+    from app.schemas import EventSettings
+    from app.services import event_ladder
+    from solver.types import DEFAULT_LADDER, LadderLevel
+
+    assert event_ladder(EventSettings()) == DEFAULT_LADDER  # 默认设置与原来的阶梯一致
+    assert event_ladder(EventSettings(max_absent_percent=0)) == (LadderLevel(0),)
+    assert event_ladder(EventSettings(max_absent_percent=40, min_full_per_song=0, absent_per_member_song=2)) == (
+        LadderLevel(0),
+        LadderLevel(1, 0.20, 1, 1),
+        LadderLevel(2, 0.40, 0, 2),
+    )
+    assert event_ladder(EventSettings(max_absent_percent=10)) == (LadderLevel(0), LadderLevel(1, 0.10, 1, 1))

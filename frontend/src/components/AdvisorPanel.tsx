@@ -53,16 +53,11 @@ export function AdvisorPanel({ eventId, onResolve, resolving }: { eventId: numbe
       toast('已按所选调整修改,可以重新求解了')
     },
   )
-  const ask = useAction(
-    (indices: number[]) => api<{ sent: string[]; skipped: string[] }>(`/api/advisor-runs/${run?.id}/ask-members`, { method: 'POST', json: { indices } }),
-    (r) => toast(r.sent.length ? `已通知 ${r.sent.join('、')}` + (r.skipped.length ? `;${r.skipped.join('、')} 没有账号,请线下联系` : '') : `${r.skipped.join('、')} 没有账号,请线下联系`),
-  )
 
   if (latest.isPending) return <Spinner />
 
   const changes = run?.proposal?.changes ?? []
   const selected = [...picked].filter((i) => !run?.applied.includes(i)).sort((a, b) => a - b)
-  const selectedSlots = selected.filter((i) => changes[i]?.kind === 'open_slots')
   const toggle = (i: number) =>
     setPicked((s) => {
       const next = new Set(s)
@@ -83,7 +78,7 @@ export function AdvisorPanel({ eventId, onResolve, resolving }: { eventId: numbe
       {!running && run?.status !== 'done' && (
         <>
           <p className="muted">
-            让 Claude 读诊断、试算各种调整(请成员开放时段、放宽要求、拆分场次),用求解器逐一验证,最后给你一份能直接执行的方案。它不会自动改任何东西,每一条都要你允许。
+            让 Claude 读诊断、试算各种调整(提高允许的缺席、放宽特殊要求、拆分场次),用求解器逐一验证,最后给你一份能直接执行的方案。不会动成员的空闲时间;也不会自动改任何东西,每一条都要你允许。
           </p>
           {run?.status === 'failed' && <Note tone="error">{run.error?.split('\n')[0] || '出错了'},可以重试。</Note>}
           <div className="actions">
@@ -143,7 +138,7 @@ export function AdvisorPanel({ eventId, onResolve, resolving }: { eventId: numbe
                   <label>
                     <input type="checkbox" checked={done || picked.has(i)} disabled={done} onChange={() => toggle(i)} />
                     <span>
-                      <Badge tone={c.kind === 'open_slots' ? 'orange' : 'neutral'}>{c.kind_label}</Badge> {c.description}
+                      <Badge tone={c.kind === 'setting' ? 'orange' : 'neutral'}>{c.kind_label}</Badge> {c.description}
                       {done && <b className="advisor-changes__done"> · 已执行</b>}
                       {c.reason && <span className="muted advisor-changes__reason">{c.reason}</span>}
                     </span>
@@ -156,11 +151,6 @@ export function AdvisorPanel({ eventId, onResolve, resolving }: { eventId: numbe
             <Button variant="ghost" loading={start.isPending} onClick={() => start.mutate(undefined)}>
               再想一次
             </Button>
-            {selectedSlots.length > 0 && (
-              <Button loading={ask.isPending} onClick={() => ask.mutate(selectedSlots)}>
-                通知相关成员
-              </Button>
-            )}
             <Button disabled={selected.length === 0} loading={apply.isPending} onClick={() => setConfirm(true)}>
               允许并执行所选({selected.length})
             </Button>
@@ -191,9 +181,6 @@ export function AdvisorPanel({ eventId, onResolve, resolving }: { eventId: numbe
             <li key={i}>{changes[i]?.description}</li>
           ))}
         </ul>
-        {selectedSlots.length > 0 && (
-          <Note tone="warning">其中 {selectedSlots.length} 条是替成员改空闲(记为管理员代填)。请先确认这些成员已经同意;还没问过的话,先点「通知相关成员」。</Note>
-        )}
       </Modal>
     </Panel>
   )

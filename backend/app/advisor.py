@@ -1,8 +1,8 @@
 """AI 调度员(开发文档 §5.11):无解时让 Claude 读诊断、提出调整、调用求解器验证,循环几轮后给管理员一份可执行的方案。
 
-- 求解器仍负责保证排练表不冲突;Claude 只负责“想办法”:放宽哪条要求、请哪位成员多开放哪些时段、把哪首拆成几场。
+- 求解器仍负责保证排练表不冲突;Claude 只负责“想办法”:提高允许的缺席、放宽哪条要求、把哪首拆成几场。不会请成员改空闲(成员的空闲时间是给定的)。
 - Claude 只在“沙盘”里试算:每次把调整临时套到演出上、转换成求解包后立即回滚,数据库不变。
-- 真正修改要求 / 代填空闲,必须由管理员在方案里逐条勾选“允许”后执行(``apply_change``,real=True)。
+- 真正修改要求 / 参数,必须由管理员在方案里逐条勾选“允许”后执行(``apply_change``,real=True)。
 """
 
 from __future__ import annotations
@@ -26,10 +26,10 @@ from solver.types import AVAILABLE as FREE
 from solver.types import AVOID, Problem
 
 from .db import make_engine, make_session_factory
-from .models import AdvisorRun, AvailabilityDay, Event, Rule
+from .models import AdvisorRun, Event, Rule
 from .rules import RULE_TYPES, sentence, validate_params
 from .schemas import EventSettings
-from .services import event_config, event_problem, event_settings, song_durations, sorted_participants
+from .services import event_config, event_problem, event_settings, ladder_text, song_durations, sorted_participants
 from .utils import utcnow
 
 MAX_TURNS = 14  # Claude 最多来回几轮(每轮可试算多次)
@@ -37,7 +37,6 @@ EVAL_STAGE_SECONDS = 15.0  # 沙盘试算每阶段的时间上限
 FINAL_STAGE_SECONDS = 45.0  # 最终方案复核
 
 KIND_LABELS = {
-    "open_slots": "请成员开放时段",
     "add_rule": "新增要求",
     "edit_rule": "修改要求",
     "disable_rule": "停用要求",
@@ -45,6 +44,9 @@ KIND_LABELS = {
     "session_plan": "修改曲目场次方案",
 }
 SETTING_KEYS = {
+    "max_absent_percent": "最多允许缺席的场次比例(%)",
+    "absent_per_member_song": "每人每首最多缺席次数",
+    "min_full_per_song": "每首至少全员到齐的场次",
     "hard_daily_limit": "单日排练硬上限(小时)",
     "soft_daily_limit": "单日排练软上限(小时)",
     "same_song_different_days": "同一首曲目的几场必须排在不同天",
@@ -58,10 +60,6 @@ class ChangeError(ValueError):
 # ---------- 调整:沙盘与真实执行共用一套代码 ----------
 def _hour(h: int) -> str:
     return f"{h % 24:02d}:00"
-
-
-def _md(d: date) -> str:
-    return f"{d.month}/{d.day}"
 
 
 def _participant(event: Event, name: str | None):  # noqa: ANN202
@@ -119,9 +117,6 @@ def describe_change(event: Event, change: dict) -> str:
     """给管理员看的一句话。"""
     kind = change.get("kind")
     try:
-        if kind == "open_slots":
-            d = date.fromisoformat(str(change["date"]))
-            return f"请 {change['member']} 把 {_md(d)} {_hour(int(change['start_hour']))}–{_hour(int(change['end_hour']))} 改为有空"
         if kind == "add_rule":
             rule = Rule(type=change["rule_type"], params=_rule_params(event, change))
             return "新增:" + sentence(event, rule)
@@ -134,9 +129,10 @@ def describe_change(event: Event, change: dict) -> str:
         if kind == "setting":
             label = SETTING_KEYS.get(change.get("key", ""), change.get("key"))
             value = change.get("value")
+            old = event_settings(event).model_dump().get(change.get("key", ""))
             if isinstance(value, bool):
-                value = "是" if value else "否"
-            return f"{label} 改为 {value}"
+                value, old = ("是" if value else "否"), ("是" if old else "否")
+            return f"{label}:{old} → {value}"
         if kind == "session_plan":
             plan = " + ".join(f"{h} 小时" for h in change.get("plan") or [])
             return f"曲目 {change['song']} 的场次方案改为 {plan}"
@@ -148,29 +144,6 @@ def describe_change(event: Event, change: dict) -> str:
 def apply_change(db: Session, event: Event, change: dict, *, real: bool) -> None:
     """把一条调整套到 ORM 对象上。沙盘(real=False)由调用方随后回滚;真实执行由调用方提交。"""
     kind = change.get("kind")
-    if kind == "open_slots":
-        p = _participant(event, change.get("member"))
-        d = _parse_date(event, change.get("date"))
-        try:
-            start, end = int(change["start_hour"]), int(change["end_hour"])
-        except (KeyError, TypeError, ValueError) as exc:
-            raise ChangeError("开放时段需要 start_hour 和 end_hour") from exc
-        if not event.day_start_hour <= start < end <= event.day_end_hour:
-            raise ChangeError(f"时段 {start}–{end} 超出每日排练窗口 {event.day_start_hour}–{event.day_end_hour}")
-        slots = event.day_end_hour - event.day_start_hour
-        row = next((r for r in event.availability if r.member_id == p.member_id and r.date == d), None)
-        if row is None:
-            row = AvailabilityDay(event_id=event.id, member_id=p.member_id, date=d, slots="0" * slots, filled_by="admin")
-            event.availability.append(row)
-        chars = list(row.slots.ljust(slots, "0"))
-        for h in range(start - event.day_start_hour, end - event.day_start_hour):
-            chars[h] = str(FREE)
-        row.slots = "".join(chars)
-        if real:
-            row.filled_by = "admin"
-        if p.availability_submitted_at is None:
-            p.availability_submitted_at = utcnow()
-        return
     if kind == "add_rule":
         rule_type = change.get("rule_type")
         if rule_type not in RULE_TYPES:
@@ -285,7 +258,12 @@ def overview(db: Session, event_id: int) -> dict:
             "same_song_different_days": settings.same_song_different_days,
             "评估场时长可选": settings.eval_durations,
         },
-        "缺席阶梯": "先试严格(全员到齐);排不下时自动允许少量缺席:L1 总场次 20% 内、每首至少 1 场全员、每人每首最多缺 1 次;L2 放宽到 25%",
+        "缺席设置": {
+            "max_absent_percent": settings.max_absent_percent,
+            "absent_per_member_song": settings.absent_per_member_song,
+            "min_full_per_song": settings.min_full_per_song,
+            "说明": "先试全员到齐;排不下时按阶梯自动允许缺席(每场最多 1 人缺席)。" + ladder_text(settings),
+        },
         "曲目": [
             {
                 "代号": s.code,
@@ -366,11 +344,11 @@ CHANGE_SCHEMA: dict = {
     "properties": {
         "kind": {"type": "string", "enum": list(KIND_LABELS), "description": "调整类型"},
         "reason": {"type": "string", "description": "一句话说明为什么这样改(管理员会看到)"},
-        "member": {"type": "string", "description": "成员昵称(open_slots;或 add_rule / edit_rule 中的成员)"},
+        "member": {"type": "string", "description": "add_rule / edit_rule 中的成员昵称"},
         "song": {"type": "string", "description": "曲目代号(session_plan;或 add_rule / edit_rule 中的曲目)"},
         "date": {"type": "string", "description": "日期 YYYY-MM-DD"},
-        "start_hour": {"type": "integer", "description": "开始钟点,如 18 表示 18:00"},
-        "end_hour": {"type": "integer", "description": "结束钟点(不含),如 20 表示到 20:00"},
+        "start_hour": {"type": "integer", "description": "要求中的开始钟点,如 18 表示 18:00"},
+        "end_hour": {"type": "integer", "description": "要求中的结束钟点(不含)"},
         "rule_type": {"type": "string", "enum": list(RULE_TYPES), "description": "add_rule 的要求类型"},
         "rule_id": {"type": "integer", "description": "edit_rule / disable_rule 的要求编号"},
         "n": {"type": "integer", "description": "要求里的次数 / 场次数"},
@@ -390,7 +368,7 @@ TOOLS: list[dict] = [
     },
     {
         "name": "get_member_availability",
-        "description": "查看某位成员每天的空闲(有空 / 尽量避开的时段)。请成员开放时段前先看,优先请对方把“尽量避开”改成有空,或在已有空闲旁边延长。",
+        "description": "查看某位成员每天的空闲(有空 / 尽量避开的时段),用于判断卡在谁、哪些曲目适合让谁缺席。空闲是给定的,不能修改。",
         "input_schema": {"type": "object", "properties": {"member": {"type": "string", "description": "成员昵称"}}, "required": ["member"]},
     },
     {
@@ -426,8 +404,12 @@ SYSTEM_PROMPT = """你是舞团排练排程系统里的「AI 调度员」。管�
 
 背景:
 - 排程由 CP-SAT 求解器完成,它保证排出来的表不冲突。你不直接排表,而是决定“改什么”,再用 evaluate_changes 在沙盘里验证。
-- 每首曲目按“场次方案”排若干场,每场全员到齐;排不下时求解器会自动试缺席阶梯(L1/L2)。
-- 可用的调整:open_slots(请某位成员把某天某段时间改为有空)、add_rule / edit_rule / disable_rule(特殊要求)、setting(单日上限、同曲不同天)、session_plan(把一首曲目的场次拆短或合并)。
+- 每首曲目按“场次方案”排若干场;先试全员到齐,排不下时按缺席设置自动允许每场至多 1 人缺席。
+- **成员的空闲时间是给定的,不能请成员改空闲或多开放时段。**
+- 可用的调整:
+  - setting:max_absent_percent(最多允许缺席的场次比例,%,上限 60)、absent_per_member_song(每人每首最多缺几次)、min_full_per_song(每首至少几场全员到齐,可为 0)、hard_daily_limit / soft_daily_limit(单日小时上限)、same_song_different_days(同曲不同天)。
+  - add_rule / edit_rule / disable_rule:特殊要求。例如 add_rule 的 member_song_max_absent 允许某人在某首缺席 n 次(只对这一个人、这一首放宽,比整体提高缺席率更精确)。
+  - session_plan:把一首曲目的场次拆短或合并。
 
 做法:
 1. 先 get_overview,读懂卡在哪里(哪几首排不下、主要卡在谁、只差一人的时段)。
@@ -435,12 +417,12 @@ SYSTEM_PROMPT = """你是舞团排练排程系统里的「AI 调度员」。管�
 3. 选出代价最小、最可行的方案,用 submit_proposal 提交。
 
 衡量代价(从轻到重):
-- 请成员开放时段:越少人、越少小时越好;优先把“尽量避开”改成有空,或紧挨着已有空闲延长;不要请人在深夜或明显不合理的时间来。同一个人不要请太多。
-- 放宽特殊要求或排程参数:要说明影响,硬性要求(如场地、固定场次)尽量不动。
+- 允许缺席:优先只对卡住的人和曲目放宽(member_song_max_absent),再考虑整体提高 max_absent_percent;比例够用即可,不要一下提太高。试算结果里的“缺席场次”越少越好。
+- 放宽其他特殊要求或排程参数:要说明影响;硬性要求(如场地、固定场次)尽量不动。
 - 修改场次方案:会改变排练总时长,谨慎使用,并在 summary 里写明。
 - 如果实在无法全部排完,也可以提交“能多排几场”的方案,并在 summary 里说清还差什么。
 
-试算次数有限,通常 3–8 次就应提交。所有给管理员看的文字用简体中文,简洁、具体(写清成员、日期、时段)。"""
+试算次数有限,通常 3–8 次就应提交。所有给管理员看的文字用简体中文,简洁、具体(写清成员、曲目、数值)。"""
 
 
 # ---------- 运行 ----------

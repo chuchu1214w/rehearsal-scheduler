@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import multiprocessing
-from datetime import date, datetime
+from datetime import datetime
 from typing import Any
 
 from fastapi import APIRouter, HTTPException
@@ -13,7 +13,6 @@ from sqlalchemy.orm import Session
 from .. import advisor
 from ..deps import DB, AdminUser, SettingsDep
 from ..models import AdvisorRun
-from ..notify import notify
 from ..schemas import AdvisorApplyIn, AdvisorRunOut
 from ..utils import utcnow
 from .events import load_event
@@ -128,45 +127,8 @@ def _done_run(db: Session, run_id: int, admin) -> AdvisorRun:  # noqa: ANN001
 
 @router.post("/advisor-runs/{run_id}/apply", response_model=AdvisorRunOut)
 def apply_advisor(run_id: int, body: AdvisorApplyIn, db: DB, admin: AdminUser) -> AdvisorRunOut:
-    """管理员允许后执行所选调整(修改要求 / 参数 / 场次方案,或在成员同意后代填空闲)。"""
+    """管理员允许后执行所选调整(修改要求 / 参数 / 场次方案)。"""
     run = _done_run(db, run_id, admin)
     advisor.apply_selected(db, run, body.indices)
     db.commit()
     return serialize_run(run)
-
-
-@router.post("/advisor-runs/{run_id}/ask-members")
-def ask_members(run_id: int, body: AdvisorApplyIn, db: DB, admin: AdminUser) -> dict:
-    """把所选的“请成员开放时段”发给对应成员(站内通知 + 推送)。"""
-    run = _done_run(db, run_id, admin)
-    event = load_event(db, run.event_id, admin)
-    changes = (run.proposal or {}).get("changes") or []
-    by_member: dict[str, list[str]] = {}
-    for i in dict.fromkeys(body.indices):
-        if 0 <= i < len(changes) and changes[i].get("kind") == "open_slots":
-            c = changes[i]
-            try:
-                d = date.fromisoformat(str(c["date"]))
-                text = f"{d.month}/{d.day} {int(c['start_hour']):02d}:00–{int(c['end_hour']):02d}:00"
-            except (KeyError, TypeError, ValueError):
-                continue
-            by_member.setdefault(str(c.get("member")), []).append(text)
-    users = {p.member.display_name: p.member.user.id for p in event.participants if p.member.user is not None and p.member.user.is_active}
-    sent, skipped = [], []
-    for name, slots in by_member.items():
-        uid = users.get(name)
-        if uid is None:
-            skipped.append(name)
-            continue
-        notify(
-            db,
-            [uid],
-            type="advisor_request",
-            title=f"「{event.name}」排练需要你帮忙协调时间",
-            body=f"管理员想请你看看能否把这些时段改为有空:{'、'.join(slots)}。可以的话请在填空闲页面修改并重新提交。",
-            link=f"/events/{event.id}/availability",
-            event_id=event.id,
-        )
-        sent.append(name)
-    db.commit()
-    return {"sent": sent, "skipped": skipped}

@@ -9,7 +9,7 @@ from fastapi import HTTPException
 from solver.candidates import build_candidates, make_tasks
 from solver.evaluation import diagnose_evaluation
 from solver.timegrid import weekday_zh
-from solver.types import Availability, EventConfig, Problem
+from solver.types import Availability, EventConfig, LadderLevel, Problem
 from solver.types import Song as SolverSong
 
 from .models import AvailabilityDay, Event, EventMember, Member, RehearsalSession, ScheduleVersion, SolveJob, Song, User
@@ -131,6 +131,28 @@ def validate_event(
         )
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+def event_ladder(settings: EventSettings) -> tuple[LadderLevel, ...]:
+    """缺席阶梯:L0 严格;L1 先试较轻的缺席(每项取默认与设置中更严的一侧);最后一层按设置。默认设置与求解包的默认阶梯一致。"""
+    ratio = settings.max_absent_percent / 100
+    if ratio <= 0:
+        return (LadderLevel(0),)
+    top = (ratio, settings.min_full_per_song, settings.absent_per_member_song)
+    first = (min(0.20, ratio), max(1, settings.min_full_per_song), min(1, settings.absent_per_member_song))
+    levels = [LadderLevel(0), LadderLevel(1, *first)]
+    if top != first:
+        levels.append(LadderLevel(2, *top))
+    return tuple(levels)
+
+
+def ladder_text(settings: EventSettings) -> str:
+    if settings.max_absent_percent <= 0:
+        return "不允许缺席(每场全员到齐)"
+    return (
+        f"排不下时最多 {settings.max_absent_percent}% 的场次可有 1 人缺席;"
+        f"每人每首最多缺 {settings.absent_per_member_song} 次;每首至少 {settings.min_full_per_song} 场全员到齐"
+    )
 
 
 def event_config(event: Event) -> EventConfig:
@@ -378,6 +400,7 @@ def event_problem(event: Event, *, include_unsubmitted: bool = False, song_codes
         availability=avail,
         rules=to_solver_rules(event),
         objectives=tuple(event_settings(event).objectives),
+        ladder=event_ladder(event_settings(event)),
     )
 
 

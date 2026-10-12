@@ -49,6 +49,9 @@ export interface EventSettings {
   eval_durations: number[]
   eval_min_contiguous: number
   same_song_different_days: boolean
+  max_absent_percent: number
+  absent_per_member_song: number
+  min_full_per_song: number
   difficulty_templates: Record<Difficulty, number[]>
   stage_time_limit: number
   objectives: string[]
@@ -394,11 +397,10 @@ export interface Objective {
 
 /** AI 调度员(开发文档 §5.11) */
 export interface AdvisorChange {
-  kind: 'open_slots' | 'add_rule' | 'edit_rule' | 'disable_rule' | 'setting' | 'session_plan'
+  kind: 'add_rule' | 'edit_rule' | 'disable_rule' | 'setting' | 'session_plan'
   kind_label: string
   description: string
   reason: string
-  member?: string
 }
 
 export interface AdvisorRun {

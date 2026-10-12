@@ -16,6 +16,9 @@ const DEFAULT_SETTINGS: EventSettings = {
   eval_durations: [3, 2],
   eval_min_contiguous: 2,
   same_song_different_days: true,
+  max_absent_percent: 25,
+  absent_per_member_song: 1,
+  min_full_per_song: 1,
   difficulty_templates: { 简单: [2, 2], 一般: [3, 2, 2], 困难: [3, 3, 3] },
   stage_time_limit: 90,
   objectives: ['absent', 'eval_attendance', 'spacing', 'focus_days', 'trips', 'gaps', 'overtime', 'soft_avoid'],
@@ -41,6 +44,9 @@ export function InfoEditor({ event, submitLabel = '保存', onSaved }: Props) {
   const [hard, setHard] = useState(s.hard_daily_limit)
   const [evalDur, setEvalDur] = useState(s.eval_durations.join(','))
   const [sameDay, setSameDay] = useState(s.same_song_different_days)
+  const [absentPct, setAbsentPct] = useState(s.max_absent_percent ?? 25)
+  const [absentPer, setAbsentPer] = useState(s.absent_per_member_song ?? 1)
+  const [minFull, setMinFull] = useState(s.min_full_per_song ?? 1)
   const [tpl, setTpl] = useState<Record<string, string>>(Object.fromEntries(DIFFICULTIES.map((d) => [d, planText(s.difficulty_templates[d])])))
   const [objectives, setObjectives] = useState<string[]>(s.objectives ?? DEFAULT_SETTINGS.objectives)
   const objectiveDefs = useObjectives()
@@ -76,7 +82,13 @@ export function InfoEditor({ event, submitLabel = '保存', onSaved }: Props) {
         availability_deadline: deadline || null,
         day_start_hour: dayStart,
         day_end_hour: dayEnd,
-        settings: { ...s, soft_daily_limit: soft, hard_daily_limit: hard, eval_durations: evalPlan, same_song_different_days: sameDay, difficulty_templates: templates, objectives },
+        settings: { ...s, soft_daily_limit: soft, hard_daily_limit: hard, eval_durations: evalPlan, same_song_different_days: sameDay,
+          max_absent_percent: absentPct,
+          absent_per_member_song: absentPer,
+          min_full_per_song: minFull,
+          difficulty_templates: templates,
+          objectives,
+        },
       }
       if (event) return api<RehearsalEvent>(`/api/events/${event.id}`, { method: 'PATCH', json: body })
       return api<RehearsalEvent>('/api/events', { method: 'POST', json: body })
@@ -149,6 +161,15 @@ export function InfoEditor({ event, submitLabel = '保存', onSaved }: Props) {
               <input value={tpl[d]} onChange={(e) => setTpl({ ...tpl, [d]: e.target.value })} />
             </Field>
           ))}
+          <Field label="最多允许缺席的场次比例(%)" hint="排不下时才启用;每场最多 1 人缺席。0 = 不允许">
+            <input type="number" min={0} max={60} value={absentPct} onChange={(e) => setAbsentPct(Number(e.target.value))} />
+          </Field>
+          <Field label="每人每首最多缺席几次">
+            <input type="number" min={1} max={5} value={absentPer} onChange={(e) => setAbsentPer(Number(e.target.value))} />
+          </Field>
+          <Field label="每首至少几场全员到齐">
+            <input type="number" min={0} max={5} value={minFull} onChange={(e) => setMinFull(Number(e.target.value))} />
+          </Field>
           <label className="check" style={{ alignSelf: 'end' }}>
             <input type="checkbox" checked={sameDay} onChange={(e) => setSameDay(e.target.checked)} />
             同一曲目的场次必须在不同日期

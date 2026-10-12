@@ -177,6 +177,10 @@ class EventSettings(BaseModel):
     eval_durations: list[int] = [3, 2]
     eval_min_contiguous: int = Field(default=2, ge=1, le=12)
     same_song_different_days: bool = True
+    # 缺席阶梯(开发文档 §5.6):排不下时最多允许多少比例的场次有 1 人缺席
+    max_absent_percent: int = Field(default=25, ge=0, le=60)
+    absent_per_member_song: int = Field(default=1, ge=1, le=5)  # 每人每首最多缺席几次
+    min_full_per_song: int = Field(default=1, ge=0, le=5)  # 每首至少几场全员到齐
     difficulty_templates: dict[str, list[int]] = {"困难": [3, 3, 3], "一般": [3, 2, 2], "简单": [2, 2]}
     stage_time_limit: float = Field(default=90.0, ge=5, le=600)
     objectives: list[str] = list(DEFAULT_OBJECTIVES)  # 优化目标顺序(RULE-04),可去掉不要的项
