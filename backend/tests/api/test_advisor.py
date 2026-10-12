@@ -148,3 +148,55 @@ def test_event_ladder_follows_settings():
         LadderLevel(2, 0.40, 0, 2),
     )
     assert event_ladder(EventSettings(max_absent_percent=10)) == (LadderLevel(0), LadderLevel(1, 0.10, 1, 1))
+
+
+def test_candidate_plans():
+    assert advisor.candidate_plans([3]) == [[2], [2, 1]]
+    assert advisor.candidate_plans([3, 2, 2]) == [[2, 2, 2], [2, 1, 1], [3, 2], [2, 2], [2, 2, 2, 1], [2, 1]]
+
+
+def test_advisor_suggests_song_session_plans(admin: TestClient, fake):
+    ev, (a, b, c), (s1, s2) = _setup(admin, availability={})
+    # C 每个排练日只有 10:00–12:00 有空:第二首要 1 场 3 小时,排不下;改成 2 小时就行
+    c_days = {d: "11" + "0" * 11 for d in FULL} | {"2026-09-09": "1" * 13}
+    for m, days in ((a, FULL), (b, FULL), (c, c_days)):
+        admin.put(f"/api/events/{ev['id']}/availability/{m['id']}", json={"days": days, "submit": True})
+    assert admin.post(f"/api/events/{ev['id']}/solve", json={}).json()["status"] == "infeasible"
+
+    plan_change = {"kind": "session_plan", "song": s2["code"], "plan": [2], "reason": "C 每天只有 2 小时"}
+    client = fake(
+        [
+            _resp(_block(type="tool_use", id="t1", name="try_session_plans", input={"song": s2["code"]})),
+            _resp(
+                _block(
+                    type="tool_use",
+                    id="t2",
+                    name="submit_proposal",
+                    input={
+                        "summary": "第二首改成 1 场 2 小时即可",
+                        "changes": [plan_change],
+                        "song_plans": [{"song": s2["code"], "plan": [2], "note": "单独改这首即可全部排完"}],
+                    },
+                )
+            ),
+        ]
+    )
+    run = admin.post(f"/api/events/{ev['id']}/advisor").json()
+    assert run["status"] == "done", run["error"]
+    tried = client.calls[1]["messages"][-1]["content"][0]["content"]
+    assert '"当前方案": "1 场:3h"' in tried and '"说明": "1 场:2h", "结果": "全部排完"' in tried
+    assert any(x["kind"] == "result" and "1 场:2h、2 场:2h + 1h 可全部排完" in x["text"] for x in run["log"]), run["log"]
+
+    p = run["proposal"]
+    assert p["check"]["全部排完"] is True
+    assert p["song_plans"] == [
+        {
+            "song": s2["code"],
+            "song_name": "第二首",
+            "current": "1 场:3h",
+            "suggested": "1 场:2h",
+            "plan": [2],
+            "note": "单独改这首即可全部排完",
+        }
+    ]
+    assert p["changes"][0]["description"] == f"曲目 {s2['code']} 的场次方案改为 2 小时"

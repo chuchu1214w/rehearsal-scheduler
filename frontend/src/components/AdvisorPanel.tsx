@@ -130,6 +130,36 @@ export function AdvisorPanel({ eventId, onResolve, resolving }: { eventId: numbe
               {check.注意 && `;${check.注意}`}
             </p>
           )}
+          {(run.proposal.song_plans?.length ?? 0) > 0 && (
+            <>
+              <div className="kicker">按曲目的场次建议 · 改成这样就能排下</div>
+              <table className="tbl advisor-plans">
+                <thead>
+                  <tr>
+                    <th>曲目</th>
+                    <th>现在</th>
+                    <th>建议</th>
+                    <th>说明</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {run.proposal.song_plans!.map((p, i) => (
+                    <tr key={i}>
+                      <td>
+                        {p.song} · {p.song_name}
+                      </td>
+                      <td>{p.current}</td>
+                      <td>
+                        <b>{p.suggested}</b>
+                      </td>
+                      <td className="muted">{p.note}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              <div className="kicker">推荐执行的调整</div>
+            </>
+          )}
           <ul className="advisor-changes">
             {changes.map((c, i) => {
               const done = run.applied.includes(i)

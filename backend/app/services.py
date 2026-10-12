@@ -280,7 +280,7 @@ def event_steps(event: Event) -> tuple[int, list[StepOut], dict[str, int]]:
         (n_songs > 0, f"{n_songs} 首 · {n_sessions} 场正规排练 + 1 场评估" if n_songs else "还没有曲目"),
         (n_songs > 0, f"{n_rules} 条要求" if n_rules else "没有特殊要求(可跳过)"),
         (n_members > 0 and n_submitted == n_members, f"已提交 {n_submitted} / {n_members}{deadline}"),
-        (latest is not None, solve_summary),
+        (any(v.source != "partial" for v in event.versions), solve_summary),  # 只有部分排程的草稿不算求解完成
         (published is not None, schedule_summary),
     ]
     steps: list[StepOut] = []
@@ -569,6 +569,10 @@ def serialize_version(event: Event, v: ScheduleVersion, *, detail: bool = False)
     )
 
 
+def _member_rows(rows: dict[date, AvailabilityDay], config: EventConfig) -> dict[str, str]:
+    return {d.isoformat(): (rows[d].slots if d in rows else "")[: config.slots_per_day] for d in config.all_dates}
+
+
 def heat(event: Event) -> HeatOut:
     config = event_config(event)
     participants = sorted_participants(event)
@@ -592,6 +596,16 @@ def heat(event: Event) -> HeatOut:
         member_count=len(participants),
         submitted_count=len(submitted),
         heat=out,
+        availability={p.member.display_name: _member_rows(index.get(p.member_id, {}), config) for p in submitted},
+        songs=[
+            {
+                "code": s.code,
+                "name": s.name,
+                "members": [m.display_name for m in s.members],
+                "durations": song_durations(s, event_settings(event)),
+            }
+            for s in event.songs
+        ],
     )
 
 

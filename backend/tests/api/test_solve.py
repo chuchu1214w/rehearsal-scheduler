@@ -85,8 +85,10 @@ def test_solve_infeasible_gives_diagnosis(admin: TestClient):
     assert v["id"] == job["version_id"] and v["source"] == "partial" and v["status"] == "draft"
     assert v["validation_errors"]
     assert admin.post(f"/api/schedules/{v['id']}/publish").status_code == 422
+    assert v["exact_optimum"] is False and "还差" in job["summary"]
     e = admin.get(f"/api/events/{ev['id']}").json()
     assert e["latest_job_status"] == "infeasible" and "上次无解" in e["steps"][5]["summary"]
+    assert e["steps"][5]["state"] == "current"  # 只有部分排程的草稿,求解这一步不算完成
 
 
 def test_only_ready_songs_skips_unsubmitted(admin: TestClient):

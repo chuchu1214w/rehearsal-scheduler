@@ -338,6 +338,60 @@ def evaluate(problem: Problem, *, stage_seconds: float, workers: int, with_diagn
     return out
 
 
+def plan_text(plan: list[int]) -> str:
+    """[3, 2, 2] → “3 场:3h + 2h + 2h”"""
+    return f"{len(plan)} 场:" + " + ".join(f"{h}h" for h in plan) if plan else "不排"
+
+
+def candidate_plans(plan: list[int]) -> list[list[int]]:
+    """一首曲目可以试的场次方案(从改动小到大):最长一场少 1 小时、每场都少 1 小时、少排一场、长场拆成两场。"""
+    plan = sorted(plan, reverse=True)
+    out: list[list[int]] = []
+
+    def add(p: list[int]) -> None:
+        p = sorted((h for h in p if h > 0), reverse=True)
+        if p and p != plan and p not in out:
+            out.append(p)
+
+    if plan[0] > 1:
+        add([plan[0] - 1, *plan[1:]])
+    add([max(1, h - 1) for h in plan])
+    if len(plan) > 1:
+        add(plan[:-1])  # 少排最短的一场
+        add(plan[1:])  # 少排最长的一场
+    if plan[0] >= 3:
+        add([plan[0] - plan[0] // 2, plan[0] // 2, *plan[1:]])  # 最长一场拆成两场
+    if len(plan) > 1:
+        add([max(1, h - 1) for h in plan[:-1]])  # 少一场且每场少 1 小时
+    return out[:6]
+
+
+def try_session_plans(
+    db: Session, event_id: int, song: str, plans: list[list[int]] | None, base_changes: list[dict], *, stage_seconds: float, workers: int
+) -> dict:
+    """在 base_changes 的基础上,逐个试某首曲目的场次方案,看哪种能让整体有解。"""
+    event = db.get(Event, event_id)
+    assert event is not None
+    s = _song(event, song)
+    current = song_durations(s, event_settings(event))
+    db.rollback()
+    tries = [list(p) for p in plans] if plans else candidate_plans(current)
+    rows = []
+    for plan in tries[:8]:
+        change = {"kind": "session_plan", "song": s.code, "plan": plan, "reason": ""}
+        try:
+            problem = scenario_problem(db, event_id, [*base_changes, change])
+        except ChangeError as exc:
+            rows.append({"方案": plan, "说明": plan_text(plan), "结果": f"无效:{exc}"})
+            continue
+        r = evaluate(problem, stage_seconds=stage_seconds, workers=workers)
+        result = "全部排完" if r.get("全部排完") else str(r.get("最多能排") or r.get("说明") or "无解")
+        if r.get("全部排完") and r.get("缺席场次"):
+            result += f"(缺席 {r['缺席场次']} 场)"
+        rows.append({"方案": plan, "说明": plan_text(plan), "结果": result})
+    return {"曲目": f"{s.code}({s.name})", "当前方案": plan_text(current), "试算": rows}
+
+
 # ---------- Claude 的工具与提示 ----------
 CHANGE_SCHEMA: dict = {
     "type": "object",
@@ -387,6 +441,27 @@ TOOLS: list[dict] = [
         },
     },
     {
+        "name": "try_session_plans",
+        "description": (
+            "针对一首曲目,一次试算多种场次方案(排几次、每次几小时),看哪种能让整体全部排完。"
+            "不传 plans 时自动试:最长一场少 1 小时、每场少 1 小时、少排一场、长场拆两场等。"
+            "base_changes 是同时生效的其他调整(例如另一首曲目已选定的新方案),用来组合多首曲目。"
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "song": {"type": "string", "description": "曲目代号"},
+                "plans": {
+                    "type": "array",
+                    "items": {"type": "array", "items": {"type": "integer"}},
+                    "description": "要试的方案,如 [[2, 2], [3]]",
+                },
+                "base_changes": {"type": "array", "items": CHANGE_SCHEMA},
+            },
+            "required": ["song"],
+        },
+    },
+    {
         "name": "submit_proposal",
         "description": "提交最终方案给管理员(只调用一次,之后结束)。方案里的调整会逐条由管理员决定是否允许。",
         "input_schema": {
@@ -394,8 +469,21 @@ TOOLS: list[dict] = [
             "properties": {
                 "summary": {"type": "string", "description": "给管理员的说明:问题卡在哪、方案怎么解决、代价是什么(3–6 句,中文)"},
                 "changes": {"type": "array", "items": CHANGE_SCHEMA},
+                "song_plans": {
+                    "type": "array",
+                    "description": "按曲目的场次建议:哪几首如果改成排几次、每次几小时就能有解(必须是试算验证过的)",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "song": {"type": "string", "description": "曲目代号"},
+                            "plan": {"type": "array", "items": {"type": "integer"}, "description": "建议的场次方案"},
+                            "note": {"type": "string", "description": "效果与代价,如“单独改这首即可全部排完”“需与 b 一起改”"},
+                        },
+                        "required": ["song", "plan", "note"],
+                    },
+                },
             },
-            "required": ["summary", "changes"],
+            "required": ["summary", "changes", "song_plans"],
         },
     },
 ]
@@ -413,8 +501,9 @@ SYSTEM_PROMPT = """你是舞团排练排程系统里的「AI 调度员」。管�
 
 做法:
 1. 先 get_overview,读懂卡在哪里(哪几首排不下、主要卡在谁、只差一人的时段)。
-2. 提出几种候选方案,用 evaluate_changes 验证;根据结果继续调整。试算之间要真正利用结果,不要重复试一样的东西。
-3. 选出代价最小、最可行的方案,用 submit_proposal 提交。
+2. **管理员特别想知道:哪几首曲目如果改成排几次、每次几小时,就能有解。** 对每首排不下(有缺口)的曲目都用 try_session_plans 试算,找出能全部排完、且改动最小的场次方案;一首不够时用 base_changes 组合多首。结果填进 submit_proposal 的 song_plans(只写试算验证过的;某首怎么改都不行也要写明)。
+3. 再看其他调整(缺席设置、特殊要求)能否用更小的代价解决,用 evaluate_changes 验证。试算之间要真正利用结果,不要重复试一样的东西。
+4. 用 submit_proposal 提交:summary 说清两条路(改场次方案 / 其他调整)各自的效果与代价,changes 放你推荐执行的那一套。
 
 衡量代价(从轻到重):
 - 允许缺席:优先只对卡住的人和曲目放宽(member_song_max_absent),再考虑整体提高 max_absent_percent;比例够用即可,不要一下提太高。试算结果里的“缺席场次”越少越好。
@@ -422,7 +511,7 @@ SYSTEM_PROMPT = """你是舞团排练排程系统里的「AI 调度员」。管�
 - 修改场次方案:会改变排练总时长,谨慎使用,并在 summary 里写明。
 - 如果实在无法全部排完,也可以提交“能多排几场”的方案,并在 summary 里说清还差什么。
 
-试算次数有限,通常 3–8 次就应提交。所有给管理员看的文字用简体中文,简洁、具体(写清成员、曲目、数值)。"""
+试算次数有限,通常 4–10 次就应提交。所有给管理员看的文字用简体中文,简洁、具体(写清成员、曲目、数值)。"""
 
 
 # ---------- 运行 ----------
@@ -453,15 +542,32 @@ def _create(client: Any, model: str, messages: list) -> Any:
     )
 
 
-def _proposal_out(db: Session, event_id: int, changes: list[dict], summary: str, workers: int) -> dict:
+def _proposal_out(
+    db: Session, event_id: int, changes: list[dict], summary: str, workers: int, song_plans: list[dict] | None = None
+) -> dict:
     event = db.get(Event, event_id)
     assert event is not None
+    settings = event_settings(event)
+    plans_out = []
+    for sp in song_plans or []:
+        s = _song(event, sp.get("song"))
+        plan = [int(h) for h in sp.get("plan") or []]
+        plans_out.append(
+            {
+                "song": s.code,
+                "song_name": s.name,
+                "current": plan_text(song_durations(s, settings)),
+                "suggested": plan_text(plan),
+                "plan": plan,
+                "note": str(sp.get("note") or ""),
+            }
+        )
     items = [
         {**c, "kind_label": KIND_LABELS.get(c.get("kind", ""), c.get("kind")), "description": describe_change(event, c)} for c in changes
     ]
     problem = scenario_problem(db, event_id, changes)
     check = evaluate(problem, stage_seconds=FINAL_STAGE_SECONDS, workers=workers)
-    return {"summary": summary, "changes": items, "check": check}
+    return {"summary": summary, "changes": items, "check": check, "song_plans": plans_out}
 
 
 def run_advisor(database_url: str, run_id: int, workers: int = 0, model: str = "claude-opus-5-5") -> None:
@@ -553,10 +659,29 @@ def run_advisor(database_url: str, run_id: int, workers: int = 0, model: str = "
                                 with_diagnosis=bool(args.get("with_diagnosis")),
                             )
                             say("result", "全部排完" if out.get("全部排完") else str(out.get("最多能排") or out.get("说明") or "无解"))
+                        elif tu.name == "try_session_plans":
+                            if not say("tool", f"试算曲目 {args.get('song')} 的不同场次方案"):
+                                return
+                            out = try_session_plans(
+                                db,
+                                event_id,
+                                str(args.get("song")),
+                                args.get("plans"),
+                                list(args.get("base_changes") or []),
+                                stage_seconds=EVAL_STAGE_SECONDS,
+                                workers=n_workers,
+                            )
+                            ok = [r["说明"] for r in out["试算"] if str(r["结果"]).startswith("全部排完")]
+                            say("result", f"{out['曲目']}:" + (f"{'、'.join(ok)} 可全部排完" if ok else "试过的方案都排不完"))
                         elif tu.name == "submit_proposal":
                             say("tool", "复核最终方案")
                             proposal = _proposal_out(
-                                db, event_id, list(args.get("changes") or []), str(args.get("summary") or ""), n_workers
+                                db,
+                                event_id,
+                                list(args.get("changes") or []),
+                                str(args.get("summary") or ""),
+                                n_workers,
+                                list(args.get("song_plans") or []),
                             )
                             out = {"已提交": True, "复核结果": proposal["check"]}
                         else:

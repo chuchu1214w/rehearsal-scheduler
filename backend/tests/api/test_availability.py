@@ -64,5 +64,8 @@ def test_admin_proxy_fill_and_overview(app, admin: TestClient):
     assert heat["member_count"] == 2 and heat["submitted_count"] == 2
     assert heat["heat"]["2026-09-04"] == [1, 1, 1, 1, 1, 2, 2, 2, 2, 1, 1, 1, 1]
     assert heat["heat"]["2026-09-05"] == [0] * 13
+    # 热力图点格子看谁有空、按曲目算共同空闲用的数据
+    assert heat["availability"]["菁"]["2026-09-04"] == "0000011110000" and heat["availability"]["菁"]["2026-09-05"] == ""
+    assert heat["songs"] == []
     members = admin.get(f"/api/events/{ev['id']}/members").json()
     assert next(x for x in members if x["member_id"] == a["id"])["availability_filled_by"] == "admin"

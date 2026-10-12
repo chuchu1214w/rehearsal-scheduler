@@ -188,6 +188,9 @@ export interface Heat {
   member_count: number
   submitted_count: number
   heat: Record<string, number[]>
+  /** 成员昵称 -> 日期 -> 每格状态('0' 没空 / '1' 有空 / '2' 尽量避开) */
+  availability: Record<string, Record<string, string>>
+  songs: { code: string; name: string; members: string[]; durations: number[] }[]
 }
 
 export interface PrecheckItem {
@@ -412,6 +415,7 @@ export interface AdvisorRun {
   proposal: {
     summary: string
     changes: AdvisorChange[]
+    song_plans?: { song: string; song_name: string; current: string; suggested: string; plan: number[]; note: string }[]
     check: { 全部排完?: boolean; 使用层级?: string; 缺席场次?: number; 最多能排?: string; 排不上的场次?: string[]; 说明?: string; 注意?: string; 数据问题?: string[] }
   } | null
   applied: number[]

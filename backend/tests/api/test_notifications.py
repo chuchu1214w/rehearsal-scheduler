@@ -134,6 +134,7 @@ def test_rule_conflict_warning_and_objectives(admin: TestClient):
 
     # 优化目标顺序可配置
     objs = admin.get("/api/objectives").json()
+    assert "missing" not in {o["key"] for o in objs}  # 部分排程内部目标不可选
     assert {o["key"] for o in objs} >= {"absent", "trips", "hard_early"} and next(o for o in objs if o["key"] == "hard_early")[
         "default_on"
     ] is False

@@ -53,7 +53,7 @@ def store_result(db: Session, job: SolveJob, problem: Problem, result: SolveResu
             job_id=job.id,
             status="draft",
             level_used=result.level_used,
-            exact_optimum=result.exact,
+            exact_optimum=result.exact and result.feasible,  # 部分排程不算最优解
             objective_values=dict(result.objective_values),
             stage_records=job.stage_records,
             validation_errors=list(result.validation_errors),
@@ -92,8 +92,8 @@ def store_result(db: Session, job: SolveJob, problem: Problem, result: SolveResu
             # 无解但先排出了能排的场次:任务仍记为无解,草稿供查看与手动补排
             job.status = "infeasible"
             job.diagnosis = {**(result.diagnosis or {}), "部分排程": {"版本号": next_no, "未排": list(result.unscheduled)}}
-            missing = len(result.unscheduled)
-            job.summary = summarize_diagnosis(result.diagnosis) + f";已先把能排的场次存为草稿 v{next_no}(允许缺席时还差 {missing} 场)"
+            missing = f"{'允许缺席时' if result.level_used else ''}还差 {len(result.unscheduled)} 场"
+            job.summary = summarize_diagnosis(result.diagnosis) + f";已先把能排的场次存为草稿 v{next_no}({missing})"
         else:
             job.status = "succeeded"
             level = f"层级 L{result.level_used}" if result.level_used is not None else ""

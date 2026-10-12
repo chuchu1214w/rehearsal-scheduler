@@ -493,6 +493,9 @@ class HeatOut(BaseModel):
     member_count: int
     submitted_count: int
     heat: dict[str, list[int]]  # 日期 -> 每格可排人数(只统计已提交的成员)
+    # 热力图点格子看“谁有空”、按曲目算共同空闲用(仅管理员):成员昵称 -> 日期 -> 每格状态 0/1/2
+    availability: dict[str, dict[str, str]] = {}
+    songs: list[dict] = []  # [{code, name, members: [昵称], durations: [小时]}]
 
 
 class PrecheckItem(BaseModel):

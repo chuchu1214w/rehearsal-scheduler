@@ -1106,6 +1106,76 @@ summary {
   color: var(--muted);
 }
 
+.heat__cell {
+  font: inherit;
+  font-size: 10px;
+  min-height: 22px;
+  border: 0;
+  border-radius: 4px;
+  padding: 0;
+  color: var(--accent);
+  cursor: pointer;
+}
+
+.heat__cell.is-all {
+  box-shadow: inset 0 0 0 2px var(--navy);
+  font-weight: 600;
+}
+
+.heat__cell.is-picked {
+  outline: 2px solid var(--orange);
+  outline-offset: 1px;
+}
+
+.heat-filter {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  margin-top: 6px;
+}
+
+.heat-filter select {
+  max-width: 100%;
+}
+
+.heat-filter .muted {
+  font-size: 11px;
+}
+
+.heat-who,
+.heat-common {
+  margin-top: 14px;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  font-size: 13px;
+  line-height: 1.7;
+}
+
+.heat-common ul {
+  list-style: none;
+  margin: 6px 0;
+  padding: 0;
+  display: grid;
+  gap: 4px;
+}
+
+.heat-common li {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+}
+
+.heat-common__range {
+  color: var(--muted);
+}
+
+.heat-common__range.is-long {
+  color: var(--ink);
+  font-weight: 600;
+}
+
 .heat-nav {
   display: flex;
   justify-content: space-between;

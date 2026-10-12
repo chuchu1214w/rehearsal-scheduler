@@ -69,4 +69,5 @@ def run_reminders_now(db: DB, _admin: AdminUser, settings: SettingsDep) -> Unrea
 
 @router.get("/objectives", response_model=list[ObjectiveOut])
 def list_objectives(_admin: AdminUser) -> list[ObjectiveOut]:
-    return [ObjectiveOut(key=k, label=v, default_on=k in DEFAULT_OBJECTIVES) for k, v in OBJECTIVE_LABELS.items()]
+    # “尽量多排场次”只在无解时的部分排程内部使用,不能选
+    return [ObjectiveOut(key=k, label=v, default_on=k in DEFAULT_OBJECTIVES) for k, v in OBJECTIVE_LABELS.items() if k != "missing"]
