@@ -95,7 +95,8 @@ export function WeekView({
         {order.map((code) => (
           <span key={code}>
             <i style={{ background: songColor(code, order).bg }} />
-            {code} {names.get(code)}
+            {code}
+            {names.get(code) && names.get(code) !== code ? ` ${names.get(code)}` : ''}
           </span>
         ))}
         <span>

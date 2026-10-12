@@ -1954,11 +1954,57 @@ details.diag > *:not(summary) {
   user-select: none;
 }
 
+.weekgrid {
+  --hours-w: 30px;
+  --empty-w: 30px;
+}
+
 @media (min-width: 900px) {
   .weekgrid {
-    --row-h: 44px;
-    grid-template-columns: 40px repeat(7, minmax(0, 1fr));
+    --row-h: 48px;
+    --hours-w: 40px;
+    --empty-w: 40px;
     gap: 0 4px;
+  }
+}
+
+/* 没有排练的日期:细列 */
+.weekgrid__col.is-empty {
+  background: transparent;
+  border-style: dashed;
+  border-color: color-mix(in srgb, var(--line) 50%, transparent);
+}
+
+.weekgrid__day.is-empty {
+  color: var(--line);
+}
+
+.weekgrid__day.is-empty b {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--muted);
+}
+
+/* 参演成员名单:只在电脑端显示 */
+.weekgrid__names {
+  display: none;
+  font-style: normal;
+  font-size: 11px;
+  line-height: 1.35;
+  margin-top: 2px;
+  opacity: 0.9;
+  overflow: hidden;
+  word-break: break-all;
+}
+
+.weekgrid__absent {
+  font-style: normal;
+  opacity: 0.75;
+}
+
+@media (min-width: 900px) {
+  .weekgrid__names {
+    display: block;
   }
 }
 
@@ -2594,7 +2640,8 @@ body:has(.shell-member)::before {
   /* 紧凑周日历 */
   .weekgrid {
     --row-h: 30px;
-    grid-template-columns: 22px repeat(7, minmax(0, 1fr));
+    --hours-w: 22px;
+    --empty-w: 18px;
     gap: 0 2px;
   }
 

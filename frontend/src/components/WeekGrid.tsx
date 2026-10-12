@@ -140,23 +140,33 @@ export function WeekGrid({
     }
   }
 
+  // 没有排练的日期收窄成细列(仍可作为拖动目标),把宽度让给有排练的日子
+  const busy = days.map((d) => (byDay.get(d)?.length ?? 0) > 0)
+  const collapse = busy.some(Boolean)
+  const columns = `var(--hours-w) ${days.map((_, i) => (collapse && !busy[i] ? 'var(--empty-w)' : 'minmax(0, 1fr)')).join(' ')}`
+
   return (
-    <div ref={gridRef} className={'weekgrid' + (editable ? ' is-editable' : '')} style={{ ['--rows' as string]: hours }}>
+    <div
+      ref={gridRef}
+      className={'weekgrid' + (editable ? ' is-editable' : '')}
+      style={{ ['--rows' as string]: hours, gridTemplateColumns: columns }}
+    >
       <div className="weekgrid__corner" />
       {days.map((d) => {
         const inRange = d >= rangeStart && d <= rangeEnd
         const n = byDay.get(d)?.length ?? 0
+        const empty = collapse && n === 0
         return (
           <button
             key={d}
             type="button"
-            className={'weekgrid__day' + (d === today ? ' is-today' : '') + (inRange ? '' : ' is-off')}
+            className={'weekgrid__day' + (d === today ? ' is-today' : '') + (inRange ? '' : ' is-off') + (empty ? ' is-empty' : '')}
             onClick={() => onDateClick?.(d)}
             disabled={!onDateClick}
             aria-label={`${dayjs(d).format('M月D日')} 周${WEEKDAYS[(dayjs(d).day() + 6) % 7]}${n ? `,${n} 场` : ''}`}
           >
-            <span>周{WEEKDAYS[(dayjs(d).day() + 6) % 7]}</span>
-            <b>{dayjs(d).format('M/D')}</b>
+            <span>{empty ? '' : '周'}{WEEKDAYS[(dayjs(d).day() + 6) % 7]}</span>
+            <b>{dayjs(d).format(empty ? 'D' : 'M/D')}</b>
           </button>
         )
       })}
@@ -170,7 +180,7 @@ export function WeekGrid({
         const lanes = assignLanes(list)
         const laneCount = Math.max(1, ...lanes.map((l) => l.lanes))
         return (
-          <div key={d} className={'weekgrid__col' + (d >= rangeStart && d <= rangeEnd ? '' : ' is-off')}>
+          <div key={d} className={'weekgrid__col' + (d >= rangeStart && d <= rangeEnd ? '' : ' is-off') + (collapse && list.length === 0 ? ' is-empty' : '')}>
             {list.map((s, i) => {
               const c = songColor(s.kind === 'evaluation' ? null : s.song_code, songOrder)
               const involved = focusMemberId == null || s.kind === 'evaluation' || s.members.some((m) => m.id === focusMemberId)
@@ -218,6 +228,16 @@ export function WeekGrid({
                   </b>
                   {/* 代号与名称相同时不重复显示 */}
                   {(s.kind === 'evaluation' || s.song_name !== s.song_code) && <span>{s.kind === 'evaluation' ? '全员' : s.song_name}</span>}
+                  {/* 电脑端直接显示参演成员;缺席的单独标出 */}
+                  {s.kind === 'formal' && (
+                    <em className="weekgrid__names">
+                      {s.members
+                        .filter((m) => !s.absent.some((a) => a.id === m.id))
+                        .map((m) => m.display_name)
+                        .join('、')}
+                      {s.absent.length > 0 && <i className="weekgrid__absent"> · 缺 {s.absent.map((m) => m.display_name).join('、')}</i>}
+                    </em>
+                  )}
                   {laneCount === 1 && (
                     <small>
                       <span className="weekgrid__time-full">{s.time}</span>
