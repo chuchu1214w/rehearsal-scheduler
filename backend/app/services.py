@@ -466,6 +466,17 @@ def serialize_job(job: SolveJob) -> JobOut:
     )
 
 
+def _ordinal(s: RehearsalSession) -> int | None:
+    """同一首曲目在本版里按日期、时间排序后的序号(手动增删场次后编号仍连续)。"""
+    if s.kind != "formal" or s.song_id is None or s.version is None:
+        return s.task_no
+    mine = sorted(
+        (x for x in s.version.sessions if x.kind == "formal" and x.song_id == s.song_id),
+        key=lambda x: (x.date, x.start_slot, x.task_no or 0),
+    )
+    return next((i for i, x in enumerate(mine, 1) if x is s), s.task_no)
+
+
 def serialize_session(event: Event, s: RehearsalSession) -> SessionOut:
     config = event_config(event)
     names = {p.member_id: p.member.display_name for p in event.participants}
@@ -486,7 +497,8 @@ def serialize_session(event: Event, s: RehearsalSession) -> SessionOut:
         song_id=s.song_id,
         song_code=song_code,
         song_name=song_name,
-        task_no=s.task_no,
+        task_no=_ordinal(s),
+        task_key=s.task_no,
         date=s.date,
         weekday=weekday_zh(s.date),
         start_slot=s.start_slot,

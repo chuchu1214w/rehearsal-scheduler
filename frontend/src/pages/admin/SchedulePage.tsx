@@ -3,7 +3,7 @@ import { useState } from 'react'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 
 import { ApiError, api } from '../../api/client'
-import { keys, useAction, useConflicts, useDiff, useEvent, useEventMembers, useInvalidateEvent, useVersion, useVersions } from '../../api/hooks'
+import { keys, useAction, useConflicts, useDiff, useEvent, useEventMembers, useInvalidateEvent, useSongs, useVersion, useVersions } from '../../api/hooks'
 import type { DiffItem, EditResult, ScheduleSession, ScheduleVersion, ScheduleVersionDetail } from '../../api/types'
 import { MemberTable, SessionsByDate, WeekView, sessionsForMember, songOrderOf } from '../../components/ScheduleViews'
 import { renderScheduleImage, shareImage } from '../../share'
@@ -30,6 +30,7 @@ export function SchedulePage() {
   const [jumpDate, setJumpDate] = useState<string | null>(null)
   const ev = useEvent(id)
   const members = useEventMembers(id)
+  const songs = useSongs(id)
   const versions = useVersions(id)
   const list = versions.data ?? []
   const requested = Number(params.get('v'))
@@ -52,6 +53,8 @@ export function SchedulePage() {
 
   const afterEdit = (r: EditResult, what: string) => {
     qc.setQueryData(keys.version(r.version.id), r.version)
+    // 复制出了新草稿:先放进版本列表缓存,页面立刻切到它(不等列表重新请求,免得短暂落到别的草稿上)
+    if (r.forked) qc.setQueryData<ScheduleVersion[]>(keys.versions(id), (old) => (old && !old.some((v) => v.id === r.version.id) ? [r.version, ...old] : old))
     invalidate(id)
     if (r.forked) setQuery({ v: String(r.version.id), diff: String(r.version.parent_version_id ?? '') })
     const extra = r.warnings.length ? `;${r.warnings.join('、')}` : ''
@@ -73,6 +76,20 @@ export function SchedulePage() {
   const move = useAction(
     (vars: { vid: number; s: ScheduleSession; date: string; start: number }) => edit(vars.vid, 'ops/move', { session_id: vars.s.id, date: vars.date, start_slot: vars.start }),
     (r, vars) => afterEdit(r, `已移动 ${vars.s.song_code} 到 ${fmtMd(vars.date)}`),
+  )
+  const resize = useAction(
+    (vars: { vid: number; s: ScheduleSession; start: number; duration: number }) =>
+      edit(vars.vid, 'ops/resize', { session_id: vars.s.id, start_slot: vars.start, duration_slots: vars.duration }),
+    (r, vars) => afterEdit(r, `已把 ${vars.s.song_code} 调整为 ${vars.duration} 小时`),
+  )
+  const addSession = useAction(
+    (vars: { vid: number; songId: number; date: string; start: number; duration: number }) =>
+      edit(vars.vid, 'ops/add', { song_id: vars.songId, date: vars.date, start_slot: vars.start, duration_slots: vars.duration }),
+    (r, vars) => afterEdit(r, `已新建 ${fmtMd(vars.date)} 的排练`),
+  )
+  const deleteSession = useAction(
+    (vars: { vid: number; s: ScheduleSession }) => edit(vars.vid, 'ops/delete', { session_id: vars.s.id }),
+    (r, vars) => afterEdit(r, `已删除 ${vars.s.song_code} 第 ${vars.s.task_no} 场(可撤销)`),
   )
   const swap = useAction(
     (vars: { vid: number; a: ScheduleSession; b: ScheduleSession }) => edit(vars.vid, 'ops/swap', { a: vars.a.id, b: vars.b.id }),
@@ -105,7 +122,17 @@ export function SchedulePage() {
     },
   )
   const publish = useAction(
-    (vid: number) => api<ScheduleVersion>(`/api/schedules/${vid}/publish`, { method: 'POST', json: { expected_revision: detail.data?.revision ?? null } }),
+    async (vid: number) => {
+      try {
+        return await api<ScheduleVersion>(`/api/schedules/${vid}/publish`, { method: 'POST', json: { expected_revision: detail.data?.revision ?? null } })
+      } catch (err) {
+        // 发布被拦下(有冲突 / 期间被改过):刷新这一版,让冲突显示出来
+        setConfirm(null)
+        void qc.invalidateQueries({ queryKey: keys.version(vid) })
+        void qc.invalidateQueries({ queryKey: keys.versions(id) })
+        throw err
+      }
+    },
     (v) => {
       setConfirm(null)
       invalidate(id)
@@ -149,14 +176,17 @@ export function SchedulePage() {
   const current = list.find((v) => v.id === selectedId) ?? list[0]
   const issues = detail.data?.issues ?? []
   const conflictIds = new Set(issues.flatMap((i) => i.session_ids))
-  const canPublish = current.status !== 'published' && current.validation_errors.length === 0 && issues.length === 0
+  // 以实时检查为准(保存的 validation_errors 可能是旧规则下的结果);详情还没载入时不允许发布
+  const canPublish = current.status !== 'published' && detail.data?.issues !== undefined && issues.length === 0
   const editable = current.status !== 'archived'
   const sessions = detail.data ? sessionsForMember(detail.data.sessions, memberFilter) : []
   const range = { formal_start_date: e.formal_start_date, formal_end_date: e.formal_end_date, eval_date: e.eval_date, day_start_hour: e.day_start_hour, day_end_hour: e.day_end_hour }
   const dayUrl = (date: string) => `/events/${e.id}/schedule/day/${date}?v=${current.id}${memberFilter != null ? `&m=${memberFilter}` : ''}`
   const others = list.filter((v) => v.id !== current.id)
   const conflictItems = conflicts.data?.items ?? []
-  const busy = move.isPending || lock.isPending || swap.isPending || undoRedo.isPending
+  const busy = move.isPending || lock.isPending || swap.isPending || undoRedo.isPending || resize.isPending || addSession.isPending || deleteSession.isPending
+  const skipped = new Set(current.skipped_songs)
+  const songChoices = (songs.data?.songs ?? []).filter((x) => !skipped.has(x.code)).map((x) => ({ id: x.id, code: x.code, name: x.name }))
 
   // 一键把这一版画成长图,交给系统分享面板(可选微信)
   const onShare = async () => {
@@ -213,12 +243,11 @@ export function SchedulePage() {
           </span>
         </div>
         {current.skipped_songs.length > 0 && <Note tone="warning">这一版跳过了曲目 {current.skipped_songs.join('、')}(求解时参演人员尚未全部提交空闲)。</Note>}
-        {(issues.length > 0 || current.validation_errors.length > 0) && (
+        {issues.length > 0 && (
           <Note tone="error">
-            <b>有 {issues.length || current.validation_errors.length} 处冲突,解决前不能发布</b>(日历里标红;点一条跳到那一周)
+            <b>有 {issues.length} 处冲突,解决前不能发布</b>(日历里标红;点一条跳到那一周)
             <ul className="issue-list">
-              {issues.length > 0
-                ? issues.map((x, k) => {
+              {issues.map((x, k) => {
                     const first = detail.data?.sessions.find((s2) => x.session_ids.includes(s2.id))
                     return (
                       <li key={k}>
@@ -234,8 +263,17 @@ export function SchedulePage() {
                         </button>
                       </li>
                     )
-                  })
-                : current.validation_errors.map((x, k) => <li key={k}>{x}</li>)}
+                  })}
+            </ul>
+          </Note>
+        )}
+        {(detail.data?.notices?.length ?? 0) > 0 && (
+          <Note>
+            <b>提醒(不影响发布):</b>
+            <ul className="issue-list">
+              {detail.data!.notices!.map((x, k) => (
+                <li key={k}>{x}</li>
+              ))}
             </ul>
           </Note>
         )}
@@ -356,6 +394,10 @@ export function SchedulePage() {
             editable={editable && !busy}
             onMove={(s, date, start) => move.mutate({ vid: current.id, s, date, start })}
             onSwap={(a, b) => swap.mutate({ vid: current.id, a, b })}
+            onResize={(s, start, duration) => resize.mutate({ vid: current.id, s, start, duration })}
+            onDelete={(s) => deleteSession.mutate({ vid: current.id, s })}
+            onCreate={(v) => addSession.mutate({ vid: current.id, songId: v.songId, date: v.date, start: v.startSlot, duration: v.durationSlots })}
+            songs={songChoices}
             conflictIds={conflictIds}
             jumpDate={jumpDate}
             onLock={(s, locked) => lock.mutate({ vid: current.id, s, locked })}

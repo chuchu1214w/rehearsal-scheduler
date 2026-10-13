@@ -202,7 +202,7 @@ function ResultPanel({ job, eventId, evalDate }: { job: SolveJob; eventId: numbe
           )}
           {job.version_id != null && (
             <Note>
-              能排的场次已先存为草稿,可以在排练表里查看{job.diagnosis?.部分排程?.未排?.length ? `;还没排上:${job.diagnosis.部分排程.未排.join('、')}` : ''}。补齐前这一版不能发布。
+              能排的场次已先存为草稿,可以在排练表里查看{job.diagnosis?.部分排程?.未排?.length ? `;还没排上:${job.diagnosis.部分排程.未排.join('、')}` : ''}。可以在排练表里手动补上缺的场次,也可以直接发布。
             </Note>
           )}
           {job.diagnosis && <DiagnosisView d={job.diagnosis} evalDate={evalDate} />}

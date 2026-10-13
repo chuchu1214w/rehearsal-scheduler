@@ -62,9 +62,11 @@ def test_ladder_exhausted_returns_diagnosis(problem):
     result = solve(problem)
     assert not result.feasible
     assert result.diagnosis is not None
-    # 部分排程:在最宽松层级下 B 只能缺席 1 场,于是只差 2 场;排上的场次除“场次不足”外不违反任何约束
-    assert result.partial and result.level_used == 2 and len(result.unscheduled) == 2
-    assert result.validation_errors and all(e.startswith("V-03") for e in result.validation_errors)
+    # 部分排程与校验器口径一致(按实际排上的场次算缺席上限与「每首至少 1 场全员到齐」):
+    # 每场都必须 B 缺席,任何一场单独排上都会违反「全员到齐」,所以正规排练一场也排不上,只剩评估场
+    assert result.partial and result.level_used == 2 and len(result.unscheduled) == 3
+    assert result.validation_errors == []  # 排上的部分不违反任何硬约束;场数不足只作提醒
+    assert any(w.startswith("V-03") and "少" in w for w in result.warnings)
     assert set(result.diagnosis["无候选任务"]) == {"s1_1", "s1_2", "s2_1"}
     adj = result.diagnosis["最小调整建议"]
     assert adj["可行"] and adj["受影响成员数"] == 1 and adj["调整小时数"] == 7

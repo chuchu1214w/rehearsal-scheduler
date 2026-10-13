@@ -138,7 +138,7 @@ export function MemberScheduleDayPage() {
       </div>
       <p className="lead">{d.event_name}</p>
       <Panel>
-        <DayView date={date} sessions={sessions} range={d} memberId={scope === 'mine' ? d.my_member_id : null} onNavigate={(x) => navigate(`/schedule/day/${x}${query ? `?${query}` : ''}`)} />
+        <DayView date={date} sessions={sessions} allSessions={d.sessions} range={d} memberId={scope === 'mine' ? d.my_member_id : null} onNavigate={(x) => navigate(`/schedule/day/${x}${query ? `?${query}` : ''}`)} />
       </Panel>
     </>
   )

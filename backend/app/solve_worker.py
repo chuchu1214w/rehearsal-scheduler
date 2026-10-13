@@ -18,9 +18,73 @@ from solver.validator import compute_metrics
 
 from .db import make_engine, make_session_factory
 from .models import Event, RehearsalSession, ScheduleVersion, SolveJob
+from .operations import _live_report as live_report
+from .operations import _readable as readable
 from .schedule_edit import copy_locations, copy_locks, locked_fixed_sessions
 from .services import event_problem, published_version, ready_song_codes, summarize_diagnosis
 from .utils import utcnow
+
+# 锁定场次自身的时间类冲突:窗口 / 禁排、成员没空、成员重叠、单日上限、同曲同天
+LOCKED_CHECK_CODES = {"V-01", "V-02", "V-04", "V-05", "V-06"}
+
+
+def _locked_in(row, codes: set[str]) -> bool:  # noqa: ANN001
+    """本次重排要保留的锁定正规场次。"""
+    return row.locked and row.kind == "formal" and row.song is not None and row.song.code in codes
+
+
+def keep_adjusted_durations(problem: Problem, base: ScheduleVersion, rule_fixed: tuple = ()) -> tuple:
+    """锁定后重排:锁定的场次原样保留,其余按曲目当前的场次方案重排。
+
+    求解器要求每个固定场次(锁定的场次、「固定场次」要求)都对应方案里一个同样时长的任务。管理员可能手动
+    拉长 / 缩短、增删过场次,对不上时只对涉及的曲目调整方案(保持任务顺序):
+    1. 锁定场次占用它原来的那一场;时长不同时把那一场改成它的时长(拉长 / 缩短的情况);
+    2. 其余(加出来的场次、「固定场次」要求)先找时长相同的剩余任务,再替换时长最接近的;
+    3. 方案里没有剩余任务时再加一场(加场后锁定的情况)。
+    没有固定场次的曲目完全按当前方案(包括求解后才改的方案)。
+    """
+    needs: dict[str, list[tuple[int, int | None]]] = {}  # 曲目 → [(时长, 原来第几场)]
+    seen: set[tuple] = set()
+    for s in base.sessions:
+        if s.kind == "formal" and s.locked and s.song is not None:
+            needs.setdefault(s.song.code, []).append((s.duration_slots, s.task_no))
+            seen.add((s.song.code, s.date, s.start_slot, s.duration_slots))
+    for fx in rule_fixed:
+        if (fx.song_code, fx.date, fx.start, fx.duration) not in seen:
+            needs.setdefault(fx.song_code, []).append((fx.duration, None))
+    out = []
+    for song in problem.songs:
+        want = needs.get(song.code)
+        if not want:
+            out.append(song)
+            continue
+        plan = list(song.durations(problem.config))
+        slots = list(plan)
+        used = [False] * len(slots)
+        pending = []
+        # 1) 锁定场次先占它原来那一场(时长不同就把那一场改成它的时长:拉长 / 缩短的情况)
+        for d, hint in sorted(want, key=lambda w: w[1] is None):
+            if hint and 0 < hint <= len(slots) and not used[hint - 1]:
+                slots[hint - 1] = d
+                used[hint - 1] = True
+            else:
+                pending.append(d)
+        # 2) 其余(加出来的场次、「固定场次」要求):先找时长相同的剩余任务,再替换时长最接近的,都没有就加一场
+        for d in pending:
+            free = [k for k in range(len(slots)) if not used[k]]
+            same = [k for k in free if slots[k] == d]
+            if same:
+                idx = same[0]
+            elif free:
+                idx = min(free, key=lambda k: (abs(slots[k] - d), k))
+                slots[idx] = d
+            else:
+                slots.append(d)
+                used.append(True)
+                continue
+            used[idx] = True
+        out.append(replace(song, session_plan=tuple(slots)) if slots != plan else song)
+    return tuple(out)
 
 
 def _mark_failed(db: Session, job_id: int, message: str) -> None:
@@ -127,9 +191,28 @@ def run_job(database_url: str, job_id: int, workers: int = 0) -> None:
             base_id = (job.options or {}).get("base_version_id")
             base = db.get(ScheduleVersion, base_id) if base_id else None
             if base is not None:
-                fixed = locked_fixed_sessions(event, base)
+                codes_in = {s.code for s in problem.songs}
+                # 锁定的场次本身有硬冲突(草稿允许暂存冲突)就无法原样保留:先说清楚是哪几场。
+                # 只看「只涉及本次要排的锁定场次」的时间类冲突;场数 / 缺席上限这类与整版场次数有关的,重排后会重新满足
+                rows, report = live_report(event, base)
+                stuck = [
+                    readable(i.message)
+                    for i in report.issues
+                    if i.message.split(" ", 1)[0] in LOCKED_CHECK_CODES
+                    and i.sessions
+                    and all(_locked_in(rows[k], codes_in) for k in i.sessions)
+                ]
+                if stuck:
+                    msg = "锁定的场次本身有冲突,重排无法原样保留:" + ";".join(stuck[:3]) + "。请先解锁或调整这些场次。"
+                    _mark_failed(db, job_id, msg)
+                    return
+                fixed_all = locked_fixed_sessions(event, base)
+                fixed = tuple(f for f in fixed_all if f.song_code in codes_in)  # 跳过的曲目(未就绪)不参与重排
+                problem.songs = keep_adjusted_durations(problem, base, problem.rules.fixed_sessions)
                 problem.rules = replace(problem.rules, fixed_sessions=problem.rules.fixed_sessions + fixed)
-                job.progress = f"保留 {len(fixed)} 场锁定,重排其余"
+                skipped_locked = len(fixed_all) - len(fixed)
+                extra = f"(另有 {skipped_locked} 场属于本次跳过的曲目)" if skipped_locked else ""
+                job.progress = f"保留 {len(fixed)} 场锁定,重排其余{extra}"
                 db.commit()
             errors, _warnings = problem.validate()
             if errors:

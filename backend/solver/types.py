@@ -220,7 +220,7 @@ class LadderLevel:
         return self.max_absent_ratio <= 0
 
     def max_absent_sessions(self, n_tasks: int) -> int:
-        return max(0, int(n_tasks * self.max_absent_ratio))
+        return max(0, int(n_tasks * self.max_absent_ratio + 1e-9))  # 避免 100 × 0.29 = 28.999… 这类浮点误差
 
 
 DEFAULT_LADDER: tuple[LadderLevel, ...] = (

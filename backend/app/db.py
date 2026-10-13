@@ -44,6 +44,51 @@ def _migrate_10_to_11(engine: Engine) -> None:
             conn.execute(text("ALTER TABLE schedule_versions ADD COLUMN revision INTEGER NOT NULL DEFAULT 0"))
 
 
+def _migrate_11_to_12(engine: Engine) -> None:
+    """场次增加固定身份 uid(数据库 id 在删除后撤销时会变,SQLite 还会复用刚删掉的 id)。
+    早期的修改记录只存了数据库 id;此前没有删除操作,记录引用的场次都还在:按 id 补上 uid 与身份。"""
+    import json
+    import uuid
+
+    with engine.begin() as conn:
+        cols = {row[1] for row in conn.execute(text("PRAGMA table_info(rehearsal_sessions)"))}
+        if "uid" not in cols:
+            conn.execute(text("ALTER TABLE rehearsal_sessions ADD COLUMN uid VARCHAR(32)"))
+            conn.execute(text("CREATE INDEX IF NOT EXISTS ix_rehearsal_sessions_uid ON rehearsal_sessions (uid)"))
+        for (sid,) in conn.execute(text("SELECT id FROM rehearsal_sessions WHERE uid IS NULL")).all():
+            conn.execute(text("UPDATE rehearsal_sessions SET uid = :u WHERE id = :i"), {"u": uuid.uuid4().hex, "i": sid})
+        tables = {row[0] for row in conn.execute(text("SELECT name FROM sqlite_master WHERE type='table'"))}
+        if "schedule_operations" not in tables:
+            return
+        for op_id, raw in conn.execute(text("SELECT id, changes FROM schedule_operations")).all():
+            changes = json.loads(raw) if isinstance(raw, str) else (raw or [])
+            dirty = False
+            for c in changes:
+                if "uid" in c or "session_id" not in c:
+                    continue
+                row = conn.execute(
+                    text("SELECT kind, song_id, task_no, uid FROM rehearsal_sessions WHERE id = :i"), {"i": c["session_id"]}
+                ).first()
+                if row is not None:
+                    c.setdefault("key", {"kind": row[0], "song_id": row[1], "task_no": row[2]})
+                    c["uid"] = row[3]
+                    dirty = True
+            if dirty:
+                conn.execute(
+                    text("UPDATE schedule_operations SET changes = :c WHERE id = :i"),
+                    {"c": json.dumps(changes, ensure_ascii=False), "i": op_id},
+                )
+        # 「场次数 / 时长与方案不符」改为只提醒:清掉各版本里按旧规则保存的这类错误,否则会挡住发布
+        for vid, raw in conn.execute(text("SELECT id, validation_errors FROM schedule_versions")).all():
+            errors = json.loads(raw) if isinstance(raw, str) else (raw or [])
+            kept = [e for e in errors if not (str(e).startswith("V-03 曲目") and "与方案" in str(e))]
+            if kept != errors:
+                conn.execute(
+                    text("UPDATE schedule_versions SET validation_errors = :e WHERE id = :i"),
+                    {"e": json.dumps(kept, ensure_ascii=False), "i": vid},
+                )
+
+
 MIGRATIONS: dict[int, Callable[[Engine], None]] = {
     2: lambda engine: None,  # 2 → 3:新增 solve_jobs / schedule_versions / rehearsal_sessions
     3: _migrate_3_to_4,  # 3 → 4:users.calendar_token
@@ -54,6 +99,7 @@ MIGRATIONS: dict[int, Callable[[Engine], None]] = {
     8: _migrate_8_to_9,  # 8 → 9:native_push_tokens.env
     9: lambda engine: None,  # 9 → 10:新增 advisor_runs(create_all 已建)
     10: _migrate_10_to_11,  # 10 → 11:schedule_versions.revision;新增 schedule_operations
+    11: _migrate_11_to_12,  # 11 → 12:场次固定身份 uid;早期修改记录补上;清掉旧规则下的「场数不符」错误
 }
 
 

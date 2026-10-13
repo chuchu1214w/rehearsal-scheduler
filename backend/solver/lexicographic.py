@@ -150,7 +150,7 @@ def solve_partial(
     for t in bundle.tasks:
         if last.value(bundle.scheduled[t.task_id]) == 0:
             song = problem.song(t.song_code)
-            unscheduled.append(f"{song.code}({song.name})第 {t.task_no} 场 · {t.duration} 小时")
+            unscheduled.append(f"{song.code}({song.name})一场 {t.duration} 小时")
     return sessions, unscheduled, records, exact, level.level
 
 
@@ -213,7 +213,7 @@ def solve(problem: Problem, opts: SolveOptions | None = None) -> SolveResult:
                 if eval_choice is not None:
                     sessions.append(eval_choice.to_session(problem))
                 report = validate_schedule(problem, sessions, problem.ladder[-1])
-                # 场次数不足(V-03)会保留在校验问题里,使这一版在补齐前不能发布
+                # 场次数不足(V-03)只作提醒;其余硬问题照常保留
                 errors_ = list(report.errors)
                 warnings.extend(report.warnings)
         return SolveResult(

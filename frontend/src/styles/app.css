@@ -2832,3 +2832,66 @@ body:has(.shell-member)::before {
   color: var(--muted);
   text-decoration: line-through;
 }
+
+/* ---------- 拉长 / 缩短、新建 ---------- */
+.weekgrid__handle {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 8px;
+  z-index: 2;
+  cursor: ns-resize;
+}
+
+.weekgrid__handle--top {
+  top: -1px;
+}
+
+.weekgrid__handle--bottom {
+  bottom: -1px;
+}
+
+.weekgrid__handle::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  width: 18px;
+  height: 3px;
+  margin-left: -9px;
+  border-radius: 2px;
+  background: currentColor;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+
+.weekgrid__handle--top::after {
+  top: 2px;
+}
+
+.weekgrid__handle--bottom::after {
+  bottom: 2px;
+}
+
+.weekgrid__block.is-draggable:hover .weekgrid__handle::after,
+.weekgrid__handle:hover::after {
+  opacity: 0.45;
+}
+
+@media (pointer: coarse) {
+  .weekgrid__handle {
+    height: 9px;
+  }
+
+  /* 手机上 1 小时的色块太矮:只留下边缘的手柄,其余部分用来拖动(也可在详情里 ±1 小时) */
+  .weekgrid__block.is-short .weekgrid__handle--top {
+    display: none;
+  }
+
+  .weekgrid__handle::after {
+    opacity: 0.35;
+  }
+}
+
+.weekgrid__col.is-creatable {
+  cursor: cell;
+}

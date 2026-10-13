@@ -99,6 +99,9 @@ def update_song(song_id: int, body: SongPatch, db: DB, admin: AdminUser) -> Song
 @router.delete("/songs/{song_id}", status_code=204)
 def delete_song(song_id: int, db: DB, admin: AdminUser) -> None:
     song = _get_song(db, song_id)
-    load_event(db, song.event_id, admin)
+    event = load_event(db, song.event_id, admin)
+    # 草稿的修改记录里引用了这首曲目的场次,删除后无法再可靠地撤销 / 重做:清空修改记录(场次本身保留)
+    for version in event.versions:
+        version.operations.clear()
     db.delete(song)
     db.commit()

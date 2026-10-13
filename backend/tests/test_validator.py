@@ -64,11 +64,20 @@ def test_overlap_and_daily_limit(solved):
     assert any("V-04" in e for e in errs) and any("V-06" in e for e in errs)
 
 
-def test_wrong_duration_rejected(solved):
+def test_session_count_and_duration_differences_are_notices(solved):
+    """管理员像日历一样自由增删场次、拉长 / 缩短:与曲目方案不同只提醒,不算硬问题。"""
     problem, result = solved
     sessions = copy.deepcopy(result.sessions)
     _formal(sessions)[0].duration = 3
-    assert any("V-03" in e for e in _errors(problem, sessions))
+    rep = validate_schedule(problem, sessions)
+    assert not any(e.startswith("V-03") for e in rep.errors)
+    assert any(w.startswith("V-03") and "时长不同" in w for w in rep.warnings)
+
+    sessions = copy.deepcopy(result.sessions)
+    sessions.remove(_formal(sessions)[0])
+    rep = validate_schedule(problem, sessions)
+    assert not any(e.startswith("V-03") for e in rep.errors)
+    assert any(w.startswith("V-03") and "少 1 场" in w for w in rep.warnings)
 
 
 def test_unavailable_member_rejected(solved):
@@ -115,3 +124,15 @@ def test_fixed_session_rule_checked(solved):
 def test_session_helpers():
     s = Session(KIND_FORMAL, date(2026, 9, 4), 3, 2, "s1")
     assert s.end == 5 and list(s.hours) == [3, 4]
+
+
+def test_min_full_rule_counts_actual_sessions(solved):
+    """删掉全员到齐的那场后,「每首至少 1 场全员到齐」仍要检查出来。"""
+    problem, result = solved
+    sessions = copy.deepcopy(result.sessions)
+    s1 = [s for s in _formal(sessions) if s.song_code == "s1"]
+    member = problem.song("s1").members[0]
+    s1[0].absent_members = (member,)
+    sessions.remove(s1[1])
+    errs = _errors(problem, sessions, level=LadderLevel(1, 0.5, 1, 1))
+    assert any("全员到齐场次不足" in e for e in errs)

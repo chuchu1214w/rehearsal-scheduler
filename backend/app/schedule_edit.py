@@ -102,6 +102,7 @@ def fork_as_draft(db: DbSession, event: Event, base: ScheduleVersion, actor_id: 
                 attendance=dict(s.attendance) if s.attendance else None,
                 locked=s.locked,
                 location=s.location or "",
+                uid=s.uid,
             )
         )
     db.flush()
@@ -117,7 +118,7 @@ def ensure_draft(db: DbSession, event: Event, version: ScheduleVersion, actor_id
 
 
 def find_session(version: ScheduleVersion, session_id: int, *, original: ScheduleVersion | None = None) -> RehearsalSession:
-    """在(可能是复制出来的)草稿里找到对应场次:复制后 id 变了,用 (kind, song_id, task_no) 对应。"""
+    """在(可能是复制出来的)草稿里找到对应场次:复制后 id 变了,用固定身份 uid 对应。"""
     for s in version.sessions:
         if s.id == session_id:
             return s
@@ -125,7 +126,10 @@ def find_session(version: ScheduleVersion, session_id: int, *, original: Schedul
         src = next((s for s in original.sessions if s.id == session_id), None)
         if src is not None:
             for s in version.sessions:
-                if (s.kind, s.song_id, s.task_no) == (src.kind, src.song_id, src.task_no):
+                if src.uid and s.uid == src.uid:
+                    return s
+            for s in version.sessions:
+                if not src.uid and (s.kind, s.song_id, s.task_no) == (src.kind, src.song_id, src.task_no):
                     return s
     raise HTTPException(status_code=404, detail="场次不存在")
 
@@ -157,6 +161,9 @@ def check_move_strict(
         raise HTTPException(status_code=422, detail="这场已锁定,先解锁再移动")
     if session.kind == "evaluation":
         raise HTTPException(status_code=422, detail="全员评估场由求解器安排,暂不支持手动移动")
+    if new_duration is not None and new_duration != session.duration_slots:
+        # 时长不再是硬规则(网页版可上下拉调整),但旧接口保持原来的行为
+        raise HTTPException(status_code=422, detail="不能这样改:时长由曲目的排练方案决定,请在网页版调整时长")
     problem = version_problem(event, version)
     config = event_config(event)
     duration = new_duration or session.duration_slots

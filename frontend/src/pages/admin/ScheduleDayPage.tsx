@@ -44,7 +44,7 @@ export function ScheduleDayPage() {
       />
       <Panel>
         {detail.data ? (
-          <DayView date={date} sessions={sessionsForMember(detail.data.sessions, memberId)} range={range} memberId={memberId} onNavigate={(d) => navigate(`/events/${e.id}/schedule/day/${d}?${params.toString()}`)} />
+          <DayView date={date} sessions={sessionsForMember(detail.data.sessions, memberId)} allSessions={detail.data.sessions} range={range} memberId={memberId} onNavigate={(d) => navigate(`/events/${e.id}/schedule/day/${d}?${params.toString()}`)} />
         ) : (
           <p className="muted">还没有生成排练表。</p>
         )}

@@ -269,7 +269,10 @@ export interface ScheduleSession {
   song_id: number | null
   song_code: string | null
   song_name: string
+  /** 给人看的「第几场」:同一首按日期排序后的序号 */
   task_no: number | null
+  /** 场次在版本内的固定编号(复制成草稿后用来对应同一场) */
+  task_key?: number | null
   date: string
   weekday: string
   start_slot: number
@@ -323,7 +326,7 @@ export interface ScheduleIssue {
 export interface ScheduleOperation {
   id: number
   seq: number
-  kind: 'move' | 'swap' | 'lock'
+  kind: 'move' | 'swap' | 'lock' | 'resize' | 'add' | 'delete'
   summary: string
   undone: boolean
   created_at: string
@@ -335,6 +338,8 @@ export interface ScheduleVersionDetail extends ScheduleVersion {
   stage_records: StageRecord[]
   /** 以下仅管理员接口返回 */
   issues?: ScheduleIssue[]
+  /** 不影响发布的提醒,如场数 / 时长与曲目方案不同 */
+  notices?: string[]
   history?: ScheduleOperation[]
   can_undo?: boolean
   can_redo?: boolean

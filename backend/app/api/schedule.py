@@ -5,6 +5,7 @@ from __future__ import annotations
 from datetime import timedelta
 
 from fastapi import APIRouter, HTTPException
+from sqlalchemy.orm.exc import StaleDataError
 
 from .. import operations as ops
 from ..deps import DB, AdminUser, CurrentUser
@@ -27,8 +28,11 @@ from ..schemas import (
     LocationOut,
     LockIn,
     MoveIn,
+    OpAddIn,
+    OpDeleteIn,
     OpLockIn,
     OpMoveIn,
+    OpResizeIn,
     OpSwapIn,
     PublishedScheduleOut,
     RevisionIn,
@@ -53,11 +57,13 @@ def _get_version(db, version_id: int, admin) -> ScheduleVersion:  # noqa: ANN001
 def publish_version(version_id: int, db: DB, admin: AdminUser, body: RevisionIn | None = None) -> VersionOut:
     version = _get_version(db, version_id, admin)
     ops.check_revision(version, body.expected_revision if body else None)
-    # 发布门槛:按最新空闲与要求重新检查,有任何硬冲突都不能发布
-    if version.validation_errors or (version.status == "draft" and ops.live_issues(version.event, version)):
+    # 发布门槛:按最新空闲与要求重新检查(保存的结果可能过时,如旧规则下的「场数不符」),有任何硬冲突都不能发布
+    if version.status != "published" and ops.revalidate_errors(version.event, version):
+        db.commit()
         raise HTTPException(status_code=422, detail="还有冲突没有解决,不能发布")
     if version.status == "published":
         raise HTTPException(status_code=409, detail="这一版已经是发布状态")
+    ops.claim(db, version)  # 与同时进行的修改互斥:读到之后若有人改过,这次发布 409
     previous = None
     for other in version.event.versions:
         if other.id != version.id and other.status == "published":
@@ -158,6 +164,43 @@ def op_move(version_id: int, body: OpMoveIn, db: DB, admin: AdminUser) -> EditRe
         new_duration=body.duration_slots,
         actor_id=admin.id,
     )
+    db.refresh(draft)
+    return EditResultOut(version=ops.admin_detail(version.event, draft), warnings=warnings, forked=forked, new_issues=new)
+
+
+@router.post("/schedules/{version_id}/ops/resize", response_model=EditResultOut)
+def op_resize(version_id: int, body: OpResizeIn, db: DB, admin: AdminUser) -> EditResultOut:
+    version, draft, forked = _editable_draft(db, version_id, body.expected_revision, admin)
+    session = find_session(draft, body.session_id, original=version if forked else None)
+    new, warnings = ops.resize(
+        db, version.event, draft, session, new_start=body.start_slot, new_duration=body.duration_slots, actor_id=admin.id
+    )
+    db.refresh(draft)
+    return EditResultOut(version=ops.admin_detail(version.event, draft), warnings=warnings, forked=forked, new_issues=new)
+
+
+@router.post("/schedules/{version_id}/ops/add", response_model=EditResultOut)
+def op_add(version_id: int, body: OpAddIn, db: DB, admin: AdminUser) -> EditResultOut:
+    version, draft, forked = _editable_draft(db, version_id, body.expected_revision, admin)
+    _row, new, warnings = ops.add(
+        db,
+        version.event,
+        draft,
+        song_id=body.song_id,
+        new_date=body.date,
+        new_start=body.start_slot,
+        new_duration=body.duration_slots,
+        actor_id=admin.id,
+    )
+    db.refresh(draft)
+    return EditResultOut(version=ops.admin_detail(version.event, draft), warnings=warnings, forked=forked, new_issues=new)
+
+
+@router.post("/schedules/{version_id}/ops/delete", response_model=EditResultOut)
+def op_delete(version_id: int, body: OpDeleteIn, db: DB, admin: AdminUser) -> EditResultOut:
+    version, draft, forked = _editable_draft(db, version_id, body.expected_revision, admin)
+    session = find_session(draft, body.session_id, original=version if forked else None)
+    new, warnings = ops.delete(db, version.event, draft, session, admin.id)
     db.refresh(draft)
     return EditResultOut(version=ops.admin_detail(version.event, draft), warnings=warnings, forked=forked, new_issues=new)
 
@@ -268,8 +311,12 @@ def set_location(version_id: int, session_id: int, body: LocationIn, db: DB, adm
     event = version.event
     session = find_session(version, session_id)
     session.location = body.location.strip()
-    db.flush()
+    try:
+        db.flush()
+    except StaleDataError as exc:  # 这场刚被删除(另一个窗口)
+        db.rollback()
+        raise HTTPException(status_code=409, detail="这一场刚被修改或删除,请刷新后再试") from exc
     notified = on_location_set(db, event, version, session)
     db.commit()
     db.refresh(version)
-    return LocationOut(version=serialize_version(event, version, detail=True), notified=notified)  # type: ignore[arg-type]
+    return LocationOut(version=ops.admin_detail(event, version), notified=notified)

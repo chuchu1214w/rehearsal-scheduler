@@ -56,16 +56,25 @@ def test_publish_and_member_view(app, admin: TestClient):
 
 
 def test_publish_requires_clean_validation(app, admin: TestClient):
-    ev, _, vid, _ = _solved_event(app, admin)
-    # 直接把校验错误写进版本,模拟校验未通过
+    ev, (a, b, c), vid, _ = _solved_event(app, admin)
     from app.models import ScheduleVersion
 
+    # 保存的旧结果不作数(如旧规则下的「场数不符」),发布时按最新情况重查
     with app.state.session_factory() as db:
         v = db.get(ScheduleVersion, vid)
-        v.validation_errors = ["V-01 某场成员不可用"]
+        v.validation_errors = ["V-03 曲目 a(第一首) 场次时长 [2] 与方案 [2, 2] 不符"]
         db.commit()
+    # 真冲突:某场的成员改成那天没空 → 不能发布,并把最新结果写回
+    d = admin.get(f"/api/schedules/{vid}").json()
+    s = next(x for x in d["sessions"] if x["kind"] == "formal")
+    admin.put(f"/api/events/{ev['id']}/availability/{s['members'][0]['id']}", json={"days": {s["date"]: "0" * 13}, "submit": True})
     r = admin.post(f"/api/schedules/{vid}/publish")
     assert r.status_code == 422
+    stored = admin.get(f"/api/events/{ev['id']}/schedules").json()[0]["validation_errors"]
+    assert stored and not any(e.startswith("V-03") for e in stored)
+    # 恢复空闲 → 可以发布(旧的 V-03 不再挡)
+    admin.put(f"/api/events/{ev['id']}/availability/{s['members'][0]['id']}", json={"days": {s["date"]: "1" * 13}, "submit": True})
+    assert admin.post(f"/api/schedules/{vid}/publish").status_code == 200
 
 
 def test_calendar_feed(app, admin: TestClient, anon: TestClient):

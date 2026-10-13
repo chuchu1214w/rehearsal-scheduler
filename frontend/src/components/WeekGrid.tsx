@@ -63,19 +63,49 @@ interface Props {
   onSwap?: (a: ScheduleSession, b: ScheduleSession) => void
   /** 有冲突的场次(标红) */
   conflictIds?: Set<number>
+  /** 拖色块的上 / 下边缘调整时长(以小时为单位):新的开始格与时长 */
+  onResize?: (s: ScheduleSession, startSlot: number, durationSlots: number) => void
+  /** 在空白处按住往下拖(手机上点一下)新建一场:日期、开始格、时长 */
+  onCreate?: (date: string, startSlot: number, durationSlots: number) => void
 }
 
 const WEEKDAYS = ['一', '二', '三', '四', '五', '六', '日']
 
+type DragMode = 'move' | 'top' | 'bottom' | 'create'
+
 interface DragState {
-  session: ScheduleSession
+  mode: DragMode
+  /** 新建时为 null */
+  session: ScheduleSession | null
   pointerId: number
+  pointerType: string
   offsetRows: number
+  /** 新建:按下时所在的格与列 */
+  anchorRow: number
+  anchorDay: number
+  x0: number
+  y0: number
   cols: DOMRect[]
   gridRect: DOMRect
   rowH: number
   moved: boolean
+  /** 当前预览(松手时以它为准,而不是可能还没渲染的 React 状态) */
+  ghost: Ghost | null
+  /** 拖到其上可交换的另一场 */
+  target: ScheduleSession | null
 }
+
+interface Ghost {
+  id: number | null
+  dayIdx: number
+  start: number
+  duration: number
+  valid: boolean
+  mode: DragMode
+}
+
+/** 手机上点空白处新建时的默认时长 */
+const DEFAULT_NEW_HOURS = 2
 
 export function WeekGrid({
   weekStart,
@@ -92,6 +122,8 @@ export function WeekGrid({
   onMove,
   onSwap,
   conflictIds,
+  onResize,
+  onCreate,
 }: Props) {
   const hours = dayEndHour - dayStartHour
   const today = dayjs().format('YYYY-MM-DD')
@@ -101,8 +133,12 @@ export function WeekGrid({
   const gridRef = useRef<HTMLDivElement>(null)
   const drag = useRef<DragState | null>(null)
   const suppressClick = useRef(false)
-  const [ghost, setGhost] = useState<{ id: number; dayIdx: number; start: number; duration: number; valid: boolean } | null>(null)
+  /** 手机上点空白处:等这次点按的 click 到了再打开新建窗口,免得这一下又点到刚弹出的窗口 */
+  const pendingTap = useRef<{ date: string; start: number; duration: number } | null>(null)
+  const [ghost, setGhost] = useState<Ghost | null>(null)
   const [swapTarget, setSwapTarget] = useState<ScheduleSession | null>(null)
+  /** 正规排练日(评估日与演出日不能放正规排练) */
+  const formalDay = (date: string) => date >= rangeStart && date < rangeEnd
 
   /** 指针下方的另一场(可交换的正规排练) */
   const swappableAt = (x: number, y: number, self: ScheduleSession): ScheduleSession | null => {
@@ -115,58 +151,162 @@ export function WeekGrid({
   }
 
   const canDrag = (s: ScheduleSession) => editable && !!onMove && s.kind === 'formal' && !s.locked
+  const canResize = (s: ScheduleSession) => editable && !!onResize && s.kind === 'formal' && !s.locked
+
+  const measure = () => {
+    const grid = gridRef.current!
+    const cols = [...grid.querySelectorAll<HTMLElement>('.weekgrid__col')].map((c) => c.getBoundingClientRect())
+    return { cols, gridRect: grid.getBoundingClientRect(), rowH: cols[0]?.height ? cols[0].height / hours : 34 }
+  }
+  const rowAt = (y: number, col: DOMRect, rowH: number) => Math.max(0, Math.min(hours, Math.round((y - col.top) / rowH)))
 
   const onPointerDown = (e: ReactPointerEvent<HTMLButtonElement>, s: ScheduleSession) => {
-    if (!canDrag(s) || !gridRef.current || e.button !== 0) return
-    const grid = gridRef.current
-    const cols = [...grid.querySelectorAll<HTMLElement>('.weekgrid__col')].map((c) => c.getBoundingClientRect())
-    const rowH = cols[0]?.height ? cols[0].height / hours : 34
+    if (!gridRef.current || e.button !== 0) return
+    if (!e.isPrimary) return // 第二根手指不打断正在进行的拖动(新的主指针会重新开始,也清掉漏收松手事件的旧状态)
+    const handle = (e.target as HTMLElement).dataset?.handle as 'top' | 'bottom' | undefined
+    const mode: DragMode = handle && canResize(s) ? handle : 'move'
+    if (mode === 'move' && !canDrag(s)) return
+    e.stopPropagation() // 不要触发所在列的「新建」
+    const { cols, gridRect, rowH } = measure()
     const blockRect = e.currentTarget.getBoundingClientRect()
     try {
       e.currentTarget.setPointerCapture(e.pointerId)
     } catch {
       /* 合成事件没有真实指针时会抛错,忽略 */
     }
-    drag.current = { session: s, pointerId: e.pointerId, offsetRows: Math.floor((e.clientY - blockRect.top) / rowH), cols, gridRect: grid.getBoundingClientRect(), rowH, moved: false }
+    drag.current = {
+      mode,
+      session: s,
+      pointerId: e.pointerId,
+      pointerType: e.pointerType,
+      offsetRows: Math.floor((e.clientY - blockRect.top) / rowH),
+      anchorRow: 0,
+      anchorDay: days.indexOf(s.date),
+      x0: e.clientX,
+      y0: e.clientY,
+      cols,
+      gridRect,
+      rowH,
+      moved: false,
+      ghost: null,
+      target: null,
+    }
   }
 
-  const onPointerMove = (e: ReactPointerEvent<HTMLButtonElement>) => {
-    const d = drag.current
-    if (!d || e.pointerId !== d.pointerId) return
-    const target = swappableAt(e.clientX, e.clientY, d.session)
-    setSwapTarget(target)
-    if (target) {
+  /** 在某一天的空白处按下:鼠标立即开始拖出时长;手指 / 触控笔先不拦截(保留页面滚动),松开时没怎么动才算「点了一下」 */
+  const onColPointerDown = (e: ReactPointerEvent<HTMLDivElement>, dayIdx: number) => {
+    if (!e.isPrimary) return // 第二根手指不打断正在进行的拖动
+    pendingTap.current = null
+    if (!editable || !onCreate || !gridRef.current || e.button !== 0) return
+    if ((e.target as HTMLElement).closest('[data-session-id]')) return
+    if (!formalDay(days[dayIdx])) return
+    const { cols, gridRect, rowH } = measure()
+    const anchorRow = Math.max(0, Math.min(hours - 1, Math.floor((e.clientY - cols[dayIdx].top) / rowH)))
+    const preset: Ghost = { id: null, dayIdx, start: anchorRow, duration: Math.min(DEFAULT_NEW_HOURS, hours - anchorRow), valid: true, mode: 'create' }
+    drag.current = {
+      mode: 'create',
+      session: null,
+      pointerId: e.pointerId,
+      pointerType: e.pointerType,
+      offsetRows: 0,
+      anchorRow,
+      anchorDay: dayIdx,
+      x0: e.clientX,
+      y0: e.clientY,
+      cols,
+      gridRect,
+      rowH,
+      moved: false,
+      ghost: preset,
+      target: null,
+    }
+    if (e.pointerType === 'mouse') {
+      e.preventDefault()
+      try {
+        e.currentTarget.setPointerCapture(e.pointerId)
+      } catch {
+        /* 忽略 */
+      }
+      setGhost(preset) // 只点一下 = 默认时长;往下拖 = 按拖出的范围
+    }
+  }
+
+  /** 根据指针位置更新拖动中的预览(写在 drag ref 上,渲染只是显示它) */
+  const track = (d: DragState, x: number, y: number) => {
+    if (d.mode === 'create') {
+      if (d.pointerType !== 'mouse') return // 手指拖动 = 滚动页面
+      if (!d.moved && Math.abs(y - d.y0) < d.rowH / 3) return
       d.moved = true
-      setGhost(null)
+      const end = Math.max(d.anchorRow + 1, rowAt(y, d.cols[d.anchorDay], d.rowH))
+      d.ghost = { id: null, dayIdx: d.anchorDay, start: d.anchorRow, duration: end - d.anchorRow, valid: true, mode: 'create' }
       return
     }
-    let dayIdx = d.cols.findIndex((r) => e.clientX >= r.left && e.clientX <= r.right)
-    if (dayIdx < 0) dayIdx = e.clientX < d.cols[0].left ? 0 : d.cols.length - 1
-    const col = d.cols[dayIdx]
-    const start = Math.max(0, Math.min(hours - d.session.duration_slots, Math.round((e.clientY - col.top) / d.rowH - d.offsetRows)))
-    const origIdx = days.indexOf(d.session.date)
-    if (!d.moved && dayIdx === origIdx && start === d.session.start_slot) return
+    const s = d.session!
+    // 按下后没怎么动 = 单击(打开详情),不算移动(手指容差更大);移动量按「相对按下位置」换算成整小时
+    if (!d.moved && Math.hypot(x - d.x0, y - d.y0) < (d.pointerType === 'mouse' ? 5 : 10)) return
+    const dRows = Math.round((y - d.y0) / d.rowH)
+    if (d.mode === 'top' || d.mode === 'bottom') {
+      const end0 = s.start_slot + s.duration_slots
+      const start = d.mode === 'top' ? Math.max(0, Math.min(s.start_slot + dRows, end0 - 1)) : s.start_slot
+      const end = d.mode === 'bottom' ? Math.min(hours, Math.max(end0 + dRows, s.start_slot + 1)) : end0
+      d.moved = true
+      d.ghost = start === s.start_slot && end === end0 ? null : { id: s.id, dayIdx: d.anchorDay, start, duration: end - start, valid: true, mode: d.mode }
+      return
+    }
+    const other = swappableAt(x, y, s)
+    // 两场时间完全相同(并排显示)时交换没有意义,只当作移动处理
+    d.target = other && !(other.date === s.date && other.start_slot === s.start_slot && other.duration_slots === s.duration_slots) ? other : null
+    if (d.target) {
+      d.moved = true
+      d.ghost = null
+      return
+    }
+    let dayIdx = d.cols.findIndex((r) => x >= r.left && x <= r.right)
+    if (dayIdx < 0) dayIdx = x < d.cols[0].left ? 0 : d.cols.length - 1
+    const start = Math.max(0, Math.min(hours - s.duration_slots, s.start_slot + dRows))
     d.moved = true
-    const date = days[dayIdx]
-    setGhost({ id: d.session.id, dayIdx, start, duration: d.session.duration_slots, valid: date >= rangeStart && date < rangeEnd })
+    d.ghost = dayIdx === d.anchorDay && start === s.start_slot ? null : { id: s.id, dayIdx, start, duration: s.duration_slots, valid: formalDay(days[dayIdx]), mode: 'move' }
   }
 
-  const finishDrag = (e: ReactPointerEvent<HTMLButtonElement>, commit: boolean) => {
+  const onPointerMove = (e: ReactPointerEvent<HTMLElement>) => {
     const d = drag.current
     if (!d || e.pointerId !== d.pointerId) return
+    track(d, e.clientX, e.clientY)
+    if (d.mode === 'create' && d.pointerType !== 'mouse') return
+    setGhost(d.ghost)
+    setSwapTarget(d.target)
+  }
+
+  const finishDrag = (e: ReactPointerEvent<HTMLElement>, commit: boolean) => {
+    const d = drag.current
+    if (!d || e.pointerId !== d.pointerId) return
+    if (commit) track(d, e.clientX, e.clientY) // 以松手的位置为准
     drag.current = null
-    const g = ghost
-    const target = swapTarget
     setGhost(null)
     setSwapTarget(null)
-    if (d.moved) suppressClick.current = true
-    if (commit && target && onSwap) {
-      onSwap(d.session, target)
+    if (d.mode === 'create') {
+      if (!commit || !onCreate || !d.ghost) return
+      const g = d.ghost
+      if (d.pointerType === 'mouse') onCreate(days[d.anchorDay], g.start, g.duration)
+      else if (Math.hypot(e.clientX - d.x0, e.clientY - d.y0) < 10) pendingTap.current = { date: days[d.anchorDay], start: g.start, duration: g.duration }
       return
     }
-    if (commit && d.moved && g && g.valid && onMove) {
+    const s = d.session!
+    // 只有鼠标拖动后会紧跟一次 click;手指拖动后浏览器不发 click,不能留下「吞掉下一次点击」的标记
+    if (d.moved && d.pointerType === 'mouse') suppressClick.current = true
+    if (!commit) return
+    const g = d.ghost
+    if ((d.mode === 'top' || d.mode === 'bottom') && g && onResize) {
+      if (g.start !== s.start_slot || g.duration !== s.duration_slots) onResize(s, g.start, g.duration)
+      return
+    }
+    if (d.target && onSwap) {
+      onSwap(s, d.target)
+      return
+    }
+    if (d.moved && g && g.valid && onMove) {
       const date = days[g.dayIdx]
-      if (date !== d.session.date || g.start !== d.session.start_slot) onMove(d.session, date, g.start)
+      if (date !== s.date || g.start !== s.start_slot) onMove(s, date, g.start)
     }
   }
 
@@ -180,6 +320,9 @@ export function WeekGrid({
       ref={gridRef}
       className={'weekgrid' + (editable ? ' is-editable' : '')}
       style={{ ['--rows' as string]: hours, gridTemplateColumns: columns }}
+      onPointerDownCapture={() => {
+        suppressClick.current = false // 新的一次按下:之前拖动留下的标记作废
+      }}
     >
       <div className="weekgrid__corner" />
       {days.map((d) => {
@@ -210,7 +353,24 @@ export function WeekGrid({
         const lanes = assignLanes(list)
         const laneCount = Math.max(1, ...lanes.map((l) => l.lanes))
         return (
-          <div key={d} className={'weekgrid__col' + (d >= rangeStart && d <= rangeEnd ? '' : ' is-off') + (collapse && list.length === 0 ? ' is-empty' : '')}>
+          <div
+            key={d}
+            className={
+              'weekgrid__col' +
+              (d >= rangeStart && d <= rangeEnd ? '' : ' is-off') +
+              (collapse && list.length === 0 ? ' is-empty' : '') +
+              (editable && onCreate && formalDay(d) ? ' is-creatable' : '')
+            }
+            onPointerDown={(e) => onColPointerDown(e, days.indexOf(d))}
+            onClick={(e) => {
+              const tap = pendingTap.current
+              pendingTap.current = null
+              if (tap && onCreate && !(e.target as HTMLElement).closest('[data-session-id]')) onCreate(tap.date, tap.start, tap.duration)
+            }}
+            onPointerMove={onPointerMove}
+            onPointerUp={(e) => finishDrag(e, true)}
+            onPointerCancel={(e) => finishDrag(e, false)}
+          >
             {list.map((s, i) => {
               const c = songColor(s.kind === 'evaluation' ? null : s.song_code, songOrder)
               const involved = focusMemberId == null || s.kind === 'evaluation' || s.members.some((m) => m.id === focusMemberId)
@@ -228,10 +388,11 @@ export function WeekGrid({
                     (s.kind === 'evaluation' ? ' is-eval' : '') +
                     (dim ? ' is-dim' : '') +
                     (s.locked ? ' is-locked' : '') +
-                    (canDrag(s) ? ' is-draggable' : '') +
+                    (canDrag(s) || canResize(s) ? ' is-draggable' : '') +
                     (dragging ? ' is-dragging' : '') +
                     (conflictIds?.has(s.id) ? ' is-conflict' : '') +
-                    (swapTarget?.id === s.id ? ' is-swap-target' : '')
+                    (swapTarget?.id === s.id ? ' is-swap-target' : '') +
+                    (s.duration_slots <= 1 ? ' is-short' : '')
                   }
                   data-session-id={s.id}
                   style={{
@@ -256,6 +417,12 @@ export function WeekGrid({
                   title={`${s.time} ${s.song_name}${s.locked ? '(已锁定)' : ''}${conflictIds?.has(s.id) ? '(有冲突)' : ''}`}
                 >
                   {swapTarget?.id === s.id && <i className="weekgrid__swap">交换</i>}
+                  {canResize(s) && (
+                    <>
+                      <i className="weekgrid__handle weekgrid__handle--top" data-handle="top" aria-hidden="true" />
+                      <i className="weekgrid__handle weekgrid__handle--bottom" data-handle="bottom" aria-hidden="true" />
+                    </>
+                  )}
                   <b>
                     {conflictIds?.has(s.id) && <i className="weekgrid__alert" aria-label="有冲突">!</i>}
                     {s.locked && <i className="lock" aria-label="已锁定" />}
@@ -297,9 +464,9 @@ export function WeekGrid({
             height: ghost.duration * drag.current.rowH - 2,
           }}
         >
-          <b>{drag.current.session.song_code}</b>
+          <b>{ghost.mode === 'create' ? '新建排练' : drag.current.session?.song_code}</b>
           <span>
-            {String(dayStartHour + ghost.start).padStart(2, '0')}:00–{String(dayStartHour + ghost.start + ghost.duration).padStart(2, '0')}:00
+            {String(dayStartHour + ghost.start).padStart(2, '0')}:00–{String(dayStartHour + ghost.start + ghost.duration).padStart(2, '0')}:00 · {ghost.duration}h
           </span>
         </div>
       )}

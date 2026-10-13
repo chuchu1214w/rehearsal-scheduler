@@ -7,6 +7,7 @@ from __future__ import annotations
 
 from collections import defaultdict
 from dataclasses import dataclass
+from fractions import Fraction
 
 from ortools.sat.python import cp_model
 
@@ -235,8 +236,12 @@ def build_model(
                     absent_unexcused.append(x[(t.task_id, ci)])
 
     if absent_unexcused:
-        # HC-11 缺席场次总数上限
-        model.add(sum(absent_unexcused) <= level.max_absent_sessions(len(tasks)))
+        # HC-11 缺席场次总数上限;部分排程时按实际排上的场次计(与校验器一致)
+        if partial:
+            frac = Fraction(level.max_absent_ratio).limit_denominator(10_000)
+            model.add(frac.denominator * sum(absent_unexcused) <= frac.numerator * sum(scheduled.values()))
+        else:
+            model.add(sum(absent_unexcused) <= level.max_absent_sessions(len(tasks)))
         for code, song_tasks in tasks_by_song.items():
             n = len(song_tasks)
             min_full = n if level.per_song_min_full is None else min(level.per_song_min_full, n)
@@ -246,7 +251,16 @@ def build_model(
                 for ci, c in enumerate(candidates[t.task_id])
                 if c.absent_member is not None and not rules.planned_absence(c.absent_member, code)
             ]
-            if song_unexcused:
+            if song_unexcused and partial:
+                # HC-09(部分排程):排上的 S 场里至少 min(要求, S) 场全员到齐
+                placed = sum(scheduled[t.task_id] for t in song_tasks)
+                if level.per_song_min_full is None:
+                    model.add(sum(song_unexcused) == 0)
+                else:
+                    need = model.new_int_var(0, n, f"minfull_{code}")
+                    model.add_min_equality(need, [level.per_song_min_full, placed])
+                    model.add(sum(song_unexcused) <= placed - need)
+            elif song_unexcused:
                 model.add(sum(song_unexcused) <= n - min_full)  # HC-09
             for m in problem.song(code).members:
                 member_unexcused = [

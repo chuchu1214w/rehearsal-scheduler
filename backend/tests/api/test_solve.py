@@ -78,7 +78,7 @@ def test_solve_infeasible_gives_diagnosis(admin: TestClient):
     assert job["summary"].startswith("差 1 场") and "b" in job["summary"]
     assert job["diagnosis"]["最小调整建议"]["可行"] and {c_["成员"] for c_ in job["diagnosis"]["最小调整建议"]["调整"]} == {"C"}
     assert job["diagnosis"]["评估场"]["可行"] is False
-    # 能排的第一首(A、B)先存为部分排程草稿;补齐前不能发布
+    # 能排的第一首(A、B)先存为部分排程草稿;这里评估日也排不出(C 全程没空),所以仍不能发布
     assert job["version_id"] is not None and "已先把能排的场次存为草稿" in job["summary"]
     assert job["diagnosis"]["部分排程"]["未排"] and all(x.startswith("b(") for x in job["diagnosis"]["部分排程"]["未排"])
     [v] = admin.get(f"/api/events/{ev['id']}/schedules").json()

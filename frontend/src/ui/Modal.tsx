@@ -1,4 +1,4 @@
-import { useEffect, type ReactNode } from 'react'
+import { useEffect, useRef, type ReactNode } from 'react'
 
 interface Props {
   open: boolean
@@ -9,6 +9,10 @@ interface Props {
 }
 
 export function Modal({ open, title, onClose, children, actions }: Props) {
+  const openedAt = useRef(0)
+  useEffect(() => {
+    if (open) openedAt.current = performance.now()
+  }, [open])
   useEffect(() => {
     if (!open) return
     const onKey = (e: KeyboardEvent) => {
@@ -27,7 +31,9 @@ export function Modal({ open, title, onClose, children, actions }: Props) {
     <div
       className="layer"
       onMouseDown={(e) => {
-        if (e.target === e.currentTarget) onClose()
+        // 刚打开时的同一次点按(手机点按后补发的鼠标事件、双击的第二下)不算点背景关闭
+        if (e.target !== e.currentTarget || e.detail >= 2 || performance.now() - openedAt.current < 500) return
+        onClose()
       }}
     >
       <section className="modal" role="dialog" aria-modal="true" aria-label={title}>

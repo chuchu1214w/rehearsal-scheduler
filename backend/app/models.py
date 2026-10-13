@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import uuid
 from datetime import date, datetime
 
 from sqlalchemy import JSON, Boolean, Column, Date, DateTime, ForeignKey, Integer, String, Table, Text, UniqueConstraint
@@ -10,7 +11,7 @@ from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 from .utils import utcnow
 
 # 每次改表结构 +1;启动时与 meta 表比对,不一致就提示删库重建(开发阶段;有真实数据后改用 Alembic)
-SCHEMA_VERSION = 11  # 3:新增 solve_jobs / schedule_versions / rehearsal_sessions(可从 2 自动迁移)
+SCHEMA_VERSION = 12  # 3:新增 solve_jobs / schedule_versions / rehearsal_sessions(可从 2 自动迁移)
 
 
 class Base(DeclarativeBase):
@@ -290,6 +291,8 @@ class RehearsalSession(Base):
     attendance: Mapped[dict | None] = mapped_column(JSON, nullable=True)  # 评估场:member_id -> [start_slot, end_slot]
     locked: Mapped[bool] = mapped_column(Boolean, default=False)
     location: Mapped[str] = mapped_column(String(200), default="")  # 排练地点(管理员填写)
+    # 场次的固定身份:复制成草稿时沿用;删除后撤销重建时也用回它(数据库 id 会变,SQLite 还会复用刚删掉的 id)
+    uid: Mapped[str] = mapped_column(String(32), default=lambda: uuid.uuid4().hex, index=True)
 
     version: Mapped[ScheduleVersion] = relationship(back_populates="sessions")
     song: Mapped[Song | None] = relationship()

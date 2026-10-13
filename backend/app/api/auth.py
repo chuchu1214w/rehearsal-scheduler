@@ -110,7 +110,13 @@ def delete_account(body: AccountDeleteIn, db: DB, user: CurrentUser, response: R
         user.member.user = None
     db.delete(user)
     db.flush()
-    notify(db, admin_ids(db), type="account_deleted", title=f"{name} 注销了 App 账号", body="名册和已填的空闲仍保留;如需重新开通,在「人员」里操作。")
+    notify(
+        db,
+        admin_ids(db),
+        type="account_deleted",
+        title=f"{name} 注销了 App 账号",
+        body="名册和已填的空闲仍保留;如需重新开通,在「人员」里操作。",
+    )
     db.commit()
     clear_session_cookie(response)
     return Response(status_code=204, headers=response.headers)

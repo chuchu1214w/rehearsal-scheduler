@@ -99,12 +99,22 @@ def validate_schedule(
             if missing:
                 err(f"V-02 {_label(problem, s)} 成员 {m} 在 {'、'.join(config.slot_label(h) for h in missing)} 不可用", s)
 
-    # V-03 场次数与时长
+    # V-03 场次数与时长:与曲目方案不同只作提醒,不算硬问题——管理员可以像日历一样自由增删场次、上下拉时长;
+    # 求解器产出的方案总是与场次方案一致
     for song in problem.songs:
         expected = sorted(song.durations(config), reverse=True)
         actual = sorted((s.duration for s in by_song.get(song.code, [])), reverse=True)
         if actual != expected:
-            err(f"V-03 曲目 {song.code}({song.name}) 场次时长 {actual} 与方案 {expected} 不符", *by_song.get(song.code, []))
+            plan = " + ".join(f"{h}h" for h in expected) or "无"
+            now = " + ".join(f"{h}h" for h in actual) or "没有排"
+            what = (
+                f"少 {len(expected) - len(actual)} 场"
+                if len(actual) < len(expected)
+                else f"多 {len(actual) - len(expected)} 场"
+                if len(actual) > len(expected)
+                else "时长不同"
+            )
+            rep.warnings.append(f"V-03 曲目 {song.code}({song.name}) 现在 {now},方案是 {plan}({what})")
 
     # V-04 成员不重叠(含缺席成员,保守);V-05 单日硬上限
     per_member_day: dict[tuple[str, date], list[Session]] = defaultdict(list)
@@ -162,13 +172,13 @@ def validate_schedule(
         for s in unexcused:
             err(f"V-08 严格层不允许缺席:{_label(problem, s)} 缺席 {'、'.join(s.absent_members)}", s)
     else:
-        n_tasks = sum(len(song.durations(config)) for song in problem.songs)
+        n_tasks = len(formal)  # 按实际场次(管理员可能增删过);求解器产出的与任务数一致
         cap = level.max_absent_sessions(n_tasks)
         if len(unexcused) > cap:
             err(f"V-08 缺席场次 {len(unexcused)} 超过层级上限 {cap}", *unexcused)
         for song in problem.songs:
             ss = by_song.get(song.code, [])
-            n = len(song.durations(config))
+            n = len(ss)  # 按实际场次(管理员可能增删过);求解器产出的与方案一致
             min_full = n if level.per_song_min_full is None else min(level.per_song_min_full, n)
             song_unexcused = [s for s in ss if s in unexcused]
             if len(song_unexcused) > n - min_full:

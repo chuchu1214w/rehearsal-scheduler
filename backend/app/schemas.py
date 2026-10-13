@@ -548,7 +548,8 @@ class SessionOut(BaseModel):
     song_id: int | None
     song_code: str | None
     song_name: str
-    task_no: int | None
+    task_no: int | None  # 给人看的「第几场」:同一首按日期排序后的序号(增删场次后仍连续)
+    task_key: int | None = None  # 场次在版本内的固定编号(撤销 / 复制草稿时用来对应同一场)
     date: date
     weekday: str
     start_slot: int
@@ -614,6 +615,7 @@ class VersionDetailOut(VersionOut):
     stage_records: list[dict]
     # 以下仅管理员接口填写
     issues: list[IssueOut] = []
+    notices: list[str] = []  # 不影响发布的提醒,如某首曲目手动调整过时长
     history: list[OperationOut] = []
     can_undo: bool = False
     can_redo: bool = False
@@ -663,6 +665,27 @@ class OpMoveIn(RevisionIn):
     date: date
     start_slot: int
     duration_slots: int | None = None
+
+
+class OpResizeIn(RevisionIn):
+    """上下拉调整时长:同一天内的新开始格与新时长(都以小时为单位)。"""
+
+    session_id: int
+    start_slot: int
+    duration_slots: int
+
+
+class OpAddIn(RevisionIn):
+    """新建一场正规排练。"""
+
+    song_id: int
+    date: date
+    start_slot: int
+    duration_slots: int
+
+
+class OpDeleteIn(RevisionIn):
+    session_id: int
 
 
 class OpSwapIn(RevisionIn):

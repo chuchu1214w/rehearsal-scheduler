@@ -2,7 +2,7 @@ import dayjs from 'dayjs'
 import { useEffect, useState } from 'react'
 
 import type { MemberBrief, ScheduleSession, ScheduleVersionDetail } from '../api/types'
-import { Badge, Button } from '../ui'
+import { Badge, Button, Field } from '../ui'
 import { Modal } from '../ui/Modal'
 import { fmtMd } from '../utils'
 import { Location } from './MapLink'
@@ -41,6 +41,10 @@ export function WeekView({
   onLocation,
   conflictIds,
   jumpDate,
+  onResize,
+  onDelete,
+  onCreate,
+  songs,
 }: {
   sessions: ScheduleSession[]
   range: ScheduleRange
@@ -55,7 +59,14 @@ export function WeekView({
   conflictIds?: Set<number>
   /** 跳到这一天所在的周(如点了某条冲突);可带“|时间戳”以便重复跳转 */
   jumpDate?: string | null
+  onResize?: (s: ScheduleSession, startSlot: number, durationSlots: number) => void
+  onDelete?: (s: ScheduleSession) => void
+  /** 新建一场:选好曲目后回调 */
+  onCreate?: (v: { songId: number; date: string; startSlot: number; durationSlots: number }) => void
+  /** 新建时可选的曲目 */
+  songs?: { id: number; code: string; name: string }[]
 }) {
+  const [creating, setCreating] = useState<{ date: string; start: number; duration: number } | null>(null)
   const weeks = weekStarts(range.formal_start_date, range.eval_date)
   const today = dayjs().format('YYYY-MM-DD')
   const preferred = initialDate ?? (today >= range.formal_start_date && today <= range.eval_date ? today : range.formal_start_date)
@@ -66,7 +77,17 @@ export function WeekView({
     if (d && weeks.includes(weekOf(d))) setWeek(weekOf(d))
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [jumpDate])
-  const current = open ? (sessions.find((s) => s.id === open.id) ?? open) : null
+  // 修改已发布版会复制出新草稿(场次 id 都变了):按曲目 + 固定编号找回同一场;找不到就关闭详情
+  const current = open
+    ? (sessions.find((s) => s.id === open.id) ??
+      sessions.find((s) => s.kind === open.kind && s.song_code === open.song_code && (s.task_key ?? s.task_no) === (open.task_key ?? open.task_no)) ??
+      null)
+    : null
+  useEffect(() => {
+    if (open && current && current.id !== open.id) setOpen(current)
+    if (open && !current) setOpen(null)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [current?.id, open?.id])
   const idx = weeks.indexOf(week)
   const order = songOrderOf(sessions)
   const inWeek = sessions.filter((s) => weekOf(s.date) === week)
@@ -105,6 +126,8 @@ export function WeekView({
         onMove={onMove}
         onSwap={onSwap}
         conflictIds={conflictIds}
+        onResize={onResize}
+        onCreate={onCreate && songs?.length ? (date, start, duration) => setCreating({ date, start, duration }) : undefined}
       />
       <div className="legend">
         {order.map((code) => (
@@ -121,7 +144,9 @@ export function WeekView({
         {onDateClick && <span className="muted">点日期看当天日程</span>}
         {editable && (
           <span className="muted">
-            拖动色块可移动{onSwap ? ',拖到另一场上可交换' : '场次'};<i className="lock" /> 已锁定
+            拖动色块可移动{onSwap ? ',拖到另一场上可交换' : ''}
+            {onResize ? ',拖上下边缘可拉长 / 缩短' : ''}
+            {onCreate ? ',空白处按住往下拖(手机上点一下)可新建' : ''};<i className="lock" /> 已锁定
             {conflictIds && conflictIds.size > 0 ? ';红框 = 有冲突' : ''}
           </span>
         )}
@@ -138,8 +163,98 @@ export function WeekView({
             : undefined
         }
         onLocation={onLocation}
+        onResize={editable && onResize ? onResize : undefined}
+        onDelete={
+          editable && onDelete
+            ? (s) => {
+                setOpen(null)
+                onDelete(s)
+              }
+            : undefined
+        }
+        dayHours={range.day_end_hour - range.day_start_hour}
       />
+      {creating && onCreate && songs && (
+        <CreateSessionModal
+          value={creating}
+          songs={songs}
+          dayStartHour={range.day_start_hour}
+          dayEndHour={range.day_end_hour}
+          onClose={() => setCreating(null)}
+          onSubmit={(v) => {
+            setCreating(null)
+            onCreate(v)
+          }}
+        />
+      )}
     </>
+  )
+}
+
+/** 新建一场:确认时间、选曲目 */
+function CreateSessionModal({
+  value,
+  songs,
+  dayStartHour,
+  dayEndHour,
+  onClose,
+  onSubmit,
+}: {
+  value: { date: string; start: number; duration: number }
+  songs: { id: number; code: string; name: string }[]
+  dayStartHour: number
+  dayEndHour: number
+  onClose: () => void
+  onSubmit: (v: { songId: number; date: string; startSlot: number; durationSlots: number }) => void
+}) {
+  const hours = dayEndHour - dayStartHour
+  const [songId, setSongId] = useState(songs[0]?.id ?? 0)
+  const [start, setStart] = useState(value.start)
+  const [duration, setDuration] = useState(value.duration)
+  const maxDuration = hours - start
+  return (
+    <Modal
+      open
+      title={`新建排练 · ${fmtMd(value.date)} 周${'日一二三四五六'[dayjs(value.date).day()]}`}
+      onClose={onClose}
+      actions={
+        <Button variant="primary" disabled={!songId} onClick={() => onSubmit({ songId, date: value.date, startSlot: start, durationSlots: Math.min(duration, maxDuration) })}>
+          新建
+        </Button>
+      }
+    >
+      <div className="fields" style={{ marginTop: 4 }}>
+        <Field label="曲目">
+          <select value={songId} onChange={(e) => setSongId(Number(e.target.value))} aria-label="曲目">
+            {songs.map((x) => (
+              <option key={x.id} value={x.id}>
+                {x.code}
+                {x.name !== x.code ? ` · ${x.name}` : ''}
+              </option>
+            ))}
+          </select>
+        </Field>
+        <Field label="开始">
+          <select value={start} onChange={(e) => setStart(Number(e.target.value))} aria-label="开始时间">
+            {Array.from({ length: hours }, (_, i) => (
+              <option key={i} value={i}>
+                {String(dayStartHour + i).padStart(2, '0')}:00
+              </option>
+            ))}
+          </select>
+        </Field>
+        <Field label="时长">
+          <select value={Math.min(duration, maxDuration)} onChange={(e) => setDuration(Number(e.target.value))} aria-label="时长">
+            {Array.from({ length: maxDuration }, (_, i) => i + 1).map((h) => (
+              <option key={h} value={h}>
+                {h} 小时
+              </option>
+            ))}
+          </select>
+        </Field>
+      </div>
+      <p className="muted">场数和时长不必与曲目的排练方案一致,不一致时只会提醒,不影响发布。</p>
+    </Modal>
   )
 }
 
@@ -148,15 +263,27 @@ export function SessionModal({
   onClose,
   onLock,
   onLocation,
+  onResize,
+  onDelete,
+  dayHours = 24,
 }: {
   s: ScheduleSession | null
   onClose: () => void
   onLock?: (s: ScheduleSession, locked: boolean) => void
   onLocation?: (s: ScheduleSession, location: string) => void
+  /** 以小时为单位缩短 / 延长(新的开始格与时长) */
+  onResize?: (s: ScheduleSession, startSlot: number, durationSlots: number) => void
+  onDelete?: (s: ScheduleSession) => void
+  /** 每天可排的小时数(延长时不超出) */
+  dayHours?: number
 }) {
   const [loc, setLoc] = useState(s?.location ?? '')
+  const [confirmDelete, setConfirmDelete] = useState(false)
   useEffect(() => setLoc(s?.location ?? ''), [s?.id, s?.location])
+  useEffect(() => setConfirmDelete(false), [s?.id])
   if (!s) return null
+  const editableFormal = s.kind === 'formal' && !s.locked
+  const end = s.start_slot + s.duration_slots
   const absent = new Set(s.absent.map((m) => m.id))
   return (
     <Modal
@@ -189,7 +316,45 @@ export function SessionModal({
           </p>
         )
       )}
-      {onLock && s.kind === 'formal' && <p className="muted">在周日历里拖动色块可移动这场;锁定后不会被拖动,「锁定后重排」时也保持不变。时长由曲目的排练方案决定。</p>}
+      {onResize && editableFormal && (
+        <div className="inline" style={{ marginTop: 10, gap: 8 }}>
+          <span className="muted">时长 {s.duration_slots} 小时</span>
+          <Button small disabled={s.duration_slots <= 1} onClick={() => onResize(s, s.start_slot, s.duration_slots - 1)}>
+            − 缩短 1 小时
+          </Button>
+          <Button
+            small
+            disabled={s.duration_slots >= dayHours}
+            onClick={() => (end < dayHours ? onResize(s, s.start_slot, s.duration_slots + 1) : onResize(s, s.start_slot - 1, s.duration_slots + 1))}
+          >
+            ＋ 延长 1 小时
+          </Button>
+        </div>
+      )}
+      {onLock && s.kind === 'formal' && (
+        <p className="muted">
+          在周日历里拖动色块可移动这场,拖上下边缘可调整时长;锁定后不会被改动,「锁定后重排」时也保持不变。时长和场数可以与曲目的排练方案不同,只会提醒。
+        </p>
+      )}
+      {onDelete && editableFormal && (
+        <div className="inline" style={{ marginTop: 10, gap: 8 }}>
+          {confirmDelete ? (
+            <>
+              <span className="muted">确定删除这场?之后可以撤销。</span>
+              <Button small variant="danger" onClick={() => onDelete(s)}>
+                删除
+              </Button>
+              <Button small variant="ghost" onClick={() => setConfirmDelete(false)}>
+                取消
+              </Button>
+            </>
+          ) : (
+            <Button small variant="ghost-danger" onClick={() => setConfirmDelete(true)}>
+              删除这场
+            </Button>
+          )}
+        </div>
+      )}
       {s.kind === 'evaluation' ? (
         <div style={{ marginTop: 8 }}>
           {s.attendance && Object.values(s.attendance).some((t) => t !== s.time) ? (
@@ -343,18 +508,21 @@ export function DayView({
   range,
   memberId = null,
   onNavigate,
+  allSessions,
 }: {
   date: string
   sessions: ScheduleSession[]
   range: ScheduleRange
   memberId?: number | null
   onNavigate: (date: string) => void
+  /** 整版场次(「第 N / M 场」的 M 按整版算,与服务器给的序号一致) */
+  allSessions?: ScheduleSession[]
 }) {
   const prev = dayjs(date).subtract(1, 'day').format('YYYY-MM-DD')
   const next = dayjs(date).add(1, 'day').format('YYYY-MM-DD')
   const today = sessions.filter((s) => s.date === date)
   const taskTotal = new Map<string, number>()
-  for (const s of sessions) if (s.kind === 'formal' && s.song_code) taskTotal.set(s.song_code, (taskTotal.get(s.song_code) ?? 0) + 1)
+  for (const s of allSessions ?? sessions) if (s.kind === 'formal' && s.song_code) taskTotal.set(s.song_code, (taskTotal.get(s.song_code) ?? 0) + 1)
   const hours = today.filter((s) => s.kind === 'formal').reduce((a, s) => a + s.duration_slots, 0)
   return (
     <>
