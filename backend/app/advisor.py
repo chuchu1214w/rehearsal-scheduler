@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import os
+import sys
 import time
 import traceback
 from collections.abc import Callable
@@ -708,11 +709,11 @@ def run_advisor(database_url: str, run_id: int, workers: int = 0, model: str = "
         say("done", "方案已生成")
         update(status="done", proposal=proposal, usage=usage, progress="", finished_at=utcnow())
     except Exception as exc:  # noqa: BLE001
-        detail = traceback.format_exc()
-        msg = str(exc)
+        print(traceback.format_exc(), file=sys.stderr, flush=True)  # 完整错误只进服务器日志,页面上只显示一句话
+        msg = str(exc).strip().split("\n")[0] or type(exc).__name__
         if "api_key" in msg.lower() or "authentication" in type(exc).__name__.lower():
             msg = "Claude API 密钥无效或未配置"
-        update(status="failed", error=(msg + "\n\n" + detail)[-4000:], usage=usage, progress="", finished_at=utcnow())
+        update(status="failed", error=msg[:500], usage=usage, progress="", finished_at=utcnow())
 
 
 def estimate_cost(usage: dict | None) -> float | None:

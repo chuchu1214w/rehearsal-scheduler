@@ -89,6 +89,18 @@ def _migrate_11_to_12(engine: Engine) -> None:
                 )
 
 
+def _migrate_12_to_13(engine: Engine) -> None:
+    """AI 运行记录区分类型(无解时的调度员 / 用一句话修改某一版),并记下针对的版本与指令。"""
+    with engine.begin() as conn:
+        cols = {row[1] for row in conn.execute(text("PRAGMA table_info(advisor_runs)"))}
+        if "kind" not in cols:
+            conn.execute(text("ALTER TABLE advisor_runs ADD COLUMN kind VARCHAR(16) NOT NULL DEFAULT 'advisor'"))
+        if "version_id" not in cols:
+            conn.execute(text("ALTER TABLE advisor_runs ADD COLUMN version_id INTEGER"))
+        if "instruction" not in cols:
+            conn.execute(text("ALTER TABLE advisor_runs ADD COLUMN instruction TEXT NOT NULL DEFAULT ''"))
+
+
 MIGRATIONS: dict[int, Callable[[Engine], None]] = {
     2: lambda engine: None,  # 2 → 3:新增 solve_jobs / schedule_versions / rehearsal_sessions
     3: _migrate_3_to_4,  # 3 → 4:users.calendar_token
@@ -100,6 +112,7 @@ MIGRATIONS: dict[int, Callable[[Engine], None]] = {
     9: lambda engine: None,  # 9 → 10:新增 advisor_runs(create_all 已建)
     10: _migrate_10_to_11,  # 10 → 11:schedule_versions.revision;新增 schedule_operations
     11: _migrate_11_to_12,  # 11 → 12:场次固定身份 uid;早期修改记录补上;清掉旧规则下的「场数不符」错误
+    12: _migrate_12_to_13,  # 12 → 13:AI 运行记录类型(调度员 / 一句话修改)
 }
 
 

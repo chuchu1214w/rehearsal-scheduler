@@ -100,8 +100,10 @@ def update_song(song_id: int, body: SongPatch, db: DB, admin: AdminUser) -> Song
 def delete_song(song_id: int, db: DB, admin: AdminUser) -> None:
     song = _get_song(db, song_id)
     event = load_event(db, song.event_id, admin)
-    # 草稿的修改记录里引用了这首曲目的场次,删除后无法再可靠地撤销 / 重做:清空修改记录(场次本身保留)
+    # 草稿的修改记录里引用了这首曲目的场次,删除后无法再可靠地撤销 / 重做:清空修改记录(场次本身保留)。
+    # 修改次数 +1:之前生成的方案(AI 修改 / 少改动重排,按曲目 id 指明)不再适用,应用时会被拦下
     for version in event.versions:
         version.operations.clear()
+        version.revision = (version.revision or 0) + 1
     db.delete(song)
     db.commit()

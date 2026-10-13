@@ -15,7 +15,7 @@ from ..operations import admin_detail
 from ..schemas import JobOut, SolveIn, VersionDetailOut, VersionOut
 from ..services import serialize_job, serialize_version
 from ..solve_worker import run_job
-from ..utils import utcnow
+from ..utils import START_LOCK, utcnow
 from .events import load_event
 
 router = APIRouter(tags=["solve"])
@@ -47,31 +47,32 @@ def _refresh_liveness(db: Session, job: SolveJob) -> SolveJob:
 @router.post("/events/{event_id}/solve", response_model=JobOut, status_code=202)
 def start_solve(event_id: int, body: SolveIn, db: DB, admin: AdminUser, settings: SettingsDep) -> JobOut:
     event = load_event(db, event_id, admin)
-    active = _active_job(db, event.id)
-    if active is not None:
-        _refresh_liveness(db, active)
-        if active.status in ("queued", "running"):
-            raise HTTPException(status_code=409, detail="已有求解任务在进行中")
-    if not event.participants or not event.songs:
-        raise HTTPException(status_code=422, detail="先添加人员和曲目,再开始求解")
-    # 服务器内存小:求解与 AI 调度员各自占一个大子进程,不同时运行
-    from .advisor import _refresh as refresh_advisor  # 局部导入,避免循环引用
+    with START_LOCK:
+        active = _active_job(db, event.id)
+        if active is not None:
+            _refresh_liveness(db, active)
+            if active.status in ("queued", "running"):
+                raise HTTPException(status_code=409, detail="已有求解任务在进行中")
+        if not event.participants or not event.songs:
+            raise HTTPException(status_code=422, detail="先添加人员和曲目,再开始求解")
+        # 服务器内存小:求解与 AI 调度员各自占一个大子进程,不同时运行
+        from .advisor import _refresh as refresh_advisor  # 局部导入,避免循环引用
 
-    busy = db.scalar(select(AdvisorRun).where(AdvisorRun.status.in_(["queued", "running"])))
-    if busy is not None and refresh_advisor(db, busy).status in ("queued", "running"):
-        raise HTTPException(status_code=409, detail="AI 调度员正在工作,等它结束再求解")
-    if body.base_version_id is not None:
-        base = db.get(ScheduleVersion, body.base_version_id)
-        if base is None or base.event_id != event.id:
-            raise HTTPException(status_code=404, detail="锁定重排的基准版本不存在")
-    job = SolveJob(
-        event_id=event.id,
-        options={"only_ready_songs": body.only_ready_songs, "base_version_id": body.base_version_id},
-        params_snapshot={"settings": event.settings, "day_start_hour": event.day_start_hour, "day_end_hour": event.day_end_hour},
-        created_by=admin.id,
-    )
-    db.add(job)
-    db.commit()
+        busy = db.scalar(select(AdvisorRun).where(AdvisorRun.status.in_(["queued", "running"])))
+        if busy is not None and refresh_advisor(db, busy).status in ("queued", "running"):
+            raise HTTPException(status_code=409, detail="AI 正在工作(调度员或 AI 修改),等它结束再求解")
+        if body.base_version_id is not None:
+            base = db.get(ScheduleVersion, body.base_version_id)
+            if base is None or base.event_id != event.id:
+                raise HTTPException(status_code=404, detail="锁定重排的基准版本不存在")
+        job = SolveJob(
+            event_id=event.id,
+            options={"only_ready_songs": body.only_ready_songs, "base_version_id": body.base_version_id},
+            params_snapshot={"settings": event.settings, "day_start_hour": event.day_start_hour, "day_end_hour": event.day_end_hour},
+            created_by=admin.id,
+        )
+        db.add(job)
+        db.commit()
     if settings.solver_mode == "inline":
         run_job(settings.database_url, job.id, settings.solver_workers)
         db.refresh(job)

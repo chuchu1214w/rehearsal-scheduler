@@ -18,6 +18,7 @@ from sqlalchemy import update
 from sqlalchemy.exc import IntegrityError, OperationalError
 from sqlalchemy.orm import Session as DbSession
 from sqlalchemy.orm.attributes import set_committed_value
+from sqlalchemy.orm.exc import StaleDataError
 
 from solver.validator import compute_metrics, validate_schedule
 
@@ -103,20 +104,21 @@ def _create(version: ScheduleVersion, snap: dict) -> RehearsalSession:
 def _label(s: RehearsalSession) -> str:
     if s.kind == "evaluation":
         return "全员评估"
-    return s.song.code if s.song else "?"
+    if s.song is None:
+        return "?"
+    return s.song.code if s.song.name == s.song.code else f"{s.song.code} {s.song.name}"
 
 
 def _when(event: Event, d: date, start: int, duration: int) -> str:
-    return f"{d.month}/{d.day} {event_config(event).range_label(start, duration)}"
+    return f"{d.month}/{d.day} 周{'一二三四五六日'[d.weekday()]} {event_config(event).range_label(start, duration)}"
 
 
 def revalidate(event: Event, version: ScheduleVersion) -> list[str]:
     """按当前场次重新校验,写回 validation_errors / metrics;返回错误句子。"""
     problem = version_problem(event, version)
-    sessions = [to_solver_session(event, s) for s in version.sessions]
-    report = validate_schedule(problem, sessions, version_level(problem, version))
+    rows, report = _live_report(event, version)
     version.validation_errors = list(report.errors)
-    version.metrics = compute_metrics(problem, sessions)
+    version.metrics = compute_metrics(problem, [to_solver_session(event, s) for s in rows])
     version.exact_optimum = False
     if version.source == "solver":
         version.source = "manual"
@@ -165,6 +167,9 @@ def _flush(db: DbSession) -> None:
     except IntegrityError as exc:
         db.rollback()
         raise HTTPException(status_code=409, detail="涉及的曲目刚被删除,请刷新后再试") from exc
+    except StaleDataError as exc:  # 要改的场次刚被别处删除
+        db.rollback()
+        raise HTTPException(status_code=409, detail=STALE) from exc
 
 
 def _apply(db: DbSession, event: Event, version: ScheduleVersion, change: dict, to: str) -> dict:
@@ -207,8 +212,7 @@ def _fits(event: Event, d: date, start: int, duration: int) -> None:
 
 
 def _current_errors(event: Event, version: ScheduleVersion) -> list[str]:
-    problem = version_problem(event, version)
-    return validate_schedule(problem, [to_solver_session(event, s) for s in version.sessions], version_level(problem, version)).errors
+    return list(_live_report(event, version)[1].errors)
 
 
 def _finish(event: Event, version: ScheduleVersion, before_errors: list[str], before_metrics: dict) -> tuple[list[str], list[str]]:
@@ -453,6 +457,7 @@ def revalidate_errors(event: Event, version: ScheduleVersion) -> list[str]:
 
 
 def _live_report(event: Event, version: ScheduleVersion):  # noqa: ANN202
+    """按最新空闲与要求检查整版。"""
     problem = version_problem(event, version)
     rows = list(version.sessions)
     return rows, validate_schedule(problem, [to_solver_session(event, s) for s in rows], version_level(problem, version))
@@ -494,3 +499,181 @@ def admin_detail(event: Event, version: ScheduleVersion) -> VersionDetailOut:
     out.can_undo = version.status == "draft" and any(not o.undone for o in ops)
     out.can_redo = version.status == "draft" and any(o.undone for o in ops)
     return out
+
+
+# ---------- 批量修改:AI 修改与少改动重排的方案,一次应用、一次撤销;dry_run 只试算不保存 ----------
+OP_KINDS = ("move", "resize", "swap", "add", "delete", "lock")
+
+
+def _by_uid(version: ScheduleVersion, uid: object) -> RehearsalSession:
+    for s in version.sessions:
+        if uid and s.uid == uid:
+            return s
+    raise HTTPException(status_code=422, detail="方案里引用的场次不存在(可能已被修改或删除),请重新生成方案")
+
+
+def _describe(event: Event, version: ScheduleVersion, op: dict) -> str:
+    """给人看的一条修改,按应用这一条之前的状态描述(同一组里前面的修改已经生效)。"""
+    kind = op.get("op")
+    if kind == "add":
+        song = next((x for x in event.songs if x.id == op.get("song_id")), None)
+        name = "?" if song is None else song.code if song.name == song.code else f"{song.code} {song.name}"
+        d = date.fromisoformat(str(op.get("date")))
+        return f"新建 {name}({_when(event, d, int(op['start_slot']), int(op['duration_slots']))})"
+    if kind == "swap":
+        a, b = _by_uid(version, op.get("a")), _by_uid(version, op.get("b"))
+        return (
+            f"交换 {_label(a)}({_when(event, a.date, a.start_slot, a.duration_slots)})"
+            f"与 {_label(b)}({_when(event, b.date, b.start_slot, b.duration_slots)})"
+        )
+    s = _by_uid(version, op.get("uid"))
+    where = _when(event, s.date, s.start_slot, s.duration_slots)
+    if kind == "move":
+        d = date.fromisoformat(str(op.get("date")))
+        return f"移动 {_label(s)}:{where} → {_when(event, d, int(op['start_slot']), s.duration_slots)}"
+    if kind == "resize":
+        return f"调整 {_label(s)} 时长:{where} → {_when(event, s.date, int(op['start_slot']), int(op['duration_slots']))}"
+    if kind == "delete":
+        return f"删除 {_label(s)}({where})"
+    return f"{'锁定' if op.get('locked') else '解锁'} {_label(s)}({where})"
+
+
+def apply_batch(
+    db: DbSession,
+    event: Event,
+    version: ScheduleVersion,
+    ops: list[dict],
+    *,
+    summary: str,
+    actor_id: int | None,
+    dry_run: bool = False,
+) -> dict:
+    """把一组修改作为一次修改应用(一条修改记录,一次撤销)。任一条无效则全部不执行(422)。
+    dry_run=True 时只试算:在当前事务里应用、检查,然后回滚,数据库不变。
+    返回 {new_issues, warnings, issues, notices, lines}。"""
+    if not ops:
+        raise HTTPException(status_code=422, detail="方案里没有任何修改")
+    if len(ops) > 60:
+        raise HTTPException(status_code=422, detail="一次最多 60 条修改")
+    lines: list[str] = []
+    if not dry_run:
+        claim(db, version)
+    before_errors, before_metrics = _current_errors(event, version), dict(version.metrics or {})
+    touched: dict[str, dict] = {}  # uid → 第一次改动前的状态
+    created: list[RehearsalSession] = []
+    deleted: list[dict] = []
+
+    def touch(s: RehearsalSession) -> None:
+        if s.uid not in touched and s not in created:
+            touched[s.uid] = _state(s)
+
+    try:
+        for op in ops:
+            kind = op.get("op")
+            if kind not in OP_KINDS:
+                raise HTTPException(status_code=422, detail=f"未知的修改类型 {kind}")
+            lines.append(_describe(event, version, op))
+            if kind == "add":
+                song = next((x for x in event.songs if x.id == op.get("song_id")), None)
+                if song is None or song.code in set(version.skipped_songs or []):
+                    raise HTTPException(status_code=422, detail="新建场次的曲目不存在或这一版没有排它")
+                if op.get("song_code") is not None and op["song_code"] != song.code:
+                    raise HTTPException(status_code=409, detail="方案里的曲目已经变了(可能被删除或重建),请重新生成方案")
+                d = date.fromisoformat(str(op.get("date")))
+                start, dur = int(op["start_slot"]), int(op["duration_slots"])
+                _fits(event, d, start, dur)
+                used = [s.task_no or 0 for s in version.sessions if s.kind == "formal" and s.song_id == song.id]
+                used += [int(x.get("task_no") or 0) for x in deleted if x.get("song_id") == song.id]  # 本组里刚删掉的
+                for o in version.operations:
+                    for c in o.changes or []:
+                        for snap in (c.get("before"), c.get("after"), c.get("key")):
+                            if isinstance(snap, dict) and snap.get("song_id") == song.id and snap.get("task_no"):
+                                used.append(int(snap["task_no"]))
+                row = RehearsalSession(
+                    song_id=song.id, kind="formal", task_no=max(used, default=0) + 1, date=d, start_slot=start, duration_slots=dur
+                )
+                row.song = song
+                row.absent_member_ids, row.attendance, row.locked, row.location = _capped_absent(event, version, song), None, False, ""
+                version.sessions.append(row)
+                created.append(row)
+                continue
+            if kind == "swap":
+                a, b = _by_uid(version, op.get("a")), _by_uid(version, op.get("b"))
+                if a.id == b.id or (a.date, a.start_slot) == (b.date, b.start_slot):
+                    raise HTTPException(status_code=422, detail="交换的两场无效(同一场或时间相同)")
+                _editable(a)
+                _editable(b)
+                _fits(event, b.date, b.start_slot, a.duration_slots)
+                _fits(event, a.date, a.start_slot, b.duration_slots)
+                touch(a)
+                touch(b)
+                (a.date, a.start_slot), (b.date, b.start_slot) = (b.date, b.start_slot), (a.date, a.start_slot)
+                continue
+            s = _by_uid(version, op.get("uid"))
+            if kind == "move":
+                _editable(s)
+                d = date.fromisoformat(str(op.get("date")))
+                start = int(op["start_slot"])
+                _fits(event, d, start, s.duration_slots)
+                touch(s)
+                s.date, s.start_slot = d, start
+            elif kind == "resize":
+                _editable(s, action="调整时长")
+                start, dur = int(op["start_slot"]), int(op["duration_slots"])
+                _fits(event, s.date, start, dur)
+                touch(s)
+                s.start_slot, s.duration_slots = start, dur
+            elif kind == "lock":
+                if s.kind == "evaluation":
+                    raise HTTPException(status_code=422, detail="全员评估场不需要锁定")
+                touch(s)
+                s.locked = bool(op.get("locked"))
+            elif kind == "delete":
+                _editable(s, action="删除")
+                snap = _snapshot(s)
+                if s.uid in touched:  # 本批里先改过再删:撤销时恢复到改之前
+                    snap.update(touched.pop(s.uid))
+                if s in created:
+                    created.remove(s)
+                else:
+                    deleted.append(snap)
+                version.sessions.remove(s)
+        _flush(db)
+    except (KeyError, TypeError, ValueError, ArithmeticError) as exc:
+        db.rollback()
+        raise HTTPException(status_code=422, detail=f"方案格式不对:{exc}") from exc
+    except HTTPException:
+        db.rollback()
+        raise
+
+    changes: list[dict] = []
+    for uid, before in touched.items():
+        s = next(x for x in version.sessions if x.uid == uid)
+        after = _state(s)
+        if after != before:
+            changes.append({"uid": uid, "key": _key(s), "before": before, "after": after})
+    for row in created:
+        changes.append({"uid": row.uid, "key": _key(row), "before": None, "after": _snapshot(row)})
+    for snap in deleted:
+        changes.append({"uid": snap["uid"], "key": {k: snap[k] for k in ("kind", "song_id", "task_no")}, "before": snap, "after": None})
+
+    errors = revalidate(event, version)
+    new = list(dict.fromkeys(_readable(e) for e in errors if e not in before_errors))
+    warnings = metric_deltas(before_metrics, version.metrics or {})
+    rows, report = _live_report(event, version)
+    result = {
+        "new_issues": new,
+        "warnings": warnings,
+        "issues": [_readable(i.message) for i in report.issues],
+        "notices": [_readable(w) for w in report.warnings],
+        "lines": lines,
+    }
+    if dry_run:
+        db.rollback()
+        return result
+    if not changes:
+        db.rollback()
+        raise HTTPException(status_code=422, detail="这组修改不会改变任何东西")
+    _record(db, version, "batch", summary or f"一次应用 {len(lines)} 条修改", changes, actor_id)
+    db.commit()
+    return result

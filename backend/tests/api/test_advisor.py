@@ -212,9 +212,9 @@ def test_advisor_and_solve_do_not_run_together(admin: TestClient, fake):
         db.add(AdvisorRun(event_id=ev["id"], status="running"))
         db.commit()
     r = admin.post(f"/api/events/{ev['id']}/solve", json={})
-    assert r.status_code == 409 and "AI 调度员正在工作" in r.json()["detail"]
+    assert r.status_code == 409 and "AI 正在工作" in r.json()["detail"]
     r = admin.post(f"/api/events/{ev['id']}/advisor", json={"consent": True})
-    assert r.status_code == 409
+    assert r.status_code == 409 and "同一时间只能运行一个" in r.json()["detail"]
 
 
 def test_advisor_requires_consent(admin: TestClient, fake):

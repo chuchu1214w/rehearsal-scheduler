@@ -5,11 +5,15 @@ from __future__ import annotations
 from datetime import timedelta
 
 from fastapi import APIRouter, HTTPException
+from sqlalchemy import text, update
+from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm.exc import StaleDataError
 
+from solver.reoptimize import reoptimize
+
 from .. import operations as ops
-from ..deps import DB, AdminUser, CurrentUser
-from ..models import ScheduleVersion
+from ..deps import DB, AdminUser, CurrentUser, SettingsDep
+from ..models import AdvisorRun, ScheduleVersion
 from ..notify import on_location_set, on_publish, on_unpublish
 from ..schedule_edit import (
     check_move_strict,
@@ -19,8 +23,11 @@ from ..schedule_edit import (
     fork_as_draft,
     participants_brief,
     schedule_conflicts,
+    to_solver_session,
+    version_problem,
 )
 from ..schemas import (
+    BatchPreviewOut,
     ConflictsOut,
     DiffOut,
     EditResultOut,
@@ -29,12 +36,14 @@ from ..schemas import (
     LockIn,
     MoveIn,
     OpAddIn,
+    OpBatchIn,
     OpDeleteIn,
     OpLockIn,
     OpMoveIn,
     OpResizeIn,
     OpSwapIn,
     PublishedScheduleOut,
+    ReoptOut,
     RevisionIn,
     VersionOut,
 )
@@ -142,10 +151,10 @@ def lock_session(version_id: int, session_id: int, body: LockIn, db: DB, admin: 
 
 # ---------- 新界面:冲突标出不拒绝、交换、撤销 / 重做、恢复历史版本 ----------
 def _editable_draft(db, version_id: int, expected: int | None, admin):  # noqa: ANN001, ANN202
-    """返回(演出, 草稿, 是否新复制)。已发布 / 已归档的版本先复制成草稿;草稿要核对修改次数。"""
+    """返回(演出, 草稿, 是否新复制)。已发布 / 已归档的版本先复制成草稿。
+    带了修改次数就核对(发布 / 归档后修改次数不再变化;界面上看到的是草稿时的旧数,说明这期间改过或发布过)。"""
     version = _get_version(db, version_id, admin)
-    if version.status == "draft":
-        ops.check_revision(version, expected)
+    ops.check_revision(version, expected)
     draft, forked = ensure_draft(db, version.event, version, admin.id)
     return version, draft, forked
 
@@ -203,6 +212,75 @@ def op_delete(version_id: int, body: OpDeleteIn, db: DB, admin: AdminUser) -> Ed
     new, warnings = ops.delete(db, version.event, draft, session, admin.id)
     db.refresh(draft)
     return EditResultOut(version=ops.admin_detail(version.event, draft), warnings=warnings, forked=forked, new_issues=new)
+
+
+@router.post("/schedules/{version_id}/ops/preview", response_model=BatchPreviewOut)
+def op_preview(version_id: int, body: OpBatchIn, db: DB, admin: AdminUser) -> BatchPreviewOut:
+    """试算一组修改:应用后会怎样(新冲突、提醒),不保存任何东西。"""
+    version = _get_version(db, version_id, admin)
+    result = ops.apply_batch(db, version.event, version, body.ops, summary=body.summary, actor_id=admin.id, dry_run=True)
+    return BatchPreviewOut(**result)
+
+
+@router.post("/schedules/{version_id}/ops/batch", response_model=EditResultOut)
+def op_batch(version_id: int, body: OpBatchIn, db: DB, admin: AdminUser) -> EditResultOut:
+    """一次应用一组修改(一条修改记录,一次撤销);已发布 / 已归档的版本先复制成草稿。"""
+    run = None
+    if body.ai_run_id is not None:
+        # AI 修改的方案:只能应用到它针对的那一版,且只能应用一次
+        run = db.get(AdvisorRun, body.ai_run_id)
+        if run is None or run.kind != "edit" or run.status != "done" or run.version_id != version_id:
+            raise HTTPException(status_code=409, detail="这个 AI 方案不属于这一版排练表,请重新生成")
+        # 先在同一个事务里「占住」(比较并交换):两个窗口同时点应用时只有一个成功;应用失败时随事务一起回滚
+        try:
+            claimed = db.execute(
+                update(AdvisorRun)
+                .where(AdvisorRun.id == run.id, text("(advisor_runs.applied IS NULL OR advisor_runs.applied = '[]')"))
+                .values(applied=[0])
+                .execution_options(synchronize_session=False)
+            )
+        except OperationalError as exc:  # SQLite:另一个请求正在写
+            db.rollback()
+            raise HTTPException(status_code=409, detail="这个 AI 方案正在应用中,请稍后刷新") from exc
+        if claimed.rowcount != 1:
+            db.rollback()
+            raise HTTPException(status_code=409, detail="这个 AI 方案已经应用过了")
+    version, draft, forked = _editable_draft(db, version_id, body.expected_revision, admin)
+    result = ops.apply_batch(db, version.event, draft, body.ops, summary=body.summary, actor_id=admin.id)
+    if run is not None:
+        db.execute(
+            update(AdvisorRun).where(AdvisorRun.id == run.id).values(applied=[draft.id]).execution_options(synchronize_session=False)
+        )
+        db.commit()
+    db.refresh(draft)
+    return EditResultOut(
+        version=ops.admin_detail(version.event, draft), warnings=result["warnings"], forked=forked, new_issues=result["new_issues"]
+    )
+
+
+@router.post("/schedules/{version_id}/reoptimize", response_model=ReoptOut)
+def reoptimize_version(version_id: int, db: DB, admin: AdminUser, settings: SettingsDep) -> ReoptOut:
+    """少改动地消除冲突:锁定的不动,其余只挪必要的几场;只给提案(含试算预览),不保存。"""
+    version = _get_version(db, version_id, admin)
+    event = version.event
+    rows = list(version.sessions)
+    revision = version.revision or 0
+    result = reoptimize(
+        version_problem(event, version),
+        [to_solver_session(event, s) for s in rows],
+        time_limit=10.0,
+        workers=settings.solver_workers or 2,
+    )
+    plan = [{"op": "move", "uid": rows[m.index].uid, "date": m.date.isoformat(), "start_slot": m.start} for m in result.moves]
+    # 求解要十几秒,期间别处改过这一版:提案已不对应当前排练表
+    db.expire_all()
+    version = _get_version(db, version_id, admin)
+    if (version.revision or 0) != revision:
+        raise HTTPException(status_code=409, detail=ops.STALE)
+    preview = None
+    if plan:
+        preview = BatchPreviewOut(**ops.apply_batch(db, event, version, plan, summary="", actor_id=admin.id, dry_run=True))
+    return ReoptOut(status=result.status, message=result.message, ops=plan, preview=preview, optimal=result.optimal, revision=revision)
 
 
 @router.post("/schedules/{version_id}/ops/swap", response_model=EditResultOut)

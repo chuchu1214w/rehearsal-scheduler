@@ -499,6 +499,7 @@ def serialize_session(event: Event, s: RehearsalSession) -> SessionOut:
         song_name=song_name,
         task_no=_ordinal(s),
         task_key=s.task_no,
+        uid=s.uid,
         date=s.date,
         weekday=weekday_zh(s.date),
         start_slot=s.start_slot,

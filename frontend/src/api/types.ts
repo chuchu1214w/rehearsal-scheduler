@@ -326,7 +326,7 @@ export interface ScheduleIssue {
 export interface ScheduleOperation {
   id: number
   seq: number
-  kind: 'move' | 'swap' | 'lock' | 'resize' | 'add' | 'delete'
+  kind: 'move' | 'swap' | 'lock' | 'resize' | 'add' | 'delete' | 'batch'
   summary: string
   undone: boolean
   created_at: string
@@ -439,6 +439,9 @@ export interface AdvisorChange {
 export interface AdvisorRun {
   id: number
   event_id: number
+  kind: 'advisor' | 'edit'
+  version_id: number | null
+  instruction: string
   status: 'queued' | 'running' | 'done' | 'failed' | 'cancelled'
   progress: string
   log: { kind: 'info' | 'think' | 'text' | 'tool' | 'result' | 'done'; text: string; at: number }[]
@@ -455,3 +458,40 @@ export interface AdvisorRun {
   elapsed_seconds: number | null
   cost_usd: number | null
 }
+
+/** 一组修改(AI 修改 / 少改动重排的方案),场次用固定身份 uid 指明 */
+export type BatchOp = Record<string, unknown> & { op: 'move' | 'resize' | 'swap' | 'add' | 'delete' | 'lock' }
+
+/** 试算一组修改的结果(不保存) */
+export interface BatchPreview {
+  lines: string[]
+  new_issues: string[]
+  issues: string[]
+  notices: string[]
+  warnings: string[]
+}
+
+/** 少改动解决冲突的提案 */
+export interface ReoptResult {
+  status: 'ok' | 'unchanged' | 'infeasible' | 'locked_conflict' | 'error'
+  message: string
+  ops: BatchOp[]
+  preview: BatchPreview | null
+  optimal: boolean
+  /** 算提案时这一版的修改次数;应用时作为 expected_revision */
+  revision: number
+}
+
+/** 用一句话修改排练表:AI 给出的方案(管理员预览后用 /ops/batch 应用) */
+export interface AiEditProposal {
+  summary: string
+  ops: BatchOp[]
+  lines: string[]
+  new_issues: string[]
+  issues: string[]
+  notices: string[]
+  version_id: number
+  revision?: number
+}
+
+export type AiEditRun = Omit<AdvisorRun, 'proposal'> & { proposal: AiEditProposal | null }

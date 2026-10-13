@@ -11,7 +11,7 @@ from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 from .utils import utcnow
 
 # 每次改表结构 +1;启动时与 meta 表比对,不一致就提示删库重建(开发阶段;有真实数据后改用 Alembic)
-SCHEMA_VERSION = 12  # 3:新增 solve_jobs / schedule_versions / rehearsal_sessions(可从 2 自动迁移)
+SCHEMA_VERSION = 13  # 3:新增 solve_jobs / schedule_versions / rehearsal_sessions(可从 2 自动迁移)
 
 
 class Base(DeclarativeBase):
@@ -262,6 +262,10 @@ class AdvisorRun(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     event_id: Mapped[int] = mapped_column(ForeignKey("events.id", ondelete="CASCADE"), index=True)
     status: Mapped[str] = mapped_column(String(16), default="queued")  # queued / running / done / failed / cancelled
+    # advisor = 无解时的 AI 调度员;edit = 用一句话修改某一版排练表(只出方案,管理员确认后才写入)
+    kind: Mapped[str] = mapped_column(String(16), default="advisor")
+    version_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    instruction: Mapped[str] = mapped_column(Text, default="")
     progress: Mapped[str] = mapped_column(String(200), default="")
     log: Mapped[list] = mapped_column(JSON, default=list)
     proposal: Mapped[dict | None] = mapped_column(JSON, nullable=True)

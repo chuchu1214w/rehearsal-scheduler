@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ApiError, api, errorMessage } from './client'
 import type {
   AdvisorRun,
+  AiEditRun,
   Availability,
   EventMember,
   Heat,
@@ -36,6 +37,7 @@ export const keys = {
   heat: (id: number) => ['heat', id] as const,
   latestJob: (id: number) => ['latest-job', id] as const,
   latestAdvisor: (id: number) => ['latest-advisor', id] as const,
+  latestAiEdit: (id: number) => ['latest-ai-edit', id] as const,
   versions: (id: number) => ['versions', id] as const,
   version: (vid: number) => ['version', vid] as const,
   published: (id: number) => ['published', id] as const,
@@ -118,6 +120,24 @@ export function useLatestAdvisor(eventId: number) {
     queryFn: async (): Promise<AdvisorRun | null> => {
       try {
         return await api<AdvisorRun>(`/api/events/${eventId}/advisor/latest`)
+      } catch (err) {
+        if (err instanceof ApiError && err.status === 404) return null
+        throw err
+      }
+    },
+    enabled: Number.isFinite(eventId),
+    refetchInterval: (q) => (q.state.data && (q.state.data.status === 'running' || q.state.data.status === 'queued') ? 2000 : false),
+    refetchIntervalInBackground: true,
+  })
+}
+
+/** 最近一次「AI 修改」(用一句话修改排练表);运行中每 2 秒刷新 */
+export function useLatestAiEdit(eventId: number) {
+  return useQuery({
+    queryKey: keys.latestAiEdit(eventId),
+    queryFn: async (): Promise<AiEditRun | null> => {
+      try {
+        return await api<AiEditRun>(`/api/events/${eventId}/ai-edits/latest`)
       } catch (err) {
         if (err instanceof ApiError && err.status === 404) return null
         throw err

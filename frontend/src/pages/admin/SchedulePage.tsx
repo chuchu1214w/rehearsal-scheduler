@@ -4,7 +4,8 @@ import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 
 import { ApiError, api } from '../../api/client'
 import { keys, useAction, useConflicts, useDiff, useEvent, useEventMembers, useInvalidateEvent, useSongs, useVersion, useVersions } from '../../api/hooks'
-import type { DiffItem, EditResult, ScheduleSession, ScheduleVersion, ScheduleVersionDetail } from '../../api/types'
+import type { DiffItem, EditResult, ReoptResult, ScheduleSession, ScheduleVersion, ScheduleVersionDetail } from '../../api/types'
+import { AiEditPanel } from '../../components/AiEditPanel'
 import { MemberTable, SessionsByDate, WeekView, sessionsForMember, songOrderOf } from '../../components/ScheduleViews'
 import { renderScheduleImage, shareImage } from '../../share'
 import { Back, Badge, Button, Heading, LinkButton, Note, Panel, Spinner, Tabs } from '../../ui'
@@ -28,6 +29,8 @@ export function SchedulePage() {
   const [confirm, setConfirm] = useState<'publish' | 'unpublish' | null>(null)
   const [sharing, setSharing] = useState(false)
   const [jumpDate, setJumpDate] = useState<string | null>(null)
+  /** 少改动解决冲突的提案(连同算它的版本;revision 是服务器算提案时的修改次数,应用时核对) */
+  const [reopt, setReopt] = useState<(ReoptResult & { vid: number }) | null>(null)
   const ev = useEvent(id)
   const members = useEventMembers(id)
   const songs = useSongs(id)
@@ -112,6 +115,37 @@ export function SchedulePage() {
       toast(`已以 v${list.find((v) => v.id === r.version.parent_version_id)?.version_no ?? ''} 为底稿新建草稿 v${r.version.version_no},原版本不变`)
     },
   )
+  const reoptimize = useAction(
+    async (vid: number) => {
+      try {
+        return await api<ReoptResult>(`/api/schedules/${vid}/reoptimize`, { method: 'POST' })
+      } catch (err) {
+        if (err instanceof ApiError && err.status === 409) void qc.invalidateQueries({ queryKey: keys.version(vid) })
+        throw err
+      }
+    },
+    (r, vid) => setReopt({ ...r, vid }),
+  )
+  const applyReopt = useAction(
+    async (r: ReoptResult & { vid: number }) => {
+      try {
+        return await api<EditResult>(`/api/schedules/${r.vid}/ops/batch`, {
+          method: 'POST',
+          json: { ops: r.ops, summary: `少改动解决冲突:挪动 ${r.ops.length} 场`, expected_revision: r.revision },
+        })
+      } catch (err) {
+        if (err instanceof ApiError && err.status === 409) {
+          setReopt(null)
+          void qc.invalidateQueries({ queryKey: keys.version(r.vid) })
+        }
+        throw err
+      }
+    },
+    (res, r) => {
+      setReopt(null)
+      afterEdit(res, `已挪动 ${r.ops.length} 场(可撤销)`)
+    },
+  )
   const setLocation = useAction(
     (vars: { vid: number; s: ScheduleSession; location: string }) =>
       api<{ version: ScheduleVersionDetail; notified: number }>(`/api/schedules/${vars.vid}/sessions/${vars.s.id}/location`, { method: 'POST', json: { location: vars.location } }),
@@ -184,7 +218,16 @@ export function SchedulePage() {
   const dayUrl = (date: string) => `/events/${e.id}/schedule/day/${date}?v=${current.id}${memberFilter != null ? `&m=${memberFilter}` : ''}`
   const others = list.filter((v) => v.id !== current.id)
   const conflictItems = conflicts.data?.items ?? []
-  const busy = move.isPending || lock.isPending || swap.isPending || undoRedo.isPending || resize.isPending || addSession.isPending || deleteSession.isPending
+  const busy =
+    move.isPending ||
+    lock.isPending ||
+    swap.isPending ||
+    undoRedo.isPending ||
+    resize.isPending ||
+    addSession.isPending ||
+    deleteSession.isPending ||
+    applyReopt.isPending ||
+    reoptimize.isPending // 计算提案期间不让改,免得提案对应不上
   const skipped = new Set(current.skipped_songs)
   const songChoices = (songs.data?.songs ?? []).filter((x) => !skipped.has(x.code)).map((x) => ({ id: x.id, code: x.code, name: x.name }))
 
@@ -216,7 +259,7 @@ export function SchedulePage() {
 
       <Panel>
         <div className="version-bar">
-          <select value={current.id} onChange={(ev2) => setQuery({ v: ev2.target.value, diff: null })} aria-label="选择版本">
+          <select value={current.id} disabled={reoptimize.isPending} onChange={(ev2) => setQuery({ v: ev2.target.value, diff: null })} aria-label="选择版本">
             {list.map((v) => (
               <option key={v.id} value={v.id}>
                 v{v.version_no} · {fmtDateTime(v.created_at)} · {SOURCE_TEXT[v.source] ?? v.source}
@@ -265,6 +308,16 @@ export function SchedulePage() {
                     )
                   })}
             </ul>
+            {editable && (
+              <div className="actions" style={{ justifyContent: 'flex-start', alignItems: 'center' }}>
+                <Button small loading={reoptimize.isPending} disabled={busy} onClick={() => reoptimize.mutate(current.id)}>
+                  少改动解决冲突
+                </Button>
+                <span className="muted" style={{ fontSize: 11 }}>
+                  {reoptimize.isPending ? '正在找挪动最少的办法,最多约 20 秒…' : '锁定的场次不动,只挪必要的几场;先给你看,确认后才改'}
+                </span>
+              </div>
+            )}
           </Note>
         )}
         {(detail.data?.notices?.length ?? 0) > 0 && (
@@ -335,6 +388,10 @@ export function SchedulePage() {
           )}
         </div>
       </Panel>
+
+      {editable && detail.data && (
+        <AiEditPanel eventId={e.id} version={current} revision={detail.data.revision} disabled={busy} onApplied={(r) => afterEdit(r, '已按 AI 方案修改(可撤销)')} />
+      )}
 
       {showDiff && (
         <Panel>
@@ -409,6 +466,55 @@ export function SchedulePage() {
           <MemberTable d={detail.data} />
         )}
       </Panel>
+
+      <Modal
+        open={reopt !== null}
+        title={`少改动解决冲突 · v${list.find((v) => v.id === reopt?.vid)?.version_no ?? ''}`}
+        onClose={() => setReopt(null)}
+        actions={
+          reopt?.status === 'ok' ? (
+            <>
+              <Button onClick={() => setReopt(null)}>不用了</Button>
+              <Button variant="primary" loading={applyReopt.isPending} onClick={() => reopt && applyReopt.mutate(reopt)}>
+                应用(可撤销)
+              </Button>
+            </>
+          ) : (
+            <Button onClick={() => setReopt(null)}>知道了</Button>
+          )
+        }
+      >
+        {reopt && (
+          <>
+            <p>
+              <b>{reopt.message}</b>
+              {reopt.status === 'ok' && !reopt.optimal && <span className="muted">(时间有限,不一定是挪动最少的办法)</span>}
+            </p>
+            {reopt.preview && (
+              <>
+                <ol className="ai-edit__lines">
+                  {reopt.preview.lines.map((x, i) => (
+                    <li key={i}>{x}</li>
+                  ))}
+                </ol>
+                {reopt.preview.issues.length > 0 ? (
+                  <Note tone="warning">
+                    挪动后还剩 {reopt.preview.issues.length} 处冲突(挪动解决不了的,需要手动处理):
+                    <ul className="issue-list">
+                      {reopt.preview.issues.map((x, i) => (
+                        <li key={i}>{x}</li>
+                      ))}
+                    </ul>
+                  </Note>
+                ) : (
+                  <p className="muted">挪动后没有冲突了。</p>
+                )}
+                {reopt.preview.notices.length > 0 && <p className="muted">提醒:{reopt.preview.notices.join(';')}</p>}
+              </>
+            )}
+          </>
+        )}
+      </Modal>
 
       <Modal
         open={confirm !== null}

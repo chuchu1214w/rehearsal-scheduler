@@ -550,6 +550,7 @@ class SessionOut(BaseModel):
     song_name: str
     task_no: int | None  # 给人看的「第几场」:同一首按日期排序后的序号(增删场次后仍连续)
     task_key: int | None = None  # 场次在版本内的固定编号(撤销 / 复制草稿时用来对应同一场)
+    uid: str | None = None  # 场次的固定身份(复制成草稿后不变;一组修改里用它指明场次)
     date: date
     weekday: str
     start_slot: int
@@ -688,6 +689,33 @@ class OpDeleteIn(RevisionIn):
     session_id: int
 
 
+class OpBatchIn(RevisionIn):
+    """一组修改(AI 修改 / 少改动重排的方案):每条 {op: move|resize|swap|add|delete|lock, ...},场次用固定身份 uid 指明。"""
+
+    ops: list[dict] = Field(min_length=1, max_length=60)
+    summary: str = Field(default="", max_length=200)
+    ai_run_id: int | None = None  # 来自「AI 修改」的方案:应用后在那条运行记录上记下写入的版本
+
+
+class BatchPreviewOut(BaseModel):
+    lines: list[str]  # 每条修改的说明
+    new_issues: list[str]  # 这组修改新引入的冲突
+    issues: list[str]  # 应用后仍有的全部冲突
+    notices: list[str]  # 不影响发布的提醒
+    warnings: list[str]  # 软目标变化
+
+
+class ReoptOut(BaseModel):
+    """少改动重排的提案:只挪动必要的场次;确认后用 /ops/batch 应用。"""
+
+    status: Literal["ok", "unchanged", "infeasible", "locked_conflict", "error"]
+    message: str
+    ops: list[dict]
+    preview: BatchPreviewOut | None = None
+    optimal: bool = False
+    revision: int = 0  # 算提案时这一版的修改次数;应用时作为 expected_revision
+
+
 class OpSwapIn(RevisionIn):
     a: int
     b: int
@@ -814,11 +842,14 @@ class NativeTokenOut(BaseModel):
 class AdvisorRunOut(BaseModel):
     id: int
     event_id: int
+    kind: str = "advisor"  # advisor = 无解时的 AI 调度员;edit = 用一句话修改排练表
+    version_id: int | None = None
+    instruction: str = ""
     status: Literal["queued", "running", "done", "failed", "cancelled"]
     progress: str
     log: list[dict]
     proposal: dict | None
-    applied: list[int]
+    applied: list[int]  # 调度员:已执行的调整序号;AI 修改:方案写入的版本 id
     error: str | None
     created_at: datetime
     finished_at: datetime | None
@@ -828,6 +859,11 @@ class AdvisorRunOut(BaseModel):
 
 class AdvisorStartIn(BaseModel):
     consent: bool = False  # 管理员已确认:排程数据(含成员昵称与空闲)会发送给 Anthropic
+
+
+class AiEditIn(BaseModel):
+    instruction: str = Field(min_length=2, max_length=500)
+    consent: bool = False  # 管理员已确认:排练表数据(含成员昵称与空闲)会发送给 Anthropic
 
 
 class AdvisorApplyIn(BaseModel):

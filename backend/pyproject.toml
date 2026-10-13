@@ -46,6 +46,7 @@ select = ["E", "F", "W", "I", "B", "UP"]
 
 [tool.ruff.lint.per-file-ignores]
 "app/advisor.py" = ["E501"]  # 给 Claude 的提示词与工具说明是长段中文
+"app/ai_edit.py" = ["E501"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

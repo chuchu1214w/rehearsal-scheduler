@@ -1,24 +1,13 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 
 import { api } from '../api/client'
 import { keys, useAction, useInvalidateEvent, useLatestAdvisor } from '../api/hooks'
 import type { AdvisorRun } from '../api/types'
 import { Badge, Button, Note, Panel, Spinner } from '../ui'
-import { API_BASE, isNative, onExternalLinkClick } from '../native'
 import { Modal } from '../ui/Modal'
 import { useToast } from '../ui/Toast'
-
-const CONSENT_KEY = 'season.advisor-consent.v1'
-
-const LOG_LABEL: Record<AdvisorRun['log'][number]['kind'], string> = {
-  info: '开始',
-  think: '思考',
-  text: '说明',
-  tool: '操作',
-  result: '结果',
-  done: '完成',
-}
+import { AiConsentModal, AiLog, useAiConsent } from './AiShared'
 
 /** AI 调度员:无解时让 Claude 试算调整、给出方案;管理员逐条允许后才执行(开发文档 §5.11) */
 export function AdvisorPanel({ eventId, onResolve, resolving }: { eventId: number; onResolve: () => void; resolving: boolean }) {
@@ -30,8 +19,6 @@ export function AdvisorPanel({ eventId, onResolve, resolving }: { eventId: numbe
   const running = !!run && (run.status === 'running' || run.status === 'queued')
   const [picked, setPicked] = useState<Set<number>>(new Set())
   const [confirm, setConfirm] = useState(false)
-  const [consentOpen, setConsentOpen] = useState(false)
-  const logRef = useRef<HTMLOListElement>(null)
 
   // 新方案出来时默认全选(已执行的除外)
   const proposalKey = run?.status === 'done' ? run.id : null
@@ -40,34 +27,14 @@ export function AdvisorPanel({ eventId, onResolve, resolving }: { eventId: numbe
     setPicked(new Set(run.proposal.changes.map((_, i) => i).filter((i) => !run.applied.includes(i))))
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [proposalKey])
-  useEffect(() => {
-    logRef.current?.scrollTo({ top: logRef.current.scrollHeight })
-  }, [run?.log.length])
 
   const setRun = (r: AdvisorRun) => qc.setQueryData(keys.latestAdvisor(eventId), r)
   const start = useAction(() => api<AdvisorRun>(`/api/events/${eventId}/advisor`, { method: 'POST', json: { consent: true } }), (r) => {
-    setConsentOpen(false)
+    consent.close()
     setRun(r)
   })
-  // 第一次使用前说明数据去向并征得同意;同意过的浏览器 / App 不再重复询问
-  const begin = () => {
-    let agreed = false
-    try {
-      agreed = localStorage.getItem(CONSENT_KEY) === '1'
-    } catch {
-      /* 存储不可用时每次都询问 */
-    }
-    if (agreed) start.mutate(undefined)
-    else setConsentOpen(true)
-  }
-  const agree = () => {
-    try {
-      localStorage.setItem(CONSENT_KEY, '1')
-    } catch {
-      /* 忽略 */
-    }
-    start.mutate(undefined)
-  }
+  const consent = useAiConsent(() => start.mutate(undefined))
+  const begin = consent.ask
   const cancel = useAction(() => api<AdvisorRun>(`/api/advisor-runs/${run?.id}/cancel`, { method: 'POST' }), setRun)
   const apply = useAction(
     (indices: number[]) => api<AdvisorRun>(`/api/advisor-runs/${run?.id}/apply`, { method: 'POST', json: { indices } }),
@@ -115,22 +82,7 @@ export function AdvisorPanel({ eventId, onResolve, resolving }: { eventId: numbe
         </>
       )}
 
-      {run && (running || run.status === 'done') && run.log.length > 0 && (
-        <details className="advisor-log" open={running}>
-          <summary className="muted">
-            思考过程 · {run.log.length} 步{run.elapsed_seconds != null && ` · ${Math.round(run.elapsed_seconds)} 秒`}
-            {run.cost_usd != null && run.cost_usd > 0 && ` · 约 $${run.cost_usd.toFixed(2)}`}
-          </summary>
-          <ol ref={logRef}>
-            {run.log.map((x, i) => (
-              <li key={i} className={`advisor-log__item advisor-log__item--${x.kind}`}>
-                <span className="advisor-log__tag">{LOG_LABEL[x.kind] ?? x.kind}</span>
-                <span>{x.text}</span>
-              </li>
-            ))}
-          </ol>
-        </details>
-      )}
+      {run && (running || run.status === 'done') && <AiLog run={run} running={running} />}
 
       {running && (
         <>
@@ -219,29 +171,7 @@ export function AdvisorPanel({ eventId, onResolve, resolving }: { eventId: numbe
         </>
       )}
 
-      <Modal
-        open={consentOpen}
-        title="使用 AI 调度员前请确认"
-        onClose={() => setConsentOpen(false)}
-        actions={
-          <>
-            <Button onClick={() => setConsentOpen(false)}>不用了</Button>
-            <Button variant="primary" loading={start.isPending} onClick={agree}>
-              同意并开始
-            </Button>
-          </>
-        }
-      >
-        <p className="advisor-consent">
-          AI 调度员由 Anthropic 公司的 Claude 提供。开始后,服务器会把<b>本演出的排程数据</b>发送给 Anthropic:演出日期、曲目、成员昵称、各人的空闲时间和特殊要求。
-        </p>
-        <p className="advisor-consent">不会发送用户名、密码、推送令牌或联系方式。按 Anthropic 的商业服务条款,这些数据不会被用于训练模型。AI 只给建议,任何改动都要你逐条允许。</p>
-        <p className="advisor-consent">
-          详见 <a href={isNative() ? `${API_BASE}/api/go/privacy` : '/privacy'} target="_blank" rel="noreferrer" onClick={onExternalLinkClick}>
-            隐私政策
-          </a>。
-        </p>
-      </Modal>
+      <AiConsentModal open={consent.open} loading={start.isPending} onClose={consent.close} onAgree={consent.agree} />
 
       <Modal
         open={confirm}
