@@ -2750,3 +2750,85 @@ body:has(.shell-member)::before {
   line-height: 1.6;
   cursor: pointer;
 }
+
+/* ---------- 冲突标红、交换 ---------- */
+.weekgrid__block.is-conflict {
+  outline: 2px solid var(--red);
+  outline-offset: -2px;
+}
+
+.weekgrid__alert {
+  display: inline-grid;
+  place-items: center;
+  width: 14px;
+  height: 14px;
+  margin-right: 3px;
+  border-radius: 50%;
+  background: var(--red);
+  color: #fff;
+  font-size: 10px;
+  font-style: normal;
+  font-weight: 700;
+  vertical-align: 1px;
+}
+
+.weekgrid__block.is-swap-target {
+  outline: 2px dashed var(--accent);
+  outline-offset: -2px;
+  filter: brightness(0.96);
+}
+
+.weekgrid__swap {
+  position: absolute;
+  right: 3px;
+  top: 3px;
+  font-style: normal;
+  font-size: 10px;
+  font-weight: 700;
+  color: #fff;
+  background: var(--accent);
+  border-radius: 6px;
+  padding: 0 4px;
+}
+
+.issue-list {
+  list-style: none;
+  margin: 6px 0 0;
+  padding: 0;
+  display: grid;
+  gap: 4px;
+}
+
+.issue-list button {
+  all: unset;
+  cursor: pointer;
+  display: block;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.issue-list button:hover,
+.issue-list button:focus-visible {
+  text-decoration: underline;
+}
+
+.history {
+  margin-top: 12px;
+  font-size: 12px;
+}
+
+.history summary {
+  cursor: pointer;
+  color: var(--muted);
+}
+
+.history ol {
+  margin: 6px 0 0;
+  padding-left: 18px;
+  line-height: 1.8;
+}
+
+.history li.is-undone {
+  color: var(--muted);
+  text-decoration: line-through;
+}

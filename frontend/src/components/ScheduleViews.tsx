@@ -36,8 +36,11 @@ export function WeekView({
   initialDate,
   editable = false,
   onMove,
+  onSwap,
   onLock,
   onLocation,
+  conflictIds,
+  jumpDate,
 }: {
   sessions: ScheduleSession[]
   range: ScheduleRange
@@ -46,14 +49,23 @@ export function WeekView({
   initialDate?: string
   editable?: boolean
   onMove?: (s: ScheduleSession, date: string, startSlot: number) => void
+  onSwap?: (a: ScheduleSession, b: ScheduleSession) => void
   onLock?: (s: ScheduleSession, locked: boolean) => void
   onLocation?: (s: ScheduleSession, location: string) => void
+  conflictIds?: Set<number>
+  /** 跳到这一天所在的周(如点了某条冲突);可带“|时间戳”以便重复跳转 */
+  jumpDate?: string | null
 }) {
   const weeks = weekStarts(range.formal_start_date, range.eval_date)
   const today = dayjs().format('YYYY-MM-DD')
   const preferred = initialDate ?? (today >= range.formal_start_date && today <= range.eval_date ? today : range.formal_start_date)
   const [week, setWeek] = useState(() => (weeks.includes(weekOf(preferred)) ? weekOf(preferred) : weeks[0]))
   const [open, setOpen] = useState<ScheduleSession | null>(null)
+  useEffect(() => {
+    const d = jumpDate?.split('|')[0]
+    if (d && weeks.includes(weekOf(d))) setWeek(weekOf(d))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [jumpDate])
   const current = open ? (sessions.find((s) => s.id === open.id) ?? open) : null
   const idx = weeks.indexOf(week)
   const order = songOrderOf(sessions)
@@ -91,6 +103,8 @@ export function WeekView({
         onSessionClick={setOpen}
         editable={editable}
         onMove={onMove}
+        onSwap={onSwap}
+        conflictIds={conflictIds}
       />
       <div className="legend">
         {order.map((code) => (
@@ -105,7 +119,12 @@ export function WeekView({
           全员评估
         </span>
         {onDateClick && <span className="muted">点日期看当天日程</span>}
-        {editable && <span className="muted">拖动色块可移动场次;<i className="lock" /> 已锁定</span>}
+        {editable && (
+          <span className="muted">
+            拖动色块可移动{onSwap ? ',拖到另一场上可交换' : '场次'};<i className="lock" /> 已锁定
+            {conflictIds && conflictIds.size > 0 ? ';红框 = 有冲突' : ''}
+          </span>
+        )}
       </div>
       <SessionModal
         s={current}

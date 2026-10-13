@@ -588,12 +588,35 @@ class VersionOut(BaseModel):
     session_count: int
     created_at: datetime
     published_at: datetime | None
+    revision: int = 0
+
+
+class IssueOut(BaseModel):
+    """一条硬约束问题(冲突):message 是给人看的句子,session_ids 是涉及的场次(界面标红)。"""
+
+    code: str
+    message: str
+    session_ids: list[int]
+
+
+class OperationOut(BaseModel):
+    id: int
+    seq: int
+    kind: str
+    summary: str
+    undone: bool
+    created_at: datetime
 
 
 class VersionDetailOut(VersionOut):
     sessions: list[SessionOut]
     member_stats: list[MemberStatOut]
     stage_records: list[dict]
+    # 以下仅管理员接口填写
+    issues: list[IssueOut] = []
+    history: list[OperationOut] = []
+    can_undo: bool = False
+    can_redo: bool = False
 
 
 # ---------- 发布 / 日历订阅(M4) ----------
@@ -628,6 +651,28 @@ class EditResultOut(BaseModel):
     version: VersionDetailOut
     warnings: list[str]  # 软目标变化,如「成员额外往返 +1」
     forked: bool  # 原版本不是草稿,已复制成新草稿
+    new_issues: list[str] = []  # 这次修改新引入的冲突(草稿允许暂存,发布前必须解决)
+
+
+class RevisionIn(BaseModel):
+    expected_revision: int | None = None  # 提交修改时界面看到的版本号;对不上说明期间被改过
+
+
+class OpMoveIn(RevisionIn):
+    session_id: int
+    date: date
+    start_slot: int
+    duration_slots: int | None = None
+
+
+class OpSwapIn(RevisionIn):
+    a: int
+    b: int
+
+
+class OpLockIn(RevisionIn):
+    session_id: int
+    locked: bool
 
 
 class DiffItemOut(BaseModel):

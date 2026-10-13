@@ -10,7 +10,7 @@ from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 from .utils import utcnow
 
 # 每次改表结构 +1;启动时与 meta 表比对,不一致就提示删库重建(开发阶段;有真实数据后改用 Alembic)
-SCHEMA_VERSION = 10  # 3:新增 solve_jobs / schedule_versions / rehearsal_sessions(可从 2 自动迁移)
+SCHEMA_VERSION = 11  # 3:新增 solve_jobs / schedule_versions / rehearsal_sessions(可从 2 自动迁移)
 
 
 class Base(DeclarativeBase):
@@ -227,11 +227,30 @@ class ScheduleVersion(Base):
     created_by: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
     published_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    revision: Mapped[int] = mapped_column(Integer, default=0)  # 每次修改 +1;提交修改时核对,防止后写覆盖先写
 
     event: Mapped[Event] = relationship(back_populates="versions")
     sessions: Mapped[list[RehearsalSession]] = relationship(
         back_populates="version", cascade="all, delete-orphan", order_by="(RehearsalSession.date, RehearsalSession.start_slot)"
     )
+    operations: Mapped[list[ScheduleOperation]] = relationship(cascade="all, delete-orphan", order_by="ScheduleOperation.seq")
+
+
+class ScheduleOperation(Base):
+    """草稿上的一次人工修改(移动 / 交换 / 锁定),记录前后状态,用于撤销 / 重做。"""
+
+    __tablename__ = "schedule_operations"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    version_id: Mapped[int] = mapped_column(ForeignKey("schedule_versions.id", ondelete="CASCADE"), index=True)
+    seq: Mapped[int] = mapped_column(Integer)
+    kind: Mapped[str] = mapped_column(String(16))  # move / swap / lock
+    summary: Mapped[str] = mapped_column(String(300), default="")
+    # [{session_id, before: {date, start_slot, duration_slots, locked}, after: {...}}]
+    changes: Mapped[list] = mapped_column(JSON, default=list)
+    undone: Mapped[bool] = mapped_column(Boolean, default=False)
+    actor_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
 
 
 class AdvisorRun(Base):

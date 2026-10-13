@@ -59,6 +59,10 @@ interface Props {
   /** 允许拖动正规排练场次;评估场与已锁定的不能拖 */
   editable?: boolean
   onMove?: (s: ScheduleSession, date: string, startSlot: number) => void
+  /** 拖到另一场上松手 = 交换两场的时间 */
+  onSwap?: (a: ScheduleSession, b: ScheduleSession) => void
+  /** 有冲突的场次(标红) */
+  conflictIds?: Set<number>
 }
 
 const WEEKDAYS = ['一', '二', '三', '四', '五', '六', '日']
@@ -86,6 +90,8 @@ export function WeekGrid({
   onSessionClick,
   editable = false,
   onMove,
+  onSwap,
+  conflictIds,
 }: Props) {
   const hours = dayEndHour - dayStartHour
   const today = dayjs().format('YYYY-MM-DD')
@@ -96,6 +102,17 @@ export function WeekGrid({
   const drag = useRef<DragState | null>(null)
   const suppressClick = useRef(false)
   const [ghost, setGhost] = useState<{ id: number; dayIdx: number; start: number; duration: number; valid: boolean } | null>(null)
+  const [swapTarget, setSwapTarget] = useState<ScheduleSession | null>(null)
+
+  /** 指针下方的另一场(可交换的正规排练) */
+  const swappableAt = (x: number, y: number, self: ScheduleSession): ScheduleSession | null => {
+    if (!onSwap) return null
+    const el = document.elementFromPoint(x, y)?.closest<HTMLElement>('[data-session-id]')
+    const id = Number(el?.dataset.sessionId)
+    if (!id || id === self.id) return null
+    const other = sessions.find((s) => s.id === id)
+    return other && other.kind === 'formal' && !other.locked ? other : null
+  }
 
   const canDrag = (s: ScheduleSession) => editable && !!onMove && s.kind === 'formal' && !s.locked
 
@@ -116,6 +133,13 @@ export function WeekGrid({
   const onPointerMove = (e: ReactPointerEvent<HTMLButtonElement>) => {
     const d = drag.current
     if (!d || e.pointerId !== d.pointerId) return
+    const target = swappableAt(e.clientX, e.clientY, d.session)
+    setSwapTarget(target)
+    if (target) {
+      d.moved = true
+      setGhost(null)
+      return
+    }
     let dayIdx = d.cols.findIndex((r) => e.clientX >= r.left && e.clientX <= r.right)
     if (dayIdx < 0) dayIdx = e.clientX < d.cols[0].left ? 0 : d.cols.length - 1
     const col = d.cols[dayIdx]
@@ -132,8 +156,14 @@ export function WeekGrid({
     if (!d || e.pointerId !== d.pointerId) return
     drag.current = null
     const g = ghost
+    const target = swapTarget
     setGhost(null)
+    setSwapTarget(null)
     if (d.moved) suppressClick.current = true
+    if (commit && target && onSwap) {
+      onSwap(d.session, target)
+      return
+    }
     if (commit && d.moved && g && g.valid && onMove) {
       const date = days[g.dayIdx]
       if (date !== d.session.date || g.start !== d.session.start_slot) onMove(d.session, date, g.start)
@@ -199,8 +229,11 @@ export function WeekGrid({
                     (dim ? ' is-dim' : '') +
                     (s.locked ? ' is-locked' : '') +
                     (canDrag(s) ? ' is-draggable' : '') +
-                    (dragging ? ' is-dragging' : '')
+                    (dragging ? ' is-dragging' : '') +
+                    (conflictIds?.has(s.id) ? ' is-conflict' : '') +
+                    (swapTarget?.id === s.id ? ' is-swap-target' : '')
                   }
+                  data-session-id={s.id}
                   style={{
                     top: `calc(${s.start_slot} * var(--row-h))`,
                     height: `calc(${s.duration_slots} * var(--row-h) - 2px)`,
@@ -220,9 +253,11 @@ export function WeekGrid({
                   onPointerMove={onPointerMove}
                   onPointerUp={(e) => finishDrag(e, true)}
                   onPointerCancel={(e) => finishDrag(e, false)}
-                  title={`${s.time} ${s.song_name}${s.locked ? '(已锁定)' : ''}`}
+                  title={`${s.time} ${s.song_name}${s.locked ? '(已锁定)' : ''}${conflictIds?.has(s.id) ? '(有冲突)' : ''}`}
                 >
+                  {swapTarget?.id === s.id && <i className="weekgrid__swap">交换</i>}
                   <b>
+                    {conflictIds?.has(s.id) && <i className="weekgrid__alert" aria-label="有冲突">!</i>}
                     {s.locked && <i className="lock" aria-label="已锁定" />}
                     {s.kind === 'evaluation' ? '评估' : s.song_code}
                   </b>

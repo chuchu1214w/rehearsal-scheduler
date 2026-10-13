@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 
 from ..deps import DB, AdminUser, SettingsDep
 from ..models import AdvisorRun, ScheduleVersion, SolveJob
+from ..operations import admin_detail
 from ..schemas import JobOut, SolveIn, VersionDetailOut, VersionOut
 from ..services import serialize_job, serialize_version
 from ..solve_worker import run_job
@@ -131,4 +132,4 @@ def get_version(version_id: int, db: DB, admin: AdminUser) -> VersionDetailOut:
     if version is None:
         raise HTTPException(status_code=404, detail="排练表版本不存在")
     event = load_event(db, version.event_id, admin)
-    return serialize_version(event, version, detail=True)  # type: ignore[return-value]
+    return admin_detail(event, version)

@@ -558,6 +558,7 @@ def serialize_version(event: Event, v: ScheduleVersion, *, detail: bool = False)
         session_count=len(v.sessions),
         created_at=v.created_at,
         published_at=v.published_at,
+        revision=v.revision or 0,
     )
     if not detail:
         return VersionOut(**base)  # type: ignore[arg-type]

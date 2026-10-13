@@ -36,6 +36,14 @@ def _migrate_8_to_9(engine: Engine) -> None:
             conn.execute(text("ALTER TABLE native_push_tokens ADD COLUMN env VARCHAR(12)"))
 
 
+def _migrate_10_to_11(engine: Engine) -> None:
+    """排练表版本增加修改次数(revision)。schedule_operations 表由 create_all 新建。"""
+    with engine.begin() as conn:
+        cols = {row[1] for row in conn.execute(text("PRAGMA table_info(schedule_versions)"))}
+        if "revision" not in cols:
+            conn.execute(text("ALTER TABLE schedule_versions ADD COLUMN revision INTEGER NOT NULL DEFAULT 0"))
+
+
 MIGRATIONS: dict[int, Callable[[Engine], None]] = {
     2: lambda engine: None,  # 2 → 3:新增 solve_jobs / schedule_versions / rehearsal_sessions
     3: _migrate_3_to_4,  # 3 → 4:users.calendar_token
@@ -45,6 +53,7 @@ MIGRATIONS: dict[int, Callable[[Engine], None]] = {
     7: lambda engine: None,  # 7 → 8:新增 native_push_tokens(create_all 已建)
     8: _migrate_8_to_9,  # 8 → 9:native_push_tokens.env
     9: lambda engine: None,  # 9 → 10:新增 advisor_runs(create_all 已建)
+    10: _migrate_10_to_11,  # 10 → 11:schedule_versions.revision;新增 schedule_operations
 }
 
 

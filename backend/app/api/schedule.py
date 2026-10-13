@@ -6,11 +6,34 @@ from datetime import timedelta
 
 from fastapi import APIRouter, HTTPException
 
+from .. import operations as ops
 from ..deps import DB, AdminUser, CurrentUser
 from ..models import ScheduleVersion
 from ..notify import on_location_set, on_publish, on_unpublish
-from ..schedule_edit import apply_move, diff_versions, ensure_draft, find_session, participants_brief, schedule_conflicts
-from ..schemas import ConflictsOut, DiffOut, EditResultOut, LocationIn, LocationOut, LockIn, MoveIn, PublishedScheduleOut, VersionOut
+from ..schedule_edit import (
+    check_move_strict,
+    diff_versions,
+    ensure_draft,
+    find_session,
+    fork_as_draft,
+    participants_brief,
+    schedule_conflicts,
+)
+from ..schemas import (
+    ConflictsOut,
+    DiffOut,
+    EditResultOut,
+    LocationIn,
+    LocationOut,
+    LockIn,
+    MoveIn,
+    OpLockIn,
+    OpMoveIn,
+    OpSwapIn,
+    PublishedScheduleOut,
+    RevisionIn,
+    VersionOut,
+)
 from ..services import published_version, serialize_version
 from ..utils import utcnow
 from .events import load_event
@@ -27,10 +50,12 @@ def _get_version(db, version_id: int, admin) -> ScheduleVersion:  # noqa: ANN001
 
 
 @router.post("/schedules/{version_id}/publish", response_model=VersionOut)
-def publish_version(version_id: int, db: DB, admin: AdminUser) -> VersionOut:
+def publish_version(version_id: int, db: DB, admin: AdminUser, body: RevisionIn | None = None) -> VersionOut:
     version = _get_version(db, version_id, admin)
-    if version.validation_errors:
-        raise HTTPException(status_code=422, detail="校验未通过的版本不能发布")
+    ops.check_revision(version, body.expected_revision if body else None)
+    # 发布门槛:按最新空闲与要求重新检查,有任何硬冲突都不能发布
+    if version.validation_errors or (version.status == "draft" and ops.live_issues(version.event, version)):
+        raise HTTPException(status_code=422, detail="还有冲突没有解决,不能发布")
     if version.status == "published":
         raise HTTPException(status_code=409, detail="这一版已经是发布状态")
     previous = None
@@ -80,13 +105,21 @@ def get_published(event_id: int, db: DB, user: CurrentUser) -> PublishedSchedule
 # ---------- 调整(M5) ----------
 @router.post("/schedules/{version_id}/sessions/{session_id}/move", response_model=EditResultOut)
 def move_session(version_id: int, session_id: int, body: MoveIn, db: DB, admin: AdminUser) -> EditResultOut:
+    """旧接口(iOS App 1.0):新引入硬冲突时拒绝。新界面用 /ops/move(冲突标出不拒绝)。"""
     version = _get_version(db, version_id, admin)
     event = version.event
     draft, forked = ensure_draft(db, event, version, admin.id)
     session = find_session(draft, session_id, original=version if forked else None)
-    warnings = apply_move(db, event, draft, session, new_date=body.date, new_start=body.start_slot, new_duration=body.duration_slots)
+    try:
+        check_move_strict(event, draft, session, new_date=body.date, new_start=body.start_slot, new_duration=body.duration_slots)
+    except HTTPException:
+        db.rollback()  # 不留下刚复制出来的草稿
+        raise
+    _new, warnings = ops.move(
+        db, event, draft, session, new_date=body.date, new_start=body.start_slot, new_duration=body.duration_slots, actor_id=admin.id
+    )
     db.refresh(draft)
-    return EditResultOut(version=serialize_version(event, draft, detail=True), warnings=warnings, forked=forked)  # type: ignore[arg-type]
+    return EditResultOut(version=ops.admin_detail(event, draft), warnings=warnings, forked=forked)
 
 
 @router.post("/schedules/{version_id}/sessions/{session_id}/lock", response_model=EditResultOut)
@@ -95,12 +128,94 @@ def lock_session(version_id: int, session_id: int, body: LockIn, db: DB, admin: 
     event = version.event
     draft, forked = ensure_draft(db, event, version, admin.id)
     session = find_session(draft, session_id, original=version if forked else None)
-    if session.kind == "evaluation":
-        raise HTTPException(status_code=422, detail="全员评估场不需要锁定")
-    session.locked = body.locked
+    ops.set_lock(db, event, draft, session, body.locked, admin.id)
     db.commit()
     db.refresh(draft)
-    return EditResultOut(version=serialize_version(event, draft, detail=True), warnings=[], forked=forked)  # type: ignore[arg-type]
+    return EditResultOut(version=ops.admin_detail(event, draft), warnings=[], forked=forked)
+
+
+# ---------- 新界面:冲突标出不拒绝、交换、撤销 / 重做、恢复历史版本 ----------
+def _editable_draft(db, version_id: int, expected: int | None, admin):  # noqa: ANN001, ANN202
+    """返回(演出, 草稿, 是否新复制)。已发布 / 已归档的版本先复制成草稿;草稿要核对修改次数。"""
+    version = _get_version(db, version_id, admin)
+    if version.status == "draft":
+        ops.check_revision(version, expected)
+    draft, forked = ensure_draft(db, version.event, version, admin.id)
+    return version, draft, forked
+
+
+@router.post("/schedules/{version_id}/ops/move", response_model=EditResultOut)
+def op_move(version_id: int, body: OpMoveIn, db: DB, admin: AdminUser) -> EditResultOut:
+    version, draft, forked = _editable_draft(db, version_id, body.expected_revision, admin)
+    session = find_session(draft, body.session_id, original=version if forked else None)
+    new, warnings = ops.move(
+        db,
+        version.event,
+        draft,
+        session,
+        new_date=body.date,
+        new_start=body.start_slot,
+        new_duration=body.duration_slots,
+        actor_id=admin.id,
+    )
+    db.refresh(draft)
+    return EditResultOut(version=ops.admin_detail(version.event, draft), warnings=warnings, forked=forked, new_issues=new)
+
+
+@router.post("/schedules/{version_id}/ops/swap", response_model=EditResultOut)
+def op_swap(version_id: int, body: OpSwapIn, db: DB, admin: AdminUser) -> EditResultOut:
+    version, draft, forked = _editable_draft(db, version_id, body.expected_revision, admin)
+    original = version if forked else None
+    a, b = find_session(draft, body.a, original=original), find_session(draft, body.b, original=original)
+    new, warnings = ops.swap(db, version.event, draft, a, b, admin.id)
+    db.refresh(draft)
+    return EditResultOut(version=ops.admin_detail(version.event, draft), warnings=warnings, forked=forked, new_issues=new)
+
+
+@router.post("/schedules/{version_id}/ops/lock", response_model=EditResultOut)
+def op_lock(version_id: int, body: OpLockIn, db: DB, admin: AdminUser) -> EditResultOut:
+    version, draft, forked = _editable_draft(db, version_id, body.expected_revision, admin)
+    session = find_session(draft, body.session_id, original=version if forked else None)
+    ops.set_lock(db, version.event, draft, session, body.locked, admin.id)
+    db.commit()
+    db.refresh(draft)
+    return EditResultOut(version=ops.admin_detail(version.event, draft), warnings=[], forked=forked)
+
+
+def _draft_only(db, version_id: int, expected: int | None, admin) -> ScheduleVersion:  # noqa: ANN001
+    version = _get_version(db, version_id, admin)
+    if version.status != "draft":
+        raise HTTPException(status_code=409, detail="只有草稿可以撤销 / 重做")
+    ops.check_revision(version, expected)
+    return version
+
+
+@router.post("/schedules/{version_id}/undo", response_model=EditResultOut)
+def undo(version_id: int, body: RevisionIn, db: DB, admin: AdminUser) -> EditResultOut:
+    version = _draft_only(db, version_id, body.expected_revision, admin)
+    summary = ops.undo(db, version.event, version)
+    db.refresh(version)
+    return EditResultOut(version=ops.admin_detail(version.event, version), warnings=[f"已撤销:{summary}"], forked=False)
+
+
+@router.post("/schedules/{version_id}/redo", response_model=EditResultOut)
+def redo(version_id: int, body: RevisionIn, db: DB, admin: AdminUser) -> EditResultOut:
+    version = _draft_only(db, version_id, body.expected_revision, admin)
+    summary = ops.redo(db, version.event, version)
+    db.refresh(version)
+    return EditResultOut(version=ops.admin_detail(version.event, version), warnings=[f"已重做:{summary}"], forked=False)
+
+
+@router.post("/schedules/{version_id}/fork", response_model=EditResultOut, status_code=201)
+def fork(version_id: int, db: DB, admin: AdminUser) -> EditResultOut:
+    """以任意版本(含历史版本)为底稿复制一个新草稿,原版本不变。"""
+    version = _get_version(db, version_id, admin)
+    draft = fork_as_draft(db, version.event, version, admin.id, source="copy")
+    ops.revalidate(version.event, draft)
+    draft.source = "copy"
+    db.commit()
+    db.refresh(draft)
+    return EditResultOut(version=ops.admin_detail(version.event, draft), warnings=[], forked=True)
 
 
 @router.get("/schedules/{version_id}/diff", response_model=DiffOut)

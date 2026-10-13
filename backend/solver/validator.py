@@ -15,10 +15,19 @@ from .types import KIND_EVALUATION, KIND_FORMAL, LadderLevel, Problem, Session
 
 
 @dataclass
+class Issue:
+    """一条硬约束问题:message 与 errors 中的句子相同;sessions 为涉及的场次在输入列表中的下标(用于界面标红)。"""
+
+    message: str
+    sessions: list[int] = field(default_factory=list)
+
+
+@dataclass
 class ValidationReport:
     errors: list[str] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
     metrics: dict[str, int] = field(default_factory=dict)
+    issues: list[Issue] = field(default_factory=list)
 
     @property
     def ok(self) -> bool:
@@ -39,58 +48,63 @@ def validate_schedule(
     config, rules = problem.config, problem.rules
     level = level or problem.ladder[0]
     rep = ValidationReport()
-    err = rep.errors.append
+    index = {id(s): i for i, s in enumerate(sessions)}
+
+    def err(message: str, *involved: Session) -> None:
+        rep.errors.append(message)
+        rep.issues.append(Issue(message, sorted({index[id(x)] for x in involved if id(x) in index})))
+
     formal_dates = set(config.formal_dates)
     formal = [s for s in sessions if s.kind == KIND_FORMAL]
     evals = [s for s in sessions if s.kind == KIND_EVALUATION]
 
     for s in sessions:
         if s.kind not in (KIND_FORMAL, KIND_EVALUATION):
-            err(f"未知的场次类型 {s.kind!r}")
+            err(f"未知的场次类型 {s.kind!r}", s)
             continue
         if s.duration < 1 or s.start < 0 or s.start + s.duration > config.slots_per_day:
-            err(f"V-01 {_label(problem, s)} 超出每日窗口")
+            err(f"V-01 {_label(problem, s)} 超出每日窗口", s)
             continue
         # V-01 窗口与禁排
         if not block_allowed(config, rules, s.date, s.start, s.duration):
-            err(f"V-01 {_label(problem, s)} 落在禁排时段")
+            err(f"V-01 {_label(problem, s)} 落在禁排时段", s)
 
     # ---- 正规排练 ----
     by_song: dict[str, list[Session]] = defaultdict(list)
     for s in formal:
         if s.song_code is None:
-            err(f"V-03 正规排练缺少曲目:{s.date} {config.range_label(s.start, s.duration)}")
+            err(f"V-03 正规排练缺少曲目:{s.date} {config.range_label(s.start, s.duration)}", s)
             continue
         try:
             song = problem.song(s.song_code)
         except KeyError:
-            err(f"V-03 未知曲目 {s.song_code}")
+            err(f"V-03 未知曲目 {s.song_code}", s)
             continue
         by_song[s.song_code].append(s)
         if s.date not in formal_dates:
             if s.date == config.eval_date:
-                err(f"V-07 {_label(problem, s)} 排在了公演前一天(只允许全员评估)")
+                err(f"V-07 {_label(problem, s)} 排在了公演前一天(只允许全员评估)", s)
             else:
-                err(f"V-01 {_label(problem, s)} 不在正规排练区间内")
+                err(f"V-01 {_label(problem, s)} 不在正规排练区间内", s)
         if len(s.absent_members) > 1:
-            err(f"V-08 {_label(problem, s)} 缺席人数超过 1")
+            err(f"V-08 {_label(problem, s)} 缺席人数超过 1", s)
         for m in s.absent_members:
             if m not in song.members:
-                err(f"V-02 {_label(problem, s)} 的缺席成员 {m} 不在该曲目中")
+                err(f"V-02 {_label(problem, s)} 的缺席成员 {m} 不在该曲目中", s)
         # V-02 到场成员可用
         for m in song.members:
             if m in s.absent_members:
                 continue
             missing = unavailable_hours(problem, m, s.date, s.start, s.duration)
             if missing:
-                err(f"V-02 {_label(problem, s)} 成员 {m} 在 {'、'.join(config.slot_label(h) for h in missing)} 不可用")
+                err(f"V-02 {_label(problem, s)} 成员 {m} 在 {'、'.join(config.slot_label(h) for h in missing)} 不可用", s)
 
     # V-03 场次数与时长
     for song in problem.songs:
         expected = sorted(song.durations(config), reverse=True)
         actual = sorted((s.duration for s in by_song.get(song.code, [])), reverse=True)
         if actual != expected:
-            err(f"V-03 曲目 {song.code}({song.name}) 场次时长 {actual} 与方案 {expected} 不符")
+            err(f"V-03 曲目 {song.code}({song.name}) 场次时长 {actual} 与方案 {expected} 不符", *by_song.get(song.code, []))
 
     # V-04 成员不重叠(含缺席成员,保守);V-05 单日硬上限
     per_member_day: dict[tuple[str, date], list[Session]] = defaultdict(list)
@@ -103,40 +117,40 @@ def validate_schedule(
         ss = sorted(ss, key=lambda s: s.start)
         for a, b in zip(ss, ss[1:], strict=False):
             if b.start < a.end:
-                err(f"V-04 成员 {m} 在 {d} 有重叠:{_label(problem, a)} 与 {_label(problem, b)}")
+                err(f"V-04 成员 {m} 在 {d} 有重叠:{_label(problem, a)} 与 {_label(problem, b)}", a, b)
         hours = sum(s.duration for s in ss)
         if hours > config.hard_daily_limit:
-            err(f"V-05 成员 {m} 在 {d} 排练 {hours} 小时,超过硬上限 {config.hard_daily_limit}")
+            err(f"V-05 成员 {m} 在 {d} 排练 {hours} 小时,超过硬上限 {config.hard_daily_limit}", *ss)
 
     # V-06 同曲不同天
     if config.same_song_different_days:
         for code, ss in by_song.items():
             days = [s.date for s in ss]
             if len(set(days)) != len(days):
-                err(f"V-06 曲目 {code} 有两场排在同一天")
+                err(f"V-06 曲目 {code} 有两场排在同一天", *(s for s in ss if days.count(s.date) > 1))
 
     # V-07 评估场
     if len(evals) != 1:
-        err(f"V-07 全员评估场应恰好 1 场,实际 {len(evals)} 场")
+        err(f"V-07 全员评估场应恰好 1 场,实际 {len(evals)} 场", *evals)
     for e in evals:
         if e.date != config.eval_date:
-            err(f"V-07 评估场日期 {e.date} 不是公演前一天 {config.eval_date}")
+            err(f"V-07 评估场日期 {e.date} 不是公演前一天 {config.eval_date}", e)
         if e.duration not in config.eval_durations:
-            err(f"V-07 评估场时长 {e.duration} 不在允许范围 {list(config.eval_durations)}")
+            err(f"V-07 评估场时长 {e.duration} 不在允许范围 {list(config.eval_durations)}", e)
         att = e.attendance or {}
         min_len = min(config.eval_min_contiguous, e.duration)
         allowed = {(e.start + a, e.start + b) for a, b in attendance_options(e.duration, config.eval_min_contiguous)}
         for m in problem.members:
             if m not in att:
-                err(f"V-07 评估场缺少成员 {m} 的到场记录")
+                err(f"V-07 评估场缺少成员 {m} 的到场记录", e)
                 continue
             a, b = att[m]
             if (a, b) not in allowed:
-                err(f"V-07 评估场成员 {m} 的到场区间 {config.range_label(a, b - a)} 不符合规则(须连续 ≥ {min_len} 小时且在场内)")
+                err(f"V-07 评估场成员 {m} 的到场区间 {config.range_label(a, b - a)} 不符合规则(须连续 ≥ {min_len} 小时且在场内)", e)
                 continue
             missing = unavailable_hours(problem, m, e.date, a, b - a)
             if missing:
-                err(f"V-02 评估场成员 {m} 在 {'、'.join(config.slot_label(h) for h in missing)} 不可用")
+                err(f"V-02 评估场成员 {m} 在 {'、'.join(config.slot_label(h) for h in missing)} 不可用", e)
 
     # V-08 降级层级
     unexcused: list[Session] = []
@@ -146,40 +160,46 @@ def validate_schedule(
                 unexcused.append(s)
     if level.strict:
         for s in unexcused:
-            err(f"V-08 严格层不允许缺席:{_label(problem, s)} 缺席 {'、'.join(s.absent_members)}")
+            err(f"V-08 严格层不允许缺席:{_label(problem, s)} 缺席 {'、'.join(s.absent_members)}", s)
     else:
         n_tasks = sum(len(song.durations(config)) for song in problem.songs)
         cap = level.max_absent_sessions(n_tasks)
         if len(unexcused) > cap:
-            err(f"V-08 缺席场次 {len(unexcused)} 超过层级上限 {cap}")
+            err(f"V-08 缺席场次 {len(unexcused)} 超过层级上限 {cap}", *unexcused)
         for song in problem.songs:
             ss = by_song.get(song.code, [])
             n = len(song.durations(config))
             min_full = n if level.per_song_min_full is None else min(level.per_song_min_full, n)
             song_unexcused = [s for s in ss if s in unexcused]
             if len(song_unexcused) > n - min_full:
-                err(f"V-08 曲目 {song.code} 全员到齐场次不足 {min_full}")
+                err(f"V-08 曲目 {song.code} 全员到齐场次不足 {min_full}", *song_unexcused)
             per_member: dict[str, int] = defaultdict(int)
             for s in song_unexcused:
                 for m in s.absent_members:
                     per_member[m] += 1
             for m, cnt in per_member.items():
                 if cnt > level.per_member_per_song_max_absent:
-                    err(f"V-08 成员 {m} 在曲目 {song.code} 缺席 {cnt} 次,超过 {level.per_member_per_song_max_absent}")
+                    err(
+                        f"V-08 成员 {m} 在曲目 {song.code} 缺席 {cnt} 次,超过 {level.per_member_per_song_max_absent}",
+                        *(s for s in song_unexcused if m in s.absent_members),
+                    )
 
     # V-09 自定义硬规则
     for (m, code), cap in rules.member_song_max_attendance.items():
         attended = sum(1 for s in by_song.get(code, []) if m not in s.absent_members)
         if attended > cap:
-            err(f"V-09 成员 {m} 在曲目 {code} 出勤 {attended} 场,超过上限 {cap}")
+            err(f"V-09 成员 {m} 在曲目 {code} 出勤 {attended} 场,超过上限 {cap}", *by_song.get(code, []))
     for (m, code), allowance in rules.member_song_max_absent.items():
         absent_n = sum(1 for s in by_song.get(code, []) if m in s.absent_members)
         if absent_n > allowance:
-            err(f"V-09 成员 {m} 在曲目 {code} 缺席 {absent_n} 次,超过允许的 {allowance} 次")
+            err(
+                f"V-09 成员 {m} 在曲目 {code} 缺席 {absent_n} 次,超过允许的 {allowance} 次",
+                *(s for s in by_song.get(code, []) if m in s.absent_members),
+            )
     for d, limit in rules.max_sessions_per_date.items():
         n = sum(1 for s in formal if s.date == d)
         if n > limit:
-            err(f"V-09 {d} 安排了 {n} 场,超过上限 {limit}")
+            err(f"V-09 {d} 安排了 {n} 场,超过上限 {limit}", *(s for s in formal if s.date == d))
     for fx in rules.fixed_sessions:
         hit = any(
             s.song_code == fx.song_code
@@ -190,7 +210,10 @@ def validate_schedule(
             for s in formal
         )
         if not hit:
-            err(f"V-09 固定场次 {fx.song_code} {fx.date} {config.range_label(fx.start, fx.duration)} 未出现在排练表中")
+            err(
+                f"V-09 固定场次 {fx.song_code} {fx.date} {config.range_label(fx.start, fx.duration)} 未出现在排练表中",
+                *by_song.get(fx.song_code, []),
+            )
 
     # V-10 锁定场次
     for ref in locked_reference or []:

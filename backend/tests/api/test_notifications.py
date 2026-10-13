@@ -58,6 +58,10 @@ def test_joined_publish_and_conflict_notifications(app, admin: TestClient):
     # 再发布一版(不同内容)→ 「较 v1:你的 N 场有变动」
     admin.post(f"/api/schedules/{job['version_id']}/sessions/{s['id']}/lock", json={"locked": True})  # 复制成草稿 v2
     v2 = admin.get(f"/api/events/{ev['id']}/schedules").json()[0]
+    # 发布门槛按最新空闲检查:A 这天没空,草稿 v2 有冲突 → 不能发布
+    r = admin.post(f"/api/schedules/{v2['id']}/publish")
+    assert r.status_code == 422 and "冲突" in r.json()["detail"]
+    client_a.put(f"/api/events/{ev['id']}/availability/{a['id']}", json={"days": FULL, "submit": True})
     assert admin.post(f"/api/schedules/{v2['id']}/publish").status_code == 200
     latest = client_a.get("/api/notifications").json()[0]
     assert "v2 已发布" in latest["title"] and "较 v1" in latest["body"]

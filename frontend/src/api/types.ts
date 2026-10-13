@@ -309,12 +309,35 @@ export interface ScheduleVersion {
   session_count: number
   created_at: string
   published_at: string | null
+  /** 修改次数;提交修改时带上,对不上说明期间被改过 */
+  revision: number
+}
+
+/** 一条冲突(硬约束问题):涉及的场次在日历上标红 */
+export interface ScheduleIssue {
+  code: string
+  message: string
+  session_ids: number[]
+}
+
+export interface ScheduleOperation {
+  id: number
+  seq: number
+  kind: 'move' | 'swap' | 'lock'
+  summary: string
+  undone: boolean
+  created_at: string
 }
 
 export interface ScheduleVersionDetail extends ScheduleVersion {
   sessions: ScheduleSession[]
   member_stats: MemberStat[]
   stage_records: StageRecord[]
+  /** 以下仅管理员接口返回 */
+  issues?: ScheduleIssue[]
+  history?: ScheduleOperation[]
+  can_undo?: boolean
+  can_redo?: boolean
 }
 
 // ---------- 发布 / 日历订阅(M4) ----------
@@ -339,6 +362,8 @@ export interface EditResult {
   version: ScheduleVersionDetail
   warnings: string[]
   forked: boolean
+  /** 这次修改新引入的冲突(草稿暂存,发布前必须解决) */
+  new_issues?: string[]
 }
 
 export type DiffChange = 'added' | 'removed' | 'moved' | 'changed'

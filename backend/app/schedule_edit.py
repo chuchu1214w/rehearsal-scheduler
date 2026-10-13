@@ -149,17 +149,10 @@ def metric_deltas(before: dict[str, int], after: dict[str, int]) -> list[str]:
     return out
 
 
-def apply_move(
-    db: DbSession,
-    event: Event,
-    version: ScheduleVersion,
-    session: RehearsalSession,
-    *,
-    new_date: date,
-    new_start: int,
-    new_duration: int | None,
-) -> list[str]:
-    """移动 / 改时长。违反硬规则 → 422(只报这次改动新引入的问题);否则写入并返回软目标变化说明。"""
+def check_move_strict(
+    event: Event, version: ScheduleVersion, session: RehearsalSession, *, new_date: date, new_start: int, new_duration: int | None
+) -> None:
+    """旧接口(iOS App 1.0 使用)的规则:这次移动若新引入硬冲突则 422 拒绝。只检查,不修改。"""
     if session.locked:
         raise HTTPException(status_code=422, detail="这场已锁定,先解锁再移动")
     if session.kind == "evaluation":
@@ -185,17 +178,6 @@ def apply_move(
         label = f"{session.song.name if session.song else ''} {new_date} {config.range_label(new_start, duration)} "
         msgs = dict.fromkeys(_humanize(e).replace(label, "") for e in new_errors)
         raise HTTPException(status_code=422, detail="不能这样改:" + ";".join(list(msgs)[:3]))
-    metrics_before = compute_metrics(problem, before_sessions)
-    session.date = new_date
-    session.start_slot = new_start
-    session.duration_slots = duration
-    version.validation_errors = list(after.errors)
-    version.metrics = compute_metrics(problem, after_sessions)
-    version.exact_optimum = False
-    if version.source == "solver":
-        version.source = "manual"
-    db.commit()
-    return metric_deltas(metrics_before, version.metrics)
 
 
 def _humanize(error: str) -> str:

@@ -2,7 +2,7 @@ import { useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 
-import { api } from '../../api/client'
+import { ApiError, api } from '../../api/client'
 import { keys, useAction, useConflicts, useDiff, useEvent, useEventMembers, useInvalidateEvent, useVersion, useVersions } from '../../api/hooks'
 import type { DiffItem, EditResult, ScheduleSession, ScheduleVersion, ScheduleVersionDetail } from '../../api/types'
 import { MemberTable, SessionsByDate, WeekView, sessionsForMember, songOrderOf } from '../../components/ScheduleViews'
@@ -27,6 +27,7 @@ export function SchedulePage() {
   const [memberFilter, setMemberFilter] = useState<number | null>(null)
   const [confirm, setConfirm] = useState<'publish' | 'unpublish' | null>(null)
   const [sharing, setSharing] = useState(false)
+  const [jumpDate, setJumpDate] = useState<string | null>(null)
   const ev = useEvent(id)
   const members = useEventMembers(id)
   const versions = useVersions(id)
@@ -54,16 +55,45 @@ export function SchedulePage() {
     invalidate(id)
     if (r.forked) setQuery({ v: String(r.version.id), diff: String(r.version.parent_version_id ?? '') })
     const extra = r.warnings.length ? `;${r.warnings.join('、')}` : ''
-    toast(r.forked ? `已基于 v${r.version.parent_version_id != null ? list.find((v) => v.id === r.version.parent_version_id)?.version_no ?? '' : ''} 创建草稿 v${r.version.version_no},${what}${extra}` : `${what}${extra}`)
+    const parentNo = r.version.parent_version_id != null ? (list.find((v) => v.id === r.version.parent_version_id)?.version_no ?? '') : ''
+    const msg = r.forked ? `已基于 v${parentNo} 创建草稿 v${r.version.version_no},${what}${extra}` : `${what}${extra}`
+    // 新引入的冲突:草稿照样保存,标红并说明;发布前必须解决
+    if (r.new_issues?.length) toast(`${msg}。注意,有冲突:${r.new_issues.slice(0, 2).join(';')}${r.new_issues.length > 2 ? ' 等' : ''}(已标红,可撤销)`)
+    else toast(msg)
+  }
+  /** 提交修改:带上看到的修改次数;对不上(别处改过)时刷新再提示 */
+  const edit = async (vid: number, path: string, json: Record<string, unknown>) => {
+    try {
+      return await api<EditResult>(`/api/schedules/${vid}/${path}`, { method: 'POST', json: { ...json, expected_revision: detail.data?.revision ?? null } })
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 409) void qc.invalidateQueries({ queryKey: keys.version(vid) })
+      throw err
+    }
   }
   const move = useAction(
-    (vars: { vid: number; s: ScheduleSession; date: string; start: number }) =>
-      api<EditResult>(`/api/schedules/${vars.vid}/sessions/${vars.s.id}/move`, { method: 'POST', json: { date: vars.date, start_slot: vars.start } }),
+    (vars: { vid: number; s: ScheduleSession; date: string; start: number }) => edit(vars.vid, 'ops/move', { session_id: vars.s.id, date: vars.date, start_slot: vars.start }),
     (r, vars) => afterEdit(r, `已移动 ${vars.s.song_code} 到 ${fmtMd(vars.date)}`),
   )
+  const swap = useAction(
+    (vars: { vid: number; a: ScheduleSession; b: ScheduleSession }) => edit(vars.vid, 'ops/swap', { a: vars.a.id, b: vars.b.id }),
+    (r, vars) => afterEdit(r, `已交换 ${vars.a.song_code} 与 ${vars.b.song_code} 的时间`),
+  )
   const lock = useAction(
-    (vars: { vid: number; s: ScheduleSession; locked: boolean }) => api<EditResult>(`/api/schedules/${vars.vid}/sessions/${vars.s.id}/lock`, { method: 'POST', json: { locked: vars.locked } }),
+    (vars: { vid: number; s: ScheduleSession; locked: boolean }) => edit(vars.vid, 'ops/lock', { session_id: vars.s.id, locked: vars.locked }),
     (r, vars) => afterEdit(r, vars.locked ? `已锁定 ${vars.s.song_code} 第 ${vars.s.task_no} 场` : `已解锁 ${vars.s.song_code} 第 ${vars.s.task_no} 场`),
+  )
+  const undoRedo = useAction(
+    (vars: { vid: number; action: 'undo' | 'redo' }) => edit(vars.vid, vars.action, {}),
+    (r) => afterEdit({ ...r, warnings: [] }, r.warnings[0] ?? ''),
+  )
+  const fork = useAction(
+    (vid: number) => api<EditResult>(`/api/schedules/${vid}/fork`, { method: 'POST' }),
+    (r) => {
+      qc.setQueryData(keys.version(r.version.id), r.version)
+      invalidate(id)
+      setQuery({ v: String(r.version.id), diff: null })
+      toast(`已以 v${list.find((v) => v.id === r.version.parent_version_id)?.version_no ?? ''} 为底稿新建草稿 v${r.version.version_no},原版本不变`)
+    },
   )
   const setLocation = useAction(
     (vars: { vid: number; s: ScheduleSession; location: string }) =>
@@ -75,7 +105,7 @@ export function SchedulePage() {
     },
   )
   const publish = useAction(
-    (vid: number) => api<ScheduleVersion>(`/api/schedules/${vid}/publish`, { method: 'POST' }),
+    (vid: number) => api<ScheduleVersion>(`/api/schedules/${vid}/publish`, { method: 'POST', json: { expected_revision: detail.data?.revision ?? null } }),
     (v) => {
       setConfirm(null)
       invalidate(id)
@@ -117,14 +147,16 @@ export function SchedulePage() {
   }
 
   const current = list.find((v) => v.id === selectedId) ?? list[0]
-  const canPublish = current.status !== 'published' && current.validation_errors.length === 0
+  const issues = detail.data?.issues ?? []
+  const conflictIds = new Set(issues.flatMap((i) => i.session_ids))
+  const canPublish = current.status !== 'published' && current.validation_errors.length === 0 && issues.length === 0
   const editable = current.status !== 'archived'
   const sessions = detail.data ? sessionsForMember(detail.data.sessions, memberFilter) : []
   const range = { formal_start_date: e.formal_start_date, formal_end_date: e.formal_end_date, eval_date: e.eval_date, day_start_hour: e.day_start_hour, day_end_hour: e.day_end_hour }
   const dayUrl = (date: string) => `/events/${e.id}/schedule/day/${date}?v=${current.id}${memberFilter != null ? `&m=${memberFilter}` : ''}`
   const others = list.filter((v) => v.id !== current.id)
   const conflictItems = conflicts.data?.items ?? []
-  const busy = move.isPending || lock.isPending
+  const busy = move.isPending || lock.isPending || swap.isPending || undoRedo.isPending
 
   // 一键把这一版画成长图,交给系统分享面板(可选微信)
   const onShare = async () => {
@@ -181,17 +213,33 @@ export function SchedulePage() {
           </span>
         </div>
         {current.skipped_songs.length > 0 && <Note tone="warning">这一版跳过了曲目 {current.skipped_songs.join('、')}(求解时参演人员尚未全部提交空闲)。</Note>}
-        {current.validation_errors.length > 0 && (
+        {(issues.length > 0 || current.validation_errors.length > 0) && (
           <Note tone="error">
-            校验未通过,不能发布:
-            <ul style={{ margin: '4px 0 0 16px' }}>
-              {current.validation_errors.map((x, i) => (
-                <li key={i}>{x}</li>
-              ))}
+            <b>有 {issues.length || current.validation_errors.length} 处冲突,解决前不能发布</b>(日历里标红;点一条跳到那一周)
+            <ul className="issue-list">
+              {issues.length > 0
+                ? issues.map((x, k) => {
+                    const first = detail.data?.sessions.find((s2) => x.session_ids.includes(s2.id))
+                    return (
+                      <li key={k}>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (!first) return
+                            setView('week')
+                            setJumpDate(`${first.date}|${Date.now()}`) // 带时间戳:重复点同一条也会跳
+                          }}
+                        >
+                          {x.message}
+                        </button>
+                      </li>
+                    )
+                  })
+                : current.validation_errors.map((x, k) => <li key={k}>{x}</li>)}
             </ul>
           </Note>
         )}
-        {conflictItems.length > 0 && (
+        {conflictItems.length > 0 && issues.length === 0 && (
           <Note tone="warning">
             <b>
               {conflicts.data?.members.map((m) => m.display_name).join('、')} 修改了空闲,{conflictItems.length} 场受影响:
@@ -206,8 +254,36 @@ export function SchedulePage() {
             </p>
           </Note>
         )}
+        {current.status === 'draft' && (detail.data?.can_undo || detail.data?.can_redo) && (
+          <div className="actions" style={{ justifyContent: 'flex-start' }}>
+            <Button small disabled={!detail.data?.can_undo || busy} onClick={() => undoRedo.mutate({ vid: current.id, action: 'undo' })}>
+              ↶ 撤销
+            </Button>
+            <Button small disabled={!detail.data?.can_redo || busy} onClick={() => undoRedo.mutate({ vid: current.id, action: 'redo' })}>
+              ↷ 重做
+            </Button>
+          </div>
+        )}
+        {(detail.data?.history?.length ?? 0) > 0 && (
+          <details className="history">
+            <summary>修改记录({detail.data!.history!.length})</summary>
+            <ol>
+              {detail.data!.history!.map((h) => (
+                <li key={h.id} className={h.undone ? 'is-undone' : ''}>
+                  {h.summary}
+                  <span className="muted"> · {fmtDateTime(h.created_at)}</span>
+                </li>
+              ))}
+            </ol>
+          </details>
+        )}
         <div className="actions">
           <LinkButton to={`/events/${e.id}/solve`}>重新求解</LinkButton>
+          {current.status !== 'draft' && (
+            <Button loading={fork.isPending} onClick={() => fork.mutate(current.id)}>
+              以这一版为底稿新建草稿
+            </Button>
+          )}
           {current.locked_count > 0 && <LinkButton to={`/events/${e.id}/solve?base=${current.id}`}>锁定后重排</LinkButton>}
           {others.length > 0 && !showDiff && <Button onClick={() => setQuery({ diff: String(current.parent_version_id ?? others[0].id) })}>对比版本</Button>}
           {current.status === 'published' ? (
@@ -279,6 +355,9 @@ export function SchedulePage() {
             onDateClick={(d) => navigate(dayUrl(d))}
             editable={editable && !busy}
             onMove={(s, date, start) => move.mutate({ vid: current.id, s, date, start })}
+            onSwap={(a, b) => swap.mutate({ vid: current.id, a, b })}
+            conflictIds={conflictIds}
+            jumpDate={jumpDate}
             onLock={(s, locked) => lock.mutate({ vid: current.id, s, locked })}
             onLocation={(s, location) => setLocation.mutate({ vid: current.id, s, location })}
           />
