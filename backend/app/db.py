@@ -101,6 +101,14 @@ def _migrate_12_to_13(engine: Engine) -> None:
             conn.execute(text("ALTER TABLE advisor_runs ADD COLUMN instruction TEXT NOT NULL DEFAULT ''"))
 
 
+def _migrate_13_to_14(engine: Engine) -> None:
+    """管理员确认后带着冲突发布:记下当时的冲突、说明、操作人。"""
+    with engine.begin() as conn:
+        cols = {row[1] for row in conn.execute(text("PRAGMA table_info(schedule_versions)"))}
+        if "forced_publish" not in cols:
+            conn.execute(text("ALTER TABLE schedule_versions ADD COLUMN forced_publish JSON"))
+
+
 MIGRATIONS: dict[int, Callable[[Engine], None]] = {
     2: lambda engine: None,  # 2 → 3:新增 solve_jobs / schedule_versions / rehearsal_sessions
     3: _migrate_3_to_4,  # 3 → 4:users.calendar_token
@@ -113,6 +121,7 @@ MIGRATIONS: dict[int, Callable[[Engine], None]] = {
     10: _migrate_10_to_11,  # 10 → 11:schedule_versions.revision;新增 schedule_operations
     11: _migrate_11_to_12,  # 11 → 12:场次固定身份 uid;早期修改记录补上;清掉旧规则下的「场数不符」错误
     12: _migrate_12_to_13,  # 12 → 13:AI 运行记录类型(调度员 / 一句话修改)
+    13: _migrate_13_to_14,  # 13 → 14:带冲突发布的记录
 }
 
 

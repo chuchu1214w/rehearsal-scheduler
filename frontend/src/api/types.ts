@@ -314,6 +314,18 @@ export interface ScheduleVersion {
   published_at: string | null
   /** 修改次数;提交修改时带上,对不上说明期间被改过 */
   revision: number
+  /** 管理员确认后带着冲突发布的记录(仅管理员可见) */
+  forced_publish?: ForcedPublish | null
+}
+
+export interface ForcedPublish {
+  /** 发布时的冲突(逐条) */
+  issues: string[]
+  /** 管理员写的说明(可选) */
+  note: string
+  by: number
+  by_name: string
+  at: string
 }
 
 /** 一条冲突(硬约束问题):涉及的场次在日历上标红 */

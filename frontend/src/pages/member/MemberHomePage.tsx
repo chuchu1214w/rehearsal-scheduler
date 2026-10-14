@@ -64,7 +64,8 @@ function HomeForEvent({ event, memberId, name, others }: { event: RehearsalEvent
           </>
         )}
         <br />
-        共 {sessionsForMember(published.sessions, memberId).filter((s) => s.kind === 'formal').length} 场排练 + 1 场全员评估,可订阅到手机日历。
+        共 {sessionsForMember(published.sessions, memberId).filter((s) => s.kind === 'formal').length} 场排练
+        {sessionsForMember(published.sessions, memberId).some((s) => s.kind === 'evaluation') ? ' + 1 场全员评估' : ''},可订阅到手机日历。
       </>
     ) : (
       <>这场演出的排练已全部结束,加油!</>

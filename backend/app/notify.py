@@ -79,7 +79,9 @@ def on_publish(db: Session, event: Event, version: ScheduleVersion, previous: Sc
             and any(m.id == p.member_id for m in s.song.members)
             and p.member_id not in (s.absent_member_ids or [])
         ]
-        body = f"你有 {len(mine)} 场排练 + 1 场全员评估。"
+        # 与成员页面、日历订阅一致:有评估场就算上(带冲突发布的版本可能没有评估场)
+        has_eval = any(s.kind == "evaluation" for s in version.sessions)
+        body = f"你有 {len(mine)} 场排练" + (" + 1 场全员评估。" if has_eval else "。")
         if diff is not None:
             changes = [i for i in diff.items if _touches(i, p.member_id)]
             body += (
@@ -122,7 +124,8 @@ def on_unpublish(db: Session, event: Event, version: ScheduleVersion) -> int:
 
 
 def on_availability_submitted(db: Session, event: Event, p: EventMember, actor: User) -> int:
-    """成员(本人)提交或重新提交空闲后:排练表已发布且受影响 → 通知管理员;全员提交完成 → 通知管理员。"""
+    """成员(本人)提交或重新提交空闲后:排练表已发布且受影响 → 通知管理员;全员提交完成 → 通知管理员。
+    带冲突发布时管理员已确认的冲突不算(schedule_conflicts 已排除)。"""
     if actor.role == "admin":
         return 0
     sent = 0

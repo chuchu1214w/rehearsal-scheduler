@@ -2941,3 +2941,33 @@ body:has(.shell-member)::before {
   font-size: 13px;
   line-height: 1.6;
 }
+
+/* ---------- 带冲突发布(管理员确认) ---------- */
+.force-publish {
+  display: grid;
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.force-publish__list {
+  max-height: 220px;
+  overflow-y: auto;
+}
+
+.force-publish__check {
+  display: grid;
+  grid-template-columns: 20px 1fr;
+  gap: 8px;
+  align-items: start;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.force-publish__check input {
+  margin-top: 3px;
+}
+
+.force-publish .field textarea {
+  min-height: 60px;
+}

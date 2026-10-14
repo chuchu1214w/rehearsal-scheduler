@@ -69,6 +69,7 @@ export function MemberSchedulePage() {
   const myId = d.my_member_id
   const sessions = scope === 'mine' ? sessionsForMember(d.sessions, myId) : d.sessions
   const mineCount = sessionsForMember(d.sessions, myId).filter((s) => s.kind === 'formal').length
+  const myEval = sessionsForMember(d.sessions, myId).some((s) => s.kind === 'evaluation')
   const dayQuery = [scope === 'all' ? 'scope=all' : '', eventParam != null ? `event=${eventParam}` : ''].filter(Boolean).join('&')
   return (
     <>
@@ -78,7 +79,7 @@ export function MemberSchedulePage() {
         <Badge tone="green">已发布 v{d.version_no}</Badge>
       </div>
       <p className="lead">
-        {d.event_name} · 你有 {mineCount} 场排练 + 1 场全员评估
+        {d.event_name} · 你有 {mineCount} 场排练{myEval ? ' + 1 场全员评估' : ''}
       </p>
       {list.length > 1 && <EventSwitch list={list} value={current.id} onChange={(id) => update({ event: id })} />}
       <Panel>

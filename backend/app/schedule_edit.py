@@ -287,13 +287,12 @@ def _people(s: RehearsalSession) -> set[int]:
 
 
 # ---------- 与最新空闲的冲突 ----------
-def schedule_conflicts(event: Event, version: ScheduleVersion) -> list[ConflictOut]:
-    """发布后有人改了空闲:列出排练表里成员已不再有空的场次。未提交空闲的成员不算。"""
-    config = event_config(event)
+def availability_hits(event: Event, version: ScheduleVersion) -> list[tuple[RehearsalSession, int, list[int]]]:
+    """排练表里成员没空的场次:(场次, 成员 id, 没空的格)。未提交空闲的成员不算。"""
     avail = availability_index(event)
     submitted = {p.member_id for p in event.participants if p.availability_submitted_at is not None}
     names = member_names(event)
-    out: list[ConflictOut] = []
+    out: list[tuple[RehearsalSession, int, list[int]]] = []
     for s in version.sessions:
         if s.kind == "evaluation":
             expected = {int(k): (int(v[0]), int(v[1])) for k, v in (s.attendance or {}).items()}
@@ -309,13 +308,36 @@ def schedule_conflicts(event: Event, version: ScheduleVersion) -> list[ConflictO
             slots = row.slots if row is not None else ""
             bad = [h for h in range(a, b) if h >= len(slots) or slots[h] == "0"]
             if bad:
-                out.append(
-                    ConflictOut(
-                        session=serialize_session(event, s),
-                        member=MemberBrief(id=mid, display_name=names[mid]),
-                        hours=[config.slot_label(h) for h in bad],
-                    )
-                )
+                out.append((s, mid, bad))
+    return out
+
+
+def hit_key(s: RehearsalSession, member_id: int) -> str:
+    return f"{s.uid}:{member_id}"
+
+
+def accepted_hits(event: Event, version: ScheduleVersion) -> dict[str, list[int]]:
+    """带冲突发布时,把当时「成员没空」的冲突逐条记下(场次固定身份:成员 → 没空的格),之后不再当作新冲突。"""
+    return {hit_key(s, mid): bad for s, mid, bad in availability_hits(event, version)}
+
+
+def schedule_conflicts(event: Event, version: ScheduleVersion, *, include_accepted: bool = False) -> list[ConflictOut]:
+    """发布后有人改了空闲:列出排练表里成员已不再有空的场次。未提交空闲的成员不算。
+    带冲突发布的版本,发布时管理员已确认的(同一场、同一人、没空的格没有变多)不算。"""
+    config = event_config(event)
+    names = member_names(event)
+    accepted = {} if include_accepted else dict((version.forced_publish or {}).get("accepted") or {})
+    out: list[ConflictOut] = []
+    for s, mid, bad in availability_hits(event, version):
+        if set(bad) <= set(accepted.get(hit_key(s, mid), [])):
+            continue
+        out.append(
+            ConflictOut(
+                session=serialize_session(event, s),
+                member=MemberBrief(id=mid, display_name=names[mid]),
+                hours=[config.slot_label(h) for h in bad],
+            )
+        )
     return out
 
 

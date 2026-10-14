@@ -11,7 +11,7 @@ from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 from .utils import utcnow
 
 # 每次改表结构 +1;启动时与 meta 表比对,不一致就提示删库重建(开发阶段;有真实数据后改用 Alembic)
-SCHEMA_VERSION = 13  # 3:新增 solve_jobs / schedule_versions / rehearsal_sessions(可从 2 自动迁移)
+SCHEMA_VERSION = 14  # 3:新增 solve_jobs / schedule_versions / rehearsal_sessions(可从 2 自动迁移)
 
 
 class Base(DeclarativeBase):
@@ -229,6 +229,8 @@ class ScheduleVersion(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
     published_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     revision: Mapped[int] = mapped_column(Integer, default=0)  # 每次修改 +1;提交修改时核对,防止后写覆盖先写
+    # 管理员确认后带着冲突发布:{issues: [当时的冲突], note: 说明, by: 管理员 id, by_name, at};正常发布为空
+    forced_publish: Mapped[dict | None] = mapped_column(JSON, nullable=True)
 
     event: Mapped[Event] = relationship(back_populates="versions")
     sessions: Mapped[list[RehearsalSession]] = relationship(

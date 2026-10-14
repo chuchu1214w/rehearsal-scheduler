@@ -591,6 +591,8 @@ class VersionOut(BaseModel):
     created_at: datetime
     published_at: datetime | None
     revision: int = 0
+    # 管理员确认后带着冲突发布的记录(仅管理员可见;成员端为空)
+    forced_publish: dict | None = None
 
 
 class IssueOut(BaseModel):
@@ -659,6 +661,14 @@ class EditResultOut(BaseModel):
 
 class RevisionIn(BaseModel):
     expected_revision: int | None = None  # 提交修改时界面看到的版本号;对不上说明期间被改过
+
+
+class PublishIn(RevisionIn):
+    """发布。有冲突时默认不能发布;管理员看过全部冲突并确认后可以带着冲突发布(force)。"""
+
+    force: bool = False
+    acknowledged_issues: list[str] = Field(default_factory=list, max_length=5000)  # 管理员确认时看到的冲突(逐条,前端已去重)
+    note: str = Field(default="", max_length=300)  # 为什么仍要发布(可选,只有管理员能看到)
 
 
 class OpMoveIn(RevisionIn):

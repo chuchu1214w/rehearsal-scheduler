@@ -1,5 +1,5 @@
 import { useQueryClient } from '@tanstack/react-query'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 
 import { ApiError, api } from '../../api/client'
@@ -27,6 +27,9 @@ export function SchedulePage() {
   const [view, setView] = useState<View>('week')
   const [memberFilter, setMemberFilter] = useState<number | null>(null)
   const [confirm, setConfirm] = useState<'publish' | 'unpublish' | null>(null)
+  /** 有冲突时发布:管理员逐条看过并勾选确认,可写一句说明 */
+  const [forceOk, setForceOk] = useState(false)
+  const [forceNote, setForceNote] = useState('')
   const [sharing, setSharing] = useState(false)
   const [jumpDate, setJumpDate] = useState<string | null>(null)
   /** 少改动解决冲突的提案(连同算它的版本;revision 是服务器算提案时的修改次数,应用时核对) */
@@ -43,6 +46,10 @@ export function SchedulePage() {
   const showDiff = params.has('diff')
   const diff = useDiff(showDiff ? selectedId : null, diffAgainst)
   const conflicts = useConflicts(id, selectedId)
+  // 冲突清单变了(如刚有成员改了空闲)就要重新勾选确认
+  const issueKey = (detail.data?.issues ?? []).map((i) => i.message).join('\n')
+  useEffect(() => setForceOk(false), [issueKey, selectedId])
+  useEffect(() => setForceNote(''), [selectedId])
 
   const setQuery = (next: Record<string, string | null>) => {
     const q: Record<string, string> = {}
@@ -156,21 +163,38 @@ export function SchedulePage() {
     },
   )
   const publish = useAction(
-    async (vid: number) => {
+    async ({ vid, acknowledged, note }: { vid: number; acknowledged: string[]; note: string }) => {
       try {
-        return await api<ScheduleVersion>(`/api/schedules/${vid}/publish`, { method: 'POST', json: { expected_revision: detail.data?.revision ?? null } })
+        // 有冲突时带上管理员确认过的冲突清单(force,去重);服务器会核对清单是否包含现在的每一条
+        const json = acknowledged.length
+          ? { expected_revision: detail.data?.revision ?? null, force: true, acknowledged_issues: [...new Set(acknowledged)], note: note.trim() }
+          : { expected_revision: detail.data?.revision ?? null }
+        return await api<ScheduleVersion>(`/api/schedules/${vid}/publish`, { method: 'POST', json })
       } catch (err) {
-        // 发布被拦下(有冲突 / 期间被改过):刷新这一版,让冲突显示出来
+        void qc.invalidateQueries({ queryKey: keys.versions(id) })
+        if (err instanceof ApiError && err.status === 409 && acknowledged.length) {
+          // 确认之后冲突又变了:窗口不关、说明保留,刷新清单后重新勾选确认
+          await qc.refetchQueries({ queryKey: keys.version(vid) })
+          throw err
+        }
+        // 其他情况(期间被改过、刚冒出冲突等):关掉窗口,刷新这一版让冲突显示出来
         setConfirm(null)
         void qc.invalidateQueries({ queryKey: keys.version(vid) })
-        void qc.invalidateQueries({ queryKey: keys.versions(id) })
+        if (err instanceof ApiError && err.status === 422 && !acknowledged.length) {
+          throw new Error('刚发现新的冲突,清单已刷新。可以先解决;确需时再点「发布这一版」逐条确认后带着冲突发布')
+        }
         throw err
       }
     },
     (v) => {
       setConfirm(null)
+      setForceNote('')
       invalidate(id)
-      toast(`已发布 v${v.version_no},成员现在可以看到并订阅日历`)
+      toast(
+        v.forced_publish
+          ? `已发布 v${v.version_no}(带 ${v.forced_publish.issues.length} 处冲突,已记录你的确认),成员现在可以看到并订阅日历`
+          : `已发布 v${v.version_no},成员现在可以看到并订阅日历`,
+      )
     },
   )
   const unpublish = useAction(
@@ -190,7 +214,7 @@ export function SchedulePage() {
     return (
       <>
         <Back to={`/events/${e.id}`} label={`${e.name} · 工作台`} />
-        <Heading title="排练表" subtitle="草稿仅管理员可见,校验通过后再发布。" />
+        <Heading title="排练表" subtitle="草稿仅管理员可见,确认无误后再发布。" />
         <Panel>
           <Badge tone="neutral">尚未生成</Badge>
           <h2 style={{ marginTop: 15 }}>排程完成后,排练表会出现在这里</h2>
@@ -210,8 +234,10 @@ export function SchedulePage() {
   const current = list.find((v) => v.id === selectedId) ?? list[0]
   const issues = detail.data?.issues ?? []
   const conflictIds = new Set(issues.flatMap((i) => i.session_ids))
-  // 以实时检查为准(保存的 validation_errors 可能是旧规则下的结果);详情还没载入时不允许发布
-  const canPublish = current.status !== 'published' && detail.data?.issues !== undefined && issues.length === 0
+  // 以实时检查为准(保存的 validation_errors 可能是旧规则下的结果);详情还没载入时不允许发布。
+  // 有冲突时也可以发布,但要在确认窗口里逐条看过并勾选确认
+  const canPublish = current.status !== 'published' && detail.data?.issues !== undefined
+  const forced = current.forced_publish ?? null
   const editable = current.status !== 'archived'
   const sessions = detail.data ? sessionsForMember(detail.data.sessions, memberFilter) : []
   const range = { formal_start_date: e.formal_start_date, formal_end_date: e.formal_end_date, eval_date: e.eval_date, day_start_hour: e.day_start_hour, day_end_hour: e.day_end_hour }
@@ -264,6 +290,7 @@ export function SchedulePage() {
               <option key={v.id} value={v.id}>
                 v{v.version_no} · {fmtDateTime(v.created_at)} · {SOURCE_TEXT[v.source] ?? v.source}
                 {v.status === 'published' ? ' · 已发布' : v.status === 'archived' ? ' · 已归档' : ''}
+                {v.forced_publish ? ' · 带冲突' : ''}
               </option>
             ))}
           </select>
@@ -271,6 +298,7 @@ export function SchedulePage() {
           {current.level_used != null && <Badge tone={current.level_used === 0 ? 'green' : 'orange'}>{current.level_used === 0 ? '无计划外缺席' : `缺席层级 L${current.level_used}`}</Badge>}
           <Badge tone={current.exact_optimum ? 'accent' : 'neutral'}>{current.exact_optimum ? '严格最优' : SOURCE_TEXT[current.source] === '求解' ? '非严格最优' : (SOURCE_TEXT[current.source] ?? current.source)}</Badge>
           {current.locked_count > 0 && <Badge tone="orange">锁定 {current.locked_count} 场</Badge>}
+          {forced && <Badge tone="red">带冲突发布</Badge>}
         </div>
         <p className="muted" style={{ marginTop: 8 }}>
           {current.session_count} 场 · 生成于 {fmtDateTime(current.created_at)}
@@ -285,10 +313,30 @@ export function SchedulePage() {
             生成排练表长图{memberFilter != null ? '(当前筛选的成员)' : ''},在分享面板里选微信
           </span>
         </div>
+        {forced && (
+          <Note tone="warning">
+            <b>
+              这一版是管理员确认后带着 {forced.issues.length} 处冲突发布的
+            </b>
+            (由 {forced.by_name} 于 {fmtDateTime(forced.at)} 确认){forced.note && <>:「{forced.note}」</>}
+            <details className="history">
+              <summary>发布时的冲突({forced.issues.length})</summary>
+              <ul className="issue-list">
+                {forced.issues.map((x, k) => (
+                  <li key={k}>{x}</li>
+                ))}
+              </ul>
+            </details>
+          </Note>
+        )}
         {current.skipped_songs.length > 0 && <Note tone="warning">这一版跳过了曲目 {current.skipped_songs.join('、')}(求解时参演人员尚未全部提交空闲)。</Note>}
         {issues.length > 0 && (
           <Note tone="error">
-            <b>有 {issues.length} 处冲突,解决前不能发布</b>(日历里标红;点一条跳到那一周)
+            <b>
+              有 {issues.length} 处冲突
+              {current.status === 'draft' ? ',建议先解决' : ''}
+            </b>
+            (日历里标红;点一条跳到那一周{current.status === 'draft' ? ';确实需要时,也可以在发布时逐条确认后带着冲突发布' : ''})
             <ul className="issue-list">
               {issues.map((x, k) => {
                     const first = detail.data?.sessions.find((s2) => x.session_ids.includes(s2.id))
@@ -382,8 +430,15 @@ export function SchedulePage() {
               撤回发布
             </Button>
           ) : (
-            <Button variant="primary" disabled={!canPublish} onClick={() => setConfirm('publish')}>
-              发布这一版
+            <Button
+              variant="primary"
+              disabled={!canPublish}
+              onClick={() => {
+                setForceOk(false)
+                setConfirm('publish')
+              }}
+            >
+              {issues.length > 0 ? `发布这一版(有 ${issues.length} 处冲突)` : '发布这一版'}
             </Button>
           )}
         </div>
@@ -522,9 +577,23 @@ export function SchedulePage() {
         onClose={() => setConfirm(null)}
         actions={
           confirm === 'publish' ? (
-            <Button variant="primary" loading={publish.isPending} onClick={() => publish.mutate(current.id)}>
-              发布
-            </Button>
+            issues.length > 0 ? (
+              <>
+                <Button onClick={() => setConfirm(null)}>先不发布</Button>
+                <Button
+                  variant="danger"
+                  disabled={!forceOk || detail.isFetching}
+                  loading={publish.isPending}
+                  onClick={() => publish.mutate({ vid: current.id, acknowledged: issues.map((i) => i.message), note: forceNote })}
+                >
+                  仍然发布
+                </Button>
+              </>
+            ) : (
+              <Button variant="primary" loading={publish.isPending} onClick={() => publish.mutate({ vid: current.id, acknowledged: [], note: '' })}>
+                发布
+              </Button>
+            )
           ) : (
             <Button variant="danger" loading={unpublish.isPending} onClick={() => unpublish.mutate(current.id)}>
               撤回
@@ -537,6 +606,27 @@ export function SchedulePage() {
             ? `发布后成员能在「我的排练表」看到,并可订阅到手机日历;${e.published_version_no ? `已发布的 v${e.published_version_no} 会归档。` : '之前没有发布过的版本。'}`
             : '撤回后成员端恢复为「尚未发布」,已订阅的日历会清空这场演出的排练。'}
         </p>
+        {confirm === 'publish' && issues.length > 0 && (
+          <div className="force-publish">
+            <Note tone="error">
+              <b>这一版还有 {issues.length} 处冲突,不满足排练要求:</b>
+              <ul className="issue-list force-publish__list">
+                {issues.map((x, k) => (
+                  <li key={k}>{x.message}</li>
+                ))}
+              </ul>
+            </Note>
+            <p className="muted">带着冲突发布后,成员会照这份排练表排练(例如有人在没空的时段被排了练习),请确认已经和相关成员沟通好。之后仍可修改并发布新的版本。</p>
+            <label className="force-publish__check">
+              <input type="checkbox" checked={forceOk} onChange={(ev2) => setForceOk(ev2.target.checked)} />
+              <span>我已逐条看过以上 {issues.length} 处冲突,确认仍要发布</span>
+            </label>
+            <label className="field">
+              <span>说明(可选,只有管理员看得到)</span>
+              <textarea value={forceNote} maxLength={300} rows={2} placeholder="例如:A 那天会晚到,已当面确认" onChange={(ev2) => setForceNote(ev2.target.value)} />
+            </label>
+          </div>
+        )}
       </Modal>
     </>
   )

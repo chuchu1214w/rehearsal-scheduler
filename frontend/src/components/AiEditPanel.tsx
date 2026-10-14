@@ -138,7 +138,7 @@ export function AiEditPanel({
           )}
           {p.new_issues.length > 0 && (
             <Note tone="error">
-              <b>应用后会新增 {p.new_issues.length} 处冲突</b>(仍可应用,冲突会标红,发布前要解决):
+              <b>应用后会新增 {p.new_issues.length} 处冲突</b>(仍可应用,冲突会标红;发布前建议解决,确需时也可在发布时逐条确认后带着冲突发布):
               <ul className="issue-list">
                 {p.new_issues.map((x, i) => (
                   <li key={i}>{x}</li>

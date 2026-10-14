@@ -16,6 +16,7 @@ from ..deps import DB, AdminUser, CurrentUser, SettingsDep
 from ..models import AdvisorRun, ScheduleVersion
 from ..notify import on_location_set, on_publish, on_unpublish
 from ..schedule_edit import (
+    accepted_hits,
     check_move_strict,
     diff_versions,
     ensure_draft,
@@ -43,6 +44,7 @@ from ..schemas import (
     OpResizeIn,
     OpSwapIn,
     PublishedScheduleOut,
+    PublishIn,
     ReoptOut,
     RevisionIn,
     VersionOut,
@@ -63,15 +65,33 @@ def _get_version(db, version_id: int, admin) -> ScheduleVersion:  # noqa: ANN001
 
 
 @router.post("/schedules/{version_id}/publish", response_model=VersionOut)
-def publish_version(version_id: int, db: DB, admin: AdminUser, body: RevisionIn | None = None) -> VersionOut:
+def publish_version(version_id: int, db: DB, admin: AdminUser, body: PublishIn | None = None) -> VersionOut:
+    body = body or PublishIn()
     version = _get_version(db, version_id, admin)
-    ops.check_revision(version, body.expected_revision if body else None)
-    # 发布门槛:按最新空闲与要求重新检查(保存的结果可能过时,如旧规则下的「场数不符」),有任何硬冲突都不能发布
-    if version.status != "published" and ops.revalidate_errors(version.event, version):
-        db.commit()
-        raise HTTPException(status_code=422, detail="还有冲突没有解决,不能发布")
+    ops.check_revision(version, body.expected_revision)
     if version.status == "published":
         raise HTTPException(status_code=409, detail="这一版已经是发布状态")
+    # 发布门槛:按最新空闲与要求重新检查(保存的结果可能过时,如旧规则下的「场数不符」)。
+    # 有硬冲突时默认不能发布;管理员看过全部冲突并确认(force)后可以带着冲突发布——
+    # 确认时看到的冲突必须包含现在的每一条(期间成员改了空闲、出现新冲突时要重新确认)
+    forced = None
+    if ops.revalidate_errors(version.event, version):
+        current = [i.message for i in ops.live_issues(version.event, version)]
+        if not body.force:
+            db.commit()
+            raise HTTPException(status_code=422, detail="还有冲突没有解决,不能发布")
+        if not set(current) <= set(body.acknowledged_issues):
+            db.commit()
+            raise HTTPException(status_code=409, detail="冲突有变化(可能有成员刚改了空闲),已为你刷新,请重新确认")
+        forced = {
+            "issues": current,
+            "note": body.note.strip(),
+            "by": admin.id,
+            "by_name": admin.username,
+            "at": utcnow().isoformat(timespec="seconds"),
+            # 已确认的「成员没空」冲突(按场次固定身份 + 成员):之后成员再提交空闲时不当作新冲突提醒
+            "accepted": accepted_hits(version.event, version),
+        }
     ops.claim(db, version)  # 与同时进行的修改互斥:读到之后若有人改过,这次发布 409
     previous = None
     for other in version.event.versions:
@@ -80,6 +100,7 @@ def publish_version(version_id: int, db: DB, admin: AdminUser, body: RevisionIn 
             previous = other
     version.status = "published"
     version.published_at = utcnow()
+    version.forced_publish = forced
     on_publish(db, version.event, version, previous)
     db.commit()
     return serialize_version(version.event, version)  # type: ignore[return-value]
@@ -92,6 +113,7 @@ def unpublish_version(version_id: int, db: DB, admin: AdminUser) -> VersionOut:
         raise HTTPException(status_code=409, detail="这一版不是发布状态")
     version.status = "draft"
     version.published_at = None
+    version.forced_publish = None
     on_unpublish(db, version.event, version)
     db.commit()
     return serialize_version(version.event, version)  # type: ignore[return-value]
@@ -104,6 +126,9 @@ def get_published(event_id: int, db: DB, user: CurrentUser) -> PublishedSchedule
     if version is None:
         raise HTTPException(status_code=404, detail="排练表尚未发布")
     detail = serialize_version(event, version, detail=True)
+    if user.role != "admin":
+        # 冲突说明里有其他成员的空闲情况,只给管理员看
+        detail = detail.model_copy(update={"forced_publish": None, "validation_errors": []})
     return PublishedScheduleOut(
         **detail.model_dump(),
         event_name=event.name,

@@ -565,13 +565,16 @@ def serialize_version(event: Event, v: ScheduleVersion, *, detail: bool = False)
         level_used=v.level_used,
         exact_optimum=v.exact_optimum,
         objective_values=dict(v.objective_values or {}),
-        validation_errors=list(v.validation_errors or []),
+        # 正在发布中的「带冲突发布」版本:冲突已由管理员确认,不再作为「校验未通过」返回(旧版 App 会据此显示「不能发布」);
+        # 归档后照常返回(旧版 App 据此不允许再次直接发布)。详细冲突见 forced_publish 与实时检查
+        validation_errors=[] if v.forced_publish and v.status == "published" else list(v.validation_errors or []),
         metrics=dict(v.metrics or {}),
         skipped_songs=list(v.skipped_songs or []),
         session_count=len(v.sessions),
         created_at=v.created_at,
         published_at=v.published_at,
         revision=v.revision or 0,
+        forced_publish=dict(v.forced_publish) if v.forced_publish else None,
     )
     if not detail:
         return VersionOut(**base)  # type: ignore[arg-type]
