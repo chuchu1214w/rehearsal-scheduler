@@ -20,7 +20,7 @@ from .db import make_engine, make_session_factory
 from .models import Event, RehearsalSession, ScheduleVersion, SolveJob
 from .operations import _live_report as live_report
 from .operations import _readable as readable
-from .schedule_edit import copy_locations, copy_locks, locked_fixed_sessions
+from .schedule_edit import copy_locations, copy_locks, locked_fixed_sessions, to_solver_session
 from .services import event_problem, published_version, ready_song_codes, summarize_diagnosis
 from .utils import utcnow
 
@@ -31,6 +31,44 @@ LOCKED_CHECK_CODES = {"V-01", "V-02", "V-04", "V-05", "V-06"}
 def _locked_in(row, codes: set[str]) -> bool:  # noqa: ANN001
     """本次重排要保留的锁定正规场次。"""
     return row.locked and row.kind == "formal" and row.song is not None and row.song.code in codes
+
+
+def _planned(problem: Problem, row, member_id: int) -> bool:  # noqa: ANN001
+    """这位缺席成员属于计划内缺席(出勤上限 / 允许缺席要求)。"""
+    name = next((p.member.display_name for p in row.song.event.participants if p.member_id == member_id), None)
+    return name is not None and problem.rules.planned_absence(name, row.song.code)
+
+
+def locked_absence_over(problem: Problem, locked: list) -> list[str]:  # noqa: ANN001
+    """锁定场次里的缺席按演出设置(阶梯最宽松的一层)与「最多参加 / 允许缺席」要求检查,超出的说明。
+    场次总数按重排后的方案算(锁定场次占用方案里的任务)。"""
+    level, rules, config = problem.ladder[-1], problem.rules, problem.config
+    plan = {s.code: len(s.durations(config)) for s in problem.songs}
+    out: list[str] = []
+    unexcused = [s for s in locked if any(not rules.planned_absence(m, s.song_code or "") for m in s.absent_members)]
+    cap = level.max_absent_sessions(sum(plan.values()))
+    if len(unexcused) > cap:
+        out.append(f"锁定的场次里有人缺席的共 {len(unexcused)} 场,超过演出设置允许的 {cap} 场")
+    for code, n in plan.items():
+        song = problem.song(code)
+        mine = [s for s in locked if s.song_code == code]
+        bad = [s for s in unexcused if s.song_code == code]
+        min_full = n if level.per_song_min_full is None else min(level.per_song_min_full, n)
+        if len(bad) > n - min_full:
+            out.append(f"{song.name} 锁定的场次里有人缺席的共 {len(bad)} 场,每首至少要 {min_full} 场全员到齐")
+        for m in song.members:
+            missed = sum(1 for s in bad if m in s.absent_members and not rules.planned_absence(m, code))
+            if missed > level.per_member_per_song_max_absent:
+                out.append(f"{m} 在 {song.name} 的锁定场次里缺席 {missed} 次,超过每人每首最多 {level.per_member_per_song_max_absent} 次")
+            allow = rules.absence_allowance(m, code)
+            absent_n = sum(1 for s in mine if m in s.absent_members)
+            if allow is not None and absent_n > allow:
+                out.append(f"{m} 在 {song.name} 的锁定场次里缺席 {absent_n} 次,超过「允许缺席 {allow} 次」的要求")
+            limit = rules.attendance_cap(m, code)
+            attended = sum(1 for s in mine if m not in s.absent_members)
+            if limit is not None and attended > limit:
+                out.append(f"{m} 在 {song.name} 的锁定场次里参加 {attended} 场,超过「最多参加 {limit} 场」的要求")
+    return out
 
 
 def keep_adjusted_durations(problem: Problem, base: ScheduleVersion, rule_fixed: tuple = ()) -> tuple:
@@ -202,6 +240,18 @@ def run_job(database_url: str, job_id: int, workers: int = 0) -> None:
                     and i.sessions
                     and all(_locked_in(rows[k], codes_in) for k in i.sessions)
                 ]
+                # 锁定场次本身的缺席问题(一场缺 2 人以上、演出设置不允许缺席时有人缺席):求解器无法原样保留
+                strict = problem.ladder[-1].strict
+                for row in rows:
+                    if not _locked_in(row, codes_in):
+                        continue
+                    absent = list(row.absent_member_ids or [])
+                    planned = [m for m in absent if _planned(problem, row, m)]
+                    if len(absent) > 1 or (strict and len(absent) > len(planned)):
+                        names = {p.member_id: p.member.display_name for p in event.participants}
+                        who = "、".join(names.get(m, "?") for m in absent)
+                        why = "一场最多缺 1 人" if len(absent) > 1 else "演出设置不允许缺席"
+                        stuck.append(f"{row.song.name} {row.date.month}/{row.date.day} 缺 {who}({why})")
                 if stuck:
                     msg = "锁定的场次本身有冲突,重排无法原样保留:" + ";".join(stuck[:3]) + "。请先解锁或调整这些场次。"
                     _mark_failed(db, job_id, msg)
@@ -209,6 +259,11 @@ def run_job(database_url: str, job_id: int, workers: int = 0) -> None:
                 fixed_all = locked_fixed_sessions(event, base)
                 fixed = tuple(f for f in fixed_all if f.song_code in codes_in)  # 跳过的曲目(未就绪)不参与重排
                 problem.songs = keep_adjusted_durations(problem, base, problem.rules.fixed_sessions)
+                # 锁定场次里的缺席本身就超出演出设置(拖动时自动记下的缺席):求解器无法原样保留
+                over = locked_absence_over(problem, [to_solver_session(event, r) for r in rows if _locked_in(r, codes_in)])
+                if over:
+                    _mark_failed(db, job_id, "锁定的场次本身有冲突,重排无法原样保留:" + ";".join(over[:3]) + "。请先解锁或调整这些场次。")
+                    return
                 problem.rules = replace(problem.rules, fixed_sessions=problem.rules.fixed_sessions + fixed)
                 skipped_locked = len(fixed_all) - len(fixed)
                 extra = f"(另有 {skipped_locked} 场属于本次跳过的曲目)" if skipped_locked else ""

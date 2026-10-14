@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+import re
 from dataclasses import replace
 from datetime import date
 
@@ -153,6 +154,23 @@ def metric_deltas(before: dict[str, int], after: dict[str, int]) -> list[str]:
     return out
 
 
+_DATE = re.compile(r"\d{4}-\d{2}-\d{2}")
+_NUM = re.compile(r"\d+")
+
+
+def _worse(error: str, before: list[str]) -> bool:
+    """这次移动后的错误是否「新引入」:完全相同的不算;缺席计数类句子(不带日期,如「缺席场次 3 超过层级上限 1」)
+    只在数字变大时才算——把一场移回大家都有空的时段、缺席变少时不能被拒。"""
+    if error in before:
+        return False
+    if _DATE.search(error):
+        return True
+    shape = _NUM.sub("#", error)
+    counts = [[int(n) for n in _NUM.findall(b)] for b in before if _NUM.sub("#", b) == shape]
+    mine = [int(n) for n in _NUM.findall(error)]
+    return not any(mine <= c for c in counts)
+
+
 def check_move_strict(
     event: Event, version: ScheduleVersion, session: RehearsalSession, *, new_date: date, new_start: int, new_duration: int | None
 ) -> None:
@@ -171,15 +189,26 @@ def check_move_strict(
         raise HTTPException(status_code=422, detail="超出每日排练窗口")
     if new_date not in set(config.formal_dates):
         raise HTTPException(status_code=422, detail="只能移到正规排练日")
-    level = version_level(problem, version)
+    # 与网页版的实时检查一致:缺席按演出设置允许的规则;移过去后只保留计划内缺席(出勤上限),
+    # 其余参演成员都要有空——这样仍是「新引入冲突就拒绝」,而移到大家都有空的时段时,原来记下的缺席会清掉、不会被误拒
+    level = problem.ladder[-1]
     before_sessions = [to_solver_session(event, s) for s in version.sessions]
     before = validate_schedule(problem, before_sessions, level)
+    code = session.song.code if session.song else ""
     after_sessions = [
-        replace(x, date=new_date, start=new_start, duration=duration) if s.id == session.id else x
+        replace(
+            x,
+            date=new_date,
+            start=new_start,
+            duration=duration,
+            absent_members=tuple(m for m in x.absent_members if problem.rules.attendance_cap(m, code) is not None),
+        )
+        if s.id == session.id
+        else x
         for s, x in zip(version.sessions, before_sessions, strict=True)
     ]
     after = validate_schedule(problem, after_sessions, level)
-    new_errors = [e for e in after.errors if e not in before.errors]
+    new_errors = [e for e in after.errors if _worse(e, before.errors)]
     if new_errors:
         # 校验器的句子以「曲目名 日期 时段」开头;这些错误都是这场引起的,去掉重复的前缀更好读
         label = f"{session.song.name if session.song else ''} {new_date} {config.range_label(new_start, duration)} "

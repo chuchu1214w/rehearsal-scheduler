@@ -34,6 +34,7 @@ class Blocker:
     date_idx: int
     start: int
     duration: int
+    absent: tuple[str, ...] = ()  # 这场里缺席的成员(计入各项缺席上限)
 
 
 @dataclass
@@ -65,6 +66,7 @@ def build_model(
     symmetry: bool = True,
     blockers: tuple[Blocker, ...] = (),
     frozen_absence: bool = False,
+    absence_baseline: dict[tuple, int] | None = None,
 ) -> ModelBundle:
     """partial=True 时放宽 HC-01 为“至多一个候选”,其余硬约束不变,并增加目标项 missing(未排场次)。
 
@@ -74,7 +76,22 @@ def build_model(
     - symmetry=False:任务对应具体的现有场次(各自的锁定、缺席、身份),不能互换,不加同曲同时长的顺序约束;
     - blockers:原样保留的场次(见 Blocker);它们之间已有的冲突不在这里解决(不让模型因此无解);
     - frozen_absence=True:每场谁缺席保持不变,只与缺席有关的约束(阶梯、出勤上限、允许缺席次数)与挪动无关,不加。
+    - absence_baseline:现在整版的各项缺席计数;已经超出上限的不要求修好(挪动解决不了),只要求不更糟。
+      键:("cap",) 有人缺席的场次数、("song", 曲目) 该曲目有人缺席的场次数、("member", 曲目, 成员)、
+      ("allow", 成员, 曲目) 该成员在该曲目的缺席次数(含计划内)、("attend", 成员, 曲目) 出勤次数。
     """
+    base = absence_baseline or {}
+    excess_terms: list = []  # 少改动重排:各项缺席超出上限的量(先尽量减到最少)
+
+    def capped(expr, value: int, key: tuple, kept: int, name: str) -> None:  # noqa: ANN001
+        """expr(要排的任务) + kept(原样保留的) ≤ value。给了 absence_baseline 时:现在已超出的不要求修好、只要求不更糟,
+        超出量另计为目标项 absence_excess(调用方先把它降到最少)。"""
+        model.add(expr <= max(max(value, base.get(key, value)) - kept, 0))
+        if absence_baseline is not None:
+            ex = model.new_int_var(0, len(tasks) + len(blockers) + 1, f"excess_{name}")
+            model.add(ex >= expr + kept - value)
+            excess_terms.append(ex)
+
     config, rules = problem.config, problem.rules
     dates = config.formal_dates
     n_days = len(dates)
@@ -277,15 +294,24 @@ def build_model(
                 if not rules.planned_absence(c.absent_member, t.song_code):
                     absent_unexcused.append(x[(t.task_id, ci)])
 
+    # 原样保留的场次(少改动重排)里已有的缺席也计入各项上限:场次总数、每首场次数按整版算(与校验器一致)
+    def kept_unexcused(code: str | None = None, member: str | None = None) -> int:
+        return sum(
+            1
+            for b in blockers
+            if (code is None or b.song_code == code)
+            and any((member is None or m == member) and not rules.planned_absence(m, b.song_code) for m in b.absent)
+        )
+
     if absent_unexcused and not frozen_absence:
         # HC-11 缺席场次总数上限;部分排程时按实际排上的场次计(与校验器一致)
         if partial:
             frac = Fraction(level.max_absent_ratio).limit_denominator(10_000)
             model.add(frac.denominator * sum(absent_unexcused) <= frac.numerator * sum(scheduled.values()))
         else:
-            model.add(sum(absent_unexcused) <= level.max_absent_sessions(len(tasks)))
+            capped(sum(absent_unexcused), level.max_absent_sessions(len(tasks) + len(blockers)), ("cap",), kept_unexcused(), "cap")
         for code, song_tasks in tasks_by_song.items():
-            n = len(song_tasks)
+            n = len(song_tasks) + sum(1 for b in blockers if b.song_code == code)
             min_full = n if level.per_song_min_full is None else min(level.per_song_min_full, n)
             song_unexcused = [
                 x[(t.task_id, ci)]
@@ -303,7 +329,7 @@ def build_model(
                     model.add_min_equality(need, [level.per_song_min_full, placed])
                     model.add(sum(song_unexcused) <= placed - need)
             elif song_unexcused:
-                model.add(sum(song_unexcused) <= n - min_full)  # HC-09
+                capped(sum(song_unexcused), n - min_full, ("song", code), kept_unexcused(code), f"song_{code}")  # HC-09
             for m in problem.song(code).members:
                 member_unexcused = [
                     x[(t.task_id, ci)]
@@ -312,7 +338,13 @@ def build_model(
                     if c.absent_member == m and not rules.planned_absence(m, code)
                 ]
                 if member_unexcused:
-                    model.add(sum(member_unexcused) <= level.per_member_per_song_max_absent)  # HC-10
+                    capped(  # HC-10
+                        sum(member_unexcused),
+                        level.per_member_per_song_max_absent,
+                        ("member", code, m),
+                        kept_unexcused(code, m),
+                        f"m_{code}_{m}",
+                    )
 
     # HC-13 规则「允许缺席 N 次」:该成员在该曲目的缺席场次 ≤ N
     for (m, code), n in rules.member_song_max_absent.items() if not frozen_absence else ():
@@ -320,7 +352,8 @@ def build_model(
             x[(t.task_id, ci)] for t in tasks_by_song.get(code, []) for ci, c in enumerate(candidates[t.task_id]) if c.absent_member == m
         ]
         if absent_vars:
-            model.add(sum(absent_vars) <= n)
+            kept = sum(1 for b in blockers if b.song_code == code and m in b.absent)
+            capped(sum(absent_vars), n, ("allow", m, code), kept, f"allow_{m}_{code}")
 
     # HC-13 规则模板 ①:成员–曲目出勤上限
     for (m, code), cap in rules.member_song_max_attendance.items() if not frozen_absence else ():
@@ -328,7 +361,8 @@ def build_model(
             x[(t.task_id, ci)] for t in tasks_by_song.get(code, []) for ci, c in enumerate(candidates[t.task_id]) if c.absent_member != m
         ]
         if attended:
-            model.add(sum(attended) <= cap)
+            kept = sum(1 for b in blockers if b.song_code == code and m in b.members and m not in b.absent)
+            capped(sum(attended), cap, ("attend", m, code), kept, f"attend_{m}_{code}")
 
     # HC-13 规则模板 ③:指定日期最多场次
     for d, limit in rules.max_sessions_per_date.items():
@@ -394,5 +428,6 @@ def build_model(
         "gaps": ObjectiveTerm(sum(gap_terms), len(gap_terms)),
         "overtime": ObjectiveTerm(sum(overtime_terms), len(overtime_terms)),
         "soft_avoid": ObjectiveTerm(sum(soft_terms), len(soft_terms)),
+        "absence_excess": ObjectiveTerm(sum(excess_terms), len(excess_terms)),
     }
     return ModelBundle(model, list(tasks), candidates, x, day_vars, busy, objective_terms, level, scheduled if partial else None)

@@ -25,7 +25,9 @@ def test_move_with_conflict_is_kept_marked_and_blocks_publish(app, admin: TestCl
     v = body["version"]
     moved = next(x for x in v["sessions"] if x["id"] == s["id"])
     assert moved["date"] == target and v["revision"] == 1
-    assert body["new_issues"] and who["display_name"] in body["new_issues"][0] and "不可用" in body["new_issues"][0]
+    # 拖过去后没空的人自动记为缺席;这个小例子只有 3 场,按默认设置(25%)一场也不能缺 → 仍算冲突
+    assert [m["id"] for m in moved["absent"]] == [who["id"]]
+    assert body["new_issues"] and "缺席" in body["new_issues"][0] and "演出设置" in body["new_issues"][0]
     assert [i["session_ids"] for i in v["issues"]] == [[s["id"]]] and not v["issues"][0]["message"].startswith("V-")
     assert v["validation_errors"] and v["can_undo"] is True and v["history"][0]["kind"] == "move"
     # 有冲突不能发布
@@ -36,6 +38,7 @@ def test_move_with_conflict_is_kept_marked_and_blocks_publish(app, admin: TestCl
     r = admin.post(f"/api/schedules/{vid}/undo", json={"expected_revision": 1}).json()
     back = next(x for x in r["version"]["sessions"] if x["id"] == s["id"])
     assert (back["date"], back["start_slot"]) == (s["date"], s["start_slot"]) and r["version"]["issues"] == []
+    assert back["absent"] == s["absent"]  # 缺席也一起恢复
     assert r["version"]["can_undo"] is False and r["version"]["can_redo"] is True and r["warnings"][0].startswith("已撤销")
     r = admin.post(f"/api/schedules/{vid}/redo", json={"expected_revision": 2}).json()
     assert r["version"]["issues"] and r["version"]["revision"] == 3

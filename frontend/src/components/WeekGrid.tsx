@@ -67,6 +67,21 @@ interface Props {
   onResize?: (s: ScheduleSession, startSlot: number, durationSlots: number) => void
   /** 在空白处按住往下拖(手机上点一下)新建一场:日期、开始格、时长 */
   onCreate?: (date: string, startSlot: number, durationSlots: number) => void
+  /** 拖到某个时段时谁会缺席(参演成员里那段时间没空的,加上计划内缺席)、谁还没填空闲;null 表示不知道(不显示) */
+  awayAt?: (s: ScheduleSession, date: string, startSlot: number, durationSlots: number) => Away | null
+}
+
+export interface Away {
+  away: string[]
+  unknown: string[]
+}
+
+/** 「缺 A、B」「全员可到」「未填空闲 C」 */
+function awayText(a: Away): { text: string; tone: string } {
+  const parts = []
+  if (a.away.length) parts.push(`缺 ${a.away.join('、')}`)
+  if (a.unknown.length) parts.push(`未填空闲 ${a.unknown.join('、')}`)
+  return { text: parts.join(' · ') || '全员可到', tone: a.away.length > 1 ? ' is-many' : a.away.length || a.unknown.length ? ' is-one' : '' }
 }
 
 const WEEKDAYS = ['一', '二', '三', '四', '五', '六', '日']
@@ -124,6 +139,7 @@ export function WeekGrid({
   conflictIds,
   onResize,
   onCreate,
+  awayAt,
 }: Props) {
   const hours = dayEndHour - dayStartHour
   const today = dayjs().format('YYYY-MM-DD')
@@ -416,7 +432,21 @@ export function WeekGrid({
                   onPointerCancel={(e) => finishDrag(e, false)}
                   title={`${s.time} ${s.song_name}${s.locked ? '(已锁定)' : ''}${conflictIds?.has(s.id) ? '(有冲突)' : ''}`}
                 >
-                  {swapTarget?.id === s.id && <i className="weekgrid__swap">交换</i>}
+                  {swapTarget?.id === s.id && (
+                    <i className="weekgrid__swap">
+                      交换
+                      {(() => {
+                        // 交换后两场各自谁缺席:拖着的那场放到这场的时间,这场放到拖着那场原来的时间(各自时长不变)
+                        const src = drag.current?.session
+                        if (!src || !awayAt) return null
+                        const a = awayAt(src, s.date, s.start_slot, src.duration_slots)
+                        const b = awayAt(s, src.date, src.start_slot, s.duration_slots)
+                        const notes = [a && a.away.length ? `${src.song_code}缺 ${a.away.join('、')}` : '', b && b.away.length ? `${s.song_code}缺 ${b.away.join('、')}` : '']
+                        const text = notes.filter(Boolean).join(';')
+                        return text ? ` · ${text}` : a && b ? ' · 全员可到' : null
+                      })()}
+                    </i>
+                  )}
                   {canResize(s) && (
                     <>
                       <i className="weekgrid__handle weekgrid__handle--top" data-handle="top" aria-hidden="true" />
@@ -468,6 +498,14 @@ export function WeekGrid({
           <span>
             {String(dayStartHour + ghost.start).padStart(2, '0')}:00–{String(dayStartHour + ghost.start + ghost.duration).padStart(2, '0')}:00 · {ghost.duration}h
           </span>
+          {(() => {
+            // 拖动时实时显示:松手后这些人会记为缺席(标签放在框外,不挤占时间文字)
+            const s = drag.current.session
+            const away = ghost.valid && ghost.mode !== 'create' && s && awayAt ? awayAt(s, days[ghost.dayIdx], ghost.start, ghost.duration) : null
+            if (away == null) return null
+            const { text, tone } = awayText(away)
+            return <em className={'weekgrid__away' + tone}>{text}</em>
+          })()}
         </div>
       )}
     </div>

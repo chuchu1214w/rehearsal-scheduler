@@ -2971,3 +2971,38 @@ body:has(.shell-member)::before {
 .force-publish .field textarea {
   min-height: 60px;
 }
+
+/* 拖动时显示谁会缺席:放在预览框下方的小标签,不挤占框内文字 */
+.weekgrid__away {
+  position: absolute;
+  left: -2px;
+  top: calc(100% + 3px);
+  width: max-content;
+  max-width: 220px;
+  padding: 2px 6px;
+  font-style: normal;
+  font-weight: 600;
+  font-size: 11px;
+  line-height: 1.4;
+  white-space: normal;
+  color: var(--green, var(--accent));
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  box-shadow: 2px 2px 0 var(--outline);
+}
+
+.weekgrid__away.is-one {
+  color: var(--orange, #c07000);
+}
+
+.weekgrid__away.is-many {
+  color: var(--red);
+}
+
+.weekgrid__swap {
+  width: max-content;
+  max-width: 220px;
+  white-space: normal;
+  z-index: 2;
+}

@@ -23,9 +23,9 @@ from sqlalchemy.orm.exc import StaleDataError
 from solver.validator import compute_metrics, validate_schedule
 
 from .models import Event, RehearsalSession, ScheduleOperation, ScheduleVersion
-from .schedule_edit import _humanize, metric_deltas, to_solver_session, version_level, version_problem
+from .schedule_edit import _humanize, metric_deltas, to_solver_session, version_problem
 from .schemas import IssueOut, OperationOut, VersionDetailOut
-from .services import event_config, serialize_version
+from .services import availability_index, event_config, serialize_version
 
 HISTORY_LIMIT = 30
 
@@ -60,7 +60,14 @@ def _key(s: RehearsalSession) -> dict:
 
 
 def _state(s: RehearsalSession) -> dict:
-    return {"date": s.date.isoformat(), "start_slot": s.start_slot, "duration_slots": s.duration_slots, "locked": s.locked}
+    # 缺席也记下:移动 / 调整时长会按新时段重算谁缺席,撤销时要一起恢复(早期记录没有这一项,恢复时不动缺席)
+    return {
+        "date": s.date.isoformat(),
+        "start_slot": s.start_slot,
+        "duration_slots": s.duration_slots,
+        "locked": s.locked,
+        "absent_member_ids": sorted(s.absent_member_ids or []),
+    }
 
 
 def _snapshot(s: RehearsalSession) -> dict:
@@ -80,6 +87,8 @@ def _restore(s: RehearsalSession, state: dict) -> None:
     s.start_slot = int(state["start_slot"])
     s.duration_slots = int(state["duration_slots"])
     s.locked = bool(state["locked"])
+    if "absent_member_ids" in state:
+        s.absent_member_ids = list(state["absent_member_ids"] or [])
 
 
 def _create(version: ScheduleVersion, snap: dict) -> RehearsalSession:
@@ -113,13 +122,30 @@ def _when(event: Event, d: date, start: int, duration: int) -> str:
     return f"{d.month}/{d.day} 周{'一二三四五六日'[d.weekday()]} {event_config(event).range_label(start, duration)}"
 
 
+def _absent_note(event: Event, s: RehearsalSession) -> str:
+    names = {p.member_id: p.member.display_name for p in event.participants}
+    absent = [names.get(m, "?") for m in (s.absent_member_ids or [])]
+    return f",缺 {'、'.join(absent)}" if absent else ""
+
+
 def revalidate(event: Event, version: ScheduleVersion) -> list[str]:
     """按当前场次重新校验,写回 validation_errors / metrics;返回错误句子。"""
     problem = version_problem(event, version)
     rows, report = _live_report(event, version)
+    solver_sessions = [to_solver_session(event, s) for s in rows]
     version.validation_errors = list(report.errors)
-    version.metrics = compute_metrics(problem, [to_solver_session(event, s) for s in rows])
+    version.metrics = compute_metrics(problem, solver_sessions)
     version.exact_optimum = False
+    # 缺席层级跟着实际情况:手动改出计划外缺席后不再是「全员到齐」那一层(旧版 App 据此显示「无计划外缺席」),
+    # 改到没有计划外缺席时回到第 0 层
+    if version.level_used is not None:
+        unplanned = any(
+            not problem.rules.planned_absence(m, x.song_code or "") for x in solver_sessions if x.kind == "formal" for m in x.absent_members
+        )
+        if unplanned and version.level_used == 0 and len(problem.ladder) > 1:
+            version.level_used = len(problem.ladder) - 1
+        elif not unplanned and version.level_used > 0:
+            version.level_used = 0
     if version.source == "solver":
         version.source = "manual"
     return list(report.errors)
@@ -241,7 +267,8 @@ def move(
     old = (session.date, session.start_slot, session.duration_slots)
     before = _state(session)
     session.date, session.start_slot, session.duration_slots = new_date, new_start, duration
-    summary = f"移动 {_label(session)}:{_when(event, *old)} → {_when(event, new_date, new_start, duration)}"
+    Absence(event).refresh(session)
+    summary = f"移动 {_label(session)}:{_when(event, *old)} → {_when(event, new_date, new_start, duration)}{_absent_note(event, session)}"
     _record(db, version, "move", summary, [_modified(session, before)], actor_id)
     result = _finish(event, version, before_errors, before_metrics)
     db.commit()
@@ -268,11 +295,45 @@ def resize(
     before = _state(session)
     old_duration = session.duration_slots
     session.start_slot, session.duration_slots = new_start, new_duration
-    summary = f"调整 {_label(session)} 时长:{old_duration}h → {new_duration}h({_when(event, session.date, new_start, new_duration)})"
+    Absence(event).refresh(session)
+    summary = (
+        f"调整 {_label(session)} 时长:{old_duration}h → {new_duration}h"
+        f"({_when(event, session.date, new_start, new_duration)}){_absent_note(event, session)}"
+    )
     _record(db, version, "resize", summary, [_modified(session, before)], actor_id)
     result = _finish(event, version, before_errors, before_metrics)
     db.commit()
     return result
+
+
+class Absence:
+    """移动 / 调整时长 / 新建后按新时段重算谁缺席:参演成员里在这段时间没空的记为缺席;
+    因「某人在这首最多参加 N 场」计划内缺席的保留。还没提交空闲的成员不知道有没有空,不记缺席(照常作为冲突提示)。
+    之后照常按缺席规则检查(一场最多缺 1 人、每首至少几场全员到齐等),超出才算冲突。"""
+
+    def __init__(self, event: Event) -> None:
+        self.event = event
+        self.index = availability_index(event)
+        self.submitted = {p.member_id for p in event.participants if p.availability_submitted_at is not None}
+        self.excused: dict[int, set[int]] = {}  # 曲目 id → 有出勤上限要求的成员
+        for r in event.rules:
+            p = r.params or {}
+            if r.enabled and r.type == "member_song_max_attendance" and p.get("song_id") is not None:
+                self.excused.setdefault(int(p["song_id"]), set()).add(int(p.get("member_id") or 0))
+
+    def busy(self, member_id: int, d: date, start: int, duration: int) -> bool:
+        if member_id not in self.submitted:
+            return False
+        row = self.index.get(member_id, {}).get(d)
+        slots = row.slots if row is not None else ""
+        return any(h >= len(slots) or slots[h] == "0" for h in range(start, start + duration))
+
+    def refresh(self, s: RehearsalSession) -> None:
+        if s.kind != "formal" or s.song is None:
+            return
+        keep = {m for m in (s.absent_member_ids or []) if m in self.excused.get(s.song_id, set())}
+        away = {m.id for m in s.song.members if self.busy(m.id, s.date, s.start_slot, s.duration_slots)}
+        s.absent_member_ids = sorted(keep | away)
 
 
 def _capped_absent(event: Event, version: ScheduleVersion, song) -> list[int]:  # noqa: ANN001
@@ -329,9 +390,10 @@ def add(
     )
     row.song = song
     row.absent_member_ids, row.attendance, row.locked, row.location = _capped_absent(event, version, song), None, False, ""
+    Absence(event).refresh(row)
     version.sessions.append(row)
     _flush(db)
-    summary = f"新建 {song.code}({_when(event, new_date, new_start, new_duration)})"
+    summary = f"新建 {song.code}({_when(event, new_date, new_start, new_duration)}){_absent_note(event, row)}"
     _record(db, version, "add", summary, [{"uid": row.uid, "key": _key(row), "before": None, "after": _snapshot(row)}], actor_id)
     new, warnings = _finish(event, version, before_errors, before_metrics)
     db.commit()
@@ -380,7 +442,11 @@ def swap(
     where_a = _when(event, a.date, a.start_slot, a.duration_slots)
     where_b = _when(event, b.date, b.start_slot, b.duration_slots)
     (a.date, a.start_slot), (b.date, b.start_slot) = (b.date, b.start_slot), (a.date, a.start_slot)
-    summary = f"交换 {_label(a)}(原 {where_a})与 {_label(b)}(原 {where_b})"
+    absence = Absence(event)
+    absence.refresh(a)
+    absence.refresh(b)
+    notes = "".join(f",{_label(x)}{note}" for x in (a, b) if (note := _absent_note(event, x)))
+    summary = f"交换 {_label(a)}(原 {where_a})与 {_label(b)}(原 {where_b}){notes}"
     _record(db, version, "swap", summary, [_modified(a, ba), _modified(b, bb)], actor_id)
     result = _finish(event, version, before_errors, before_metrics)
     db.commit()
@@ -438,14 +504,27 @@ _ISO = re.compile(r"(\d{4})-(\d{2})-(\d{2})")
 _WEEK = "一二三四五六日"
 
 
+# 缺席规则的句子写成白话(校验器的原句给求解诊断用,这里只改给管理员看的)
+_ABSENCE_WORDING = (
+    (re.compile(r"缺席场次 (\d+) 超过层级上限 (\d+)"), r"有人缺席的场次共 \1 场,超过演出设置允许的 \2 场(可在演出设置里调高缺席比例)"),
+    (re.compile(r"严格层不允许缺席:"), "演出设置不允许缺席:"),
+    (re.compile(r"曲目 (\S+) 全员到齐场次不足 (\d+)"), r"曲目 \1 全员到齐的场次不足 \2 场"),
+    (re.compile(r"缺席 (\d+) 次,超过 (\d+)$"), r"缺席 \1 次,超过每人每首最多 \2 次"),
+    (re.compile(r"缺席人数超过 1"), "缺席超过 1 人(每场最多缺 1 人)"),
+)
+
+
 def _readable(message: str) -> str:
-    """校验句子去掉编号,日期写成「10/5 周一」。"""
+    """校验句子去掉编号,日期写成「10/5 周一」,缺席规则写成白话。"""
 
     def fmt(m: re.Match[str]) -> str:
         d = date(int(m[1]), int(m[2]), int(m[3]))
         return f"{d.month}/{d.day} 周{_WEEK[d.weekday()]}"
 
-    return _ISO.sub(fmt, _humanize(message))
+    text = _ISO.sub(fmt, _humanize(message))
+    for pattern, repl in _ABSENCE_WORDING:
+        text = pattern.sub(repl, text)
+    return text
 
 
 def revalidate_errors(event: Event, version: ScheduleVersion) -> list[str]:
@@ -457,10 +536,11 @@ def revalidate_errors(event: Event, version: ScheduleVersion) -> list[str]:
 
 
 def _live_report(event: Event, version: ScheduleVersion):  # noqa: ANN202
-    """按最新空闲与要求检查整版。"""
+    """按最新空闲与要求检查整版。缺席按演出设置允许的规则检查(阶梯最宽松的一层),而不是求解时用到的那一层:
+    管理员拖动后有人没空会自动记为缺席,只要不超出设置(每场最多缺 1 人、缺席比例、每首至少几场全员到齐等)就不算冲突。"""
     problem = version_problem(event, version)
     rows = list(version.sessions)
-    return rows, validate_schedule(problem, [to_solver_session(event, s) for s in rows], version_level(problem, version))
+    return rows, validate_schedule(problem, [to_solver_session(event, s) for s in rows], problem.ladder[-1])
 
 
 def live_issues(event: Event, version: ScheduleVersion) -> list[IssueOut]:
@@ -559,6 +639,7 @@ def apply_batch(
     if not dry_run:
         claim(db, version)
     before_errors, before_metrics = _current_errors(event, version), dict(version.metrics or {})
+    absence = Absence(event)
     touched: dict[str, dict] = {}  # uid → 第一次改动前的状态
     created: list[RehearsalSession] = []
     deleted: list[dict] = []
@@ -594,6 +675,8 @@ def apply_batch(
                 )
                 row.song = song
                 row.absent_member_ids, row.attendance, row.locked, row.location = _capped_absent(event, version, song), None, False, ""
+                absence.refresh(row)
+                lines[-1] += _absent_note(event, row)
                 version.sessions.append(row)
                 created.append(row)
                 continue
@@ -608,6 +691,9 @@ def apply_batch(
                 touch(a)
                 touch(b)
                 (a.date, a.start_slot), (b.date, b.start_slot) = (b.date, b.start_slot), (a.date, a.start_slot)
+                absence.refresh(a)
+                absence.refresh(b)
+                lines[-1] += "".join(f",{_label(x)}{note}" for x in (a, b) if (note := _absent_note(event, x)))
                 continue
             s = _by_uid(version, op.get("uid"))
             if kind == "move":
@@ -617,12 +703,16 @@ def apply_batch(
                 _fits(event, d, start, s.duration_slots)
                 touch(s)
                 s.date, s.start_slot = d, start
+                absence.refresh(s)
+                lines[-1] += _absent_note(event, s)
             elif kind == "resize":
                 _editable(s, action="调整时长")
                 start, dur = int(op["start_slot"]), int(op["duration_slots"])
                 _fits(event, s.date, start, dur)
                 touch(s)
                 s.start_slot, s.duration_slots = start, dur
+                absence.refresh(s)
+                lines[-1] += _absent_note(event, s)
             elif kind == "lock":
                 if s.kind == "evaluation":
                     raise HTTPException(status_code=422, detail="全员评估场不需要锁定")

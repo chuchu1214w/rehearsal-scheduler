@@ -273,6 +273,8 @@ export interface ScheduleSession {
   task_no: number | null
   /** 场次在版本内的固定编号(复制成草稿后用来对应同一场) */
   task_key?: number | null
+  /** 场次固定身份(复制草稿、撤销重建后不变;数据库 id 会变) */
+  uid?: string
   date: string
   weekday: string
   start_slot: number

@@ -163,11 +163,10 @@ def validate_schedule(
                 err(f"V-02 评估场成员 {m} 在 {'、'.join(config.slot_label(h) for h in missing)} 不可用", e)
 
     # V-08 降级层级
-    unexcused: list[Session] = []
+    unexcused: list[Session] = []  # 有计划外缺席的场次(每场只算一次,一场缺 2 人也是 1 场)
     for s in formal:
-        for m in s.absent_members:
-            if not rules.planned_absence(m, s.song_code or ""):
-                unexcused.append(s)
+        if any(not rules.planned_absence(m, s.song_code or "") for m in s.absent_members):
+            unexcused.append(s)
     if level.strict:
         for s in unexcused:
             err(f"V-08 严格层不允许缺席:{_label(problem, s)} 缺席 {'、'.join(s.absent_members)}", s)

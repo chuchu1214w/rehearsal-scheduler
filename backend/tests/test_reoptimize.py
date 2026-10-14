@@ -24,20 +24,33 @@ def _problem(free: dict, rules: Rules | None = None, songs: tuple | None = None,
     return Problem(cfg, members, songs, av, rules or Rules())
 
 
+def _moved(problem: Problem, s: Session, d: date, start: int) -> Session:
+    """与写入时一致:挪过去后,参演成员里那段时间没空的缺席,计划内缺席(出勤上限)保留。"""
+    code = s.song_code or ""
+    planned = {m for m in s.absent_members if problem.rules.attendance_cap(m, code) is not None}
+    busy = {
+        m
+        for m in problem.song(code).members
+        if m not in planned and not all(problem.availability.is_available(m, d, h) for h in range(start, start + s.duration))
+    }
+    return replace(s, date=d, start=start, absent_members=tuple(sorted(planned | busy)))
+
+
 def _apply(problem: Problem, sessions: list[Session], result) -> list[str]:
     """应用提案;返回应用后新出现的错误(评估场不在这些例子里,忽略 V-07)。"""
-    before = set(validate_schedule(problem, sessions).errors)
+    level = problem.ladder[-1]  # 与线上一致:按演出设置允许的缺席规则检查
+    before = set(validate_schedule(problem, sessions, level).errors)
     after = [replace(s) for s in sessions]
     for m in result.moves:
-        after[m.index] = replace(after[m.index], date=m.date, start=m.start)
-    return [e for e in validate_schedule(problem, after).errors if e not in before and not e.startswith("V-07")]
+        after[m.index] = _moved(problem, after[m.index], m.date, m.start)
+    return [e for e in validate_schedule(problem, after, level).errors if e not in before and not e.startswith("V-07")]
 
 
 def _errors(problem: Problem, sessions: list[Session], result) -> list[str]:
     after = [replace(s) for s in sessions]
     for m in result.moves:
-        after[m.index] = replace(after[m.index], date=m.date, start=m.start)
-    return [e for e in validate_schedule(problem, after).errors if not e.startswith("V-07")]
+        after[m.index] = _moved(problem, after[m.index], m.date, m.start)
+    return [e for e in validate_schedule(problem, after, problem.ladder[-1]).errors if not e.startswith("V-07")]
 
 
 def test_moves_one_session_past_a_same_length_sibling_locked_or_not():
@@ -71,17 +84,17 @@ def test_absence_is_kept_but_slot_need_not_be_one_where_the_absentee_is_busy():
 
 
 def test_unmovable_sessions_still_block_their_members_time():
-    # 第二首那场缺席 2 人(无法挪动,原样保留):第一首不能挪到和它重叠的时段
+    # 第二首那场缺席 2 人且锁定(原样保留):照样占用 B 的时间、计入缺席上限;第一首不能挪到和它重叠的时段
     p = _problem({"A": {D4: [0, 1], D6: [0, 1], D5: [], D7: [], D8: []}})
     ss = [
         Session(KIND_FORMAL, D6, 0, 2, "s1", 1),
         Session(KIND_FORMAL, D8, 0, 2, "s1", 2),  # A 在 9/8 没空 → 要挪,只剩 9/4 0–2 点(被下面那场占着 B)
         Session(KIND_FORMAL, D5, 0, 2, "s2", 1),
-        Session(KIND_FORMAL, D4, 0, 2, "s2", 2, absent_members=("B", "C")),
+        Session(KIND_FORMAL, D4, 0, 2, "s2", 2, absent_members=("B", "C"), locked=True),
     ]
     r = reoptimize(p, ss, time_limit=5)
     assert _apply(p, ss, r) == []
-    assert all(m.date != D4 for m in r.moves)
+    assert all(m.index != 3 for m in r.moves)
 
 
 def test_fixed_rule_outside_formal_dates_and_absence_rule_violations_do_not_block():
@@ -185,3 +198,49 @@ def test_a_song_with_more_sessions_than_days_does_not_block_other_fixes():
     assert r.status == "ok" and len(r.moves) == 1, r
     assert _apply(p, ss, r) == []
     assert not [e for e in _errors(p, ss, r) if e.startswith("V-04")]
+
+
+# ---------- 拖动后自动记缺席之后的复查(回归) ----------
+def test_one_unfixable_session_does_not_block_other_fixes():
+    # C 哪天都没空:第二首两场都只能让 C 缺席,而每首至少 1 场全员到齐 → 第二首#1 怎么挪都不行(原样保留);
+    # 第一首#1 与它让 B 重叠,挪开一场就好
+    p = _problem({"C": {d: [] for d in CFG.all_dates}})
+    p = replace(p, songs=(p.songs[0], replace(p.songs[1], session_plan=(2, 2))))
+    ss = [
+        Session(KIND_FORMAL, D4, 0, 2, "s2", 1),
+        Session(KIND_FORMAL, D6, 0, 2, "s2", 2, absent_members=("C",)),
+        Session(KIND_FORMAL, D4, 1, 2, "s1", 1),
+        Session(KIND_FORMAL, D5, 0, 2, "s1", 2),
+    ]
+    r = reoptimize(p, ss, time_limit=5)
+    assert r.status == "ok" and 2 in [m.index for m in r.moves], r
+    assert not [e for e in _errors(p, ss, r) if e.startswith("V-04")]
+    assert _apply(p, ss, r) == []
+
+
+def test_absences_of_deleted_song_sessions_count_toward_the_cap():
+    # 默认 25%:4 场里最多 1 场有人缺席,已删除曲目的那场已经占了这 1 场 → 第一首不能靠让 A 缺席来解决
+    p = _problem({"A": {d: [] for d in CFG.all_dates if d != D6}})
+    ss = [
+        Session(KIND_FORMAL, D4, 0, 2, "s1", 1),  # A 没空
+        Session(KIND_FORMAL, D6, 0, 2, "s1", 2),
+        Session(KIND_FORMAL, D7, 4, 2, "s2", 1),
+        Session(KIND_FORMAL, D5, 0, 2, None, 1, absent_members=("C",)),
+    ]
+    r = reoptimize(p, ss, time_limit=5)
+    assert _apply(p, ss, r) == [], r
+
+
+def test_prefers_a_slot_where_everyone_can_come():
+    # 允许缺席时,同样挪 1 场,宁可换到大家都有空的日子,也不在同一天挪一小时让人缺席
+    from solver.types import LadderLevel
+
+    p = _problem({"A": {D5: []}})
+    p = replace(p, ladder=(LadderLevel(0), LadderLevel(1, 0.5, 1, 1)))
+    ss = [
+        Session(KIND_FORMAL, D5, 0, 2, "s1", 1),  # A 这天没空
+        Session(KIND_FORMAL, D7, 0, 2, "s1", 2),
+        Session(KIND_FORMAL, D8, 4, 2, "s2", 1),
+    ]
+    r = reoptimize(p, ss, time_limit=5)
+    assert r.status == "ok" and len(r.moves) == 1 and r.moves[0].date != D5, r

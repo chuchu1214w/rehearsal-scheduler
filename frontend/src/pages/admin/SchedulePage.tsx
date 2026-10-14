@@ -3,10 +3,11 @@ import { useEffect, useState } from 'react'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 
 import { ApiError, api } from '../../api/client'
-import { keys, useAction, useConflicts, useDiff, useEvent, useEventMembers, useInvalidateEvent, useSongs, useVersion, useVersions } from '../../api/hooks'
+import { keys, useAction, useConflicts, useDiff, useEvent, useEventMembers, useHeat, useInvalidateEvent, useRules, useSongs, useVersion, useVersions } from '../../api/hooks'
 import type { DiffItem, EditResult, ReoptResult, ScheduleSession, ScheduleVersion, ScheduleVersionDetail } from '../../api/types'
 import { AiEditPanel } from '../../components/AiEditPanel'
 import { MemberTable, SessionsByDate, WeekView, sessionsForMember, songOrderOf } from '../../components/ScheduleViews'
+import type { Away } from '../../components/WeekGrid'
 import { renderScheduleImage, shareImage } from '../../share'
 import { Back, Badge, Button, Heading, LinkButton, Note, Panel, Spinner, Tabs } from '../../ui'
 import { Modal } from '../../ui/Modal'
@@ -46,6 +47,8 @@ export function SchedulePage() {
   const showDiff = params.has('diff')
   const diff = useDiff(showDiff ? selectedId : null, diffAgainst)
   const conflicts = useConflicts(id, selectedId)
+  const heat = useHeat(id)
+  const rules = useRules(id)
   // 冲突清单变了(如刚有成员改了空闲)就要重新勾选确认
   const issueKey = (detail.data?.issues ?? []).map((i) => i.message).join('\n')
   useEffect(() => setForceOk(false), [issueKey, selectedId])
@@ -83,15 +86,50 @@ export function SchedulePage() {
       throw err
     }
   }
+  /** 改完后这一场谁缺席(服务器按新时段重算):「,缺 A、B」;没人缺席时不写(冲突另有提示) */
+  const awayNote = (r: EditResult, s: ScheduleSession, label = '') => {
+    const after = r.version.sessions.find((x) => (s.uid ? x.uid === s.uid : x.id === s.id))
+    const names = (after?.absent ?? []).map((m) => m.display_name)
+    return names.length ? `,${label}缺 ${names.join('、')}` : ''
+  }
   const move = useAction(
     (vars: { vid: number; s: ScheduleSession; date: string; start: number }) => edit(vars.vid, 'ops/move', { session_id: vars.s.id, date: vars.date, start_slot: vars.start }),
-    (r, vars) => afterEdit(r, `已移动 ${vars.s.song_code} 到 ${fmtMd(vars.date)}`),
+    (r, vars) => afterEdit(r, `已移动 ${vars.s.song_code} 到 ${fmtMd(vars.date)}${awayNote(r, vars.s)}`),
   )
   const resize = useAction(
     (vars: { vid: number; s: ScheduleSession; start: number; duration: number }) =>
       edit(vars.vid, 'ops/resize', { session_id: vars.s.id, start_slot: vars.start, duration_slots: vars.duration }),
-    (r, vars) => afterEdit(r, `已把 ${vars.s.song_code} 调整为 ${vars.duration} 小时`),
+    (r, vars) => afterEdit(r, `已把 ${vars.s.song_code} 调整为 ${vars.duration} 小时${awayNote(r, vars.s)}`),
   )
+  /** 拖到某个时段时谁会缺席(与服务器一致):计划内缺席(「最多参加 N 场」)保留,参演成员里那段时间没空的缺席;
+   *  还没提交空闲的成员不知道有没有空,单独列出(服务器照常提示冲突) */
+  const awayAt = (s: ScheduleSession, date: string, start: number, duration: number): Away | null => {
+    const h = heat.data
+    const song = s.kind === 'formal' ? h?.songs.find((x) => x.code === s.song_code) : undefined
+    if (!h || !song || !rules.data) return null
+    const capped = new Set(
+      rules.data.filter((r) => r.enabled && r.type === 'member_song_max_attendance' && r.params.song_id === s.song_id).map((r) => Number(r.params.member_id)),
+    )
+    const planned = s.absent.filter((m) => capped.has(m.id)).map((m) => m.display_name)
+    const away = [...planned]
+    const unknown: string[] = []
+    for (const name of song.members) {
+      if (planned.includes(name)) continue
+      const days = h.availability[name]
+      if (!days) {
+        unknown.push(name)
+        continue
+      }
+      const row = days[date] ?? ''
+      for (let k = start; k < start + duration; k++) {
+        if ((row[k] ?? '0') === '0') {
+          away.push(name)
+          break
+        }
+      }
+    }
+    return { away, unknown }
+  }
   const addSession = useAction(
     (vars: { vid: number; songId: number; date: string; start: number; duration: number }) =>
       edit(vars.vid, 'ops/add', { song_id: vars.songId, date: vars.date, start_slot: vars.start, duration_slots: vars.duration }),
@@ -103,7 +141,7 @@ export function SchedulePage() {
   )
   const swap = useAction(
     (vars: { vid: number; a: ScheduleSession; b: ScheduleSession }) => edit(vars.vid, 'ops/swap', { a: vars.a.id, b: vars.b.id }),
-    (r, vars) => afterEdit(r, `已交换 ${vars.a.song_code} 与 ${vars.b.song_code} 的时间`),
+    (r, vars) => afterEdit(r, `已交换 ${vars.a.song_code} 与 ${vars.b.song_code} 的时间${awayNote(r, vars.a, vars.a.song_code ?? '')}${awayNote(r, vars.b, vars.b.song_code ?? '')}`),
   )
   const lock = useAction(
     (vars: { vid: number; s: ScheduleSession; locked: boolean }) => edit(vars.vid, 'ops/lock', { session_id: vars.s.id, locked: vars.locked }),
@@ -238,6 +276,7 @@ export function SchedulePage() {
   // 有冲突时也可以发布,但要在确认窗口里逐条看过并勾选确认
   const canPublish = current.status !== 'published' && detail.data?.issues !== undefined
   const forced = current.forced_publish ?? null
+  const absentSessions = (detail.data?.sessions ?? []).filter((s) => s.kind === 'formal' && s.absent.length > 0).length
   const editable = current.status !== 'archived'
   const sessions = detail.data ? sessionsForMember(detail.data.sessions, memberFilter) : []
   const range = { formal_start_date: e.formal_start_date, formal_end_date: e.formal_end_date, eval_date: e.eval_date, day_start_hour: e.day_start_hour, day_end_hour: e.day_end_hour }
@@ -295,7 +334,11 @@ export function SchedulePage() {
             ))}
           </select>
           <Badge tone={current.status === 'published' ? 'green' : 'neutral'}>{current.status === 'published' ? '已发布' : current.status === 'archived' ? '已归档' : '草稿'}</Badge>
-          {current.level_used != null && <Badge tone={current.level_used === 0 ? 'green' : 'orange'}>{current.level_used === 0 ? '无计划外缺席' : `缺席层级 L${current.level_used}`}</Badge>}
+          {absentSessions > 0 ? (
+            <Badge tone="orange">{absentSessions} 场有人缺席</Badge>
+          ) : (
+            current.level_used != null && current.level_used === 0 && <Badge tone="green">全员到齐</Badge>
+          )}
           <Badge tone={current.exact_optimum ? 'accent' : 'neutral'}>{current.exact_optimum ? '严格最优' : SOURCE_TEXT[current.source] === '求解' ? '非严格最优' : (SOURCE_TEXT[current.source] ?? current.source)}</Badge>
           {current.locked_count > 0 && <Badge tone="orange">锁定 {current.locked_count} 场</Badge>}
           {forced && <Badge tone="red">带冲突发布</Badge>}
@@ -362,7 +405,7 @@ export function SchedulePage() {
                   少改动解决冲突
                 </Button>
                 <span className="muted" style={{ fontSize: 11 }}>
-                  {reoptimize.isPending ? '正在找挪动最少的办法,最多约 20 秒…' : '锁定的场次不动,只挪必要的几场;先给你看,确认后才改'}
+                  {reoptimize.isPending ? '正在找挪动最少的办法,最多约 30 秒…' : '锁定的场次不动,只挪必要的几场;先给你看,确认后才改'}
                 </span>
               </div>
             )}
@@ -509,6 +552,7 @@ export function SchedulePage() {
             onResize={(s, start, duration) => resize.mutate({ vid: current.id, s, start, duration })}
             onDelete={(s) => deleteSession.mutate({ vid: current.id, s })}
             onCreate={(v) => addSession.mutate({ vid: current.id, songId: v.songId, date: v.date, start: v.startSlot, duration: v.durationSlots })}
+            awayAt={awayAt}
             songs={songChoices}
             conflictIds={conflictIds}
             jumpDate={jumpDate}

@@ -6,7 +6,7 @@ import { Badge, Button, Field } from '../ui'
 import { Modal } from '../ui/Modal'
 import { fmtMd } from '../utils'
 import { Location } from './MapLink'
-import { WeekGrid, songColor, weekOf, weekStarts } from './WeekGrid'
+import { WeekGrid, songColor, weekOf, weekStarts, type Away } from './WeekGrid'
 
 /** 排练表的三种呈现(周日历 / 按日期列表 / 按成员统计)与场次详情弹窗;管理员端草稿与成员端已发布共用。 */
 
@@ -45,6 +45,7 @@ export function WeekView({
   onDelete,
   onCreate,
   songs,
+  awayAt,
 }: {
   sessions: ScheduleSession[]
   range: ScheduleRange
@@ -65,6 +66,8 @@ export function WeekView({
   onCreate?: (v: { songId: number; date: string; startSlot: number; durationSlots: number }) => void
   /** 新建时可选的曲目 */
   songs?: { id: number; code: string; name: string }[]
+  /** 拖动时显示谁会缺席 */
+  awayAt?: (s: ScheduleSession, date: string, startSlot: number, durationSlots: number) => Away | null
 }) {
   const [creating, setCreating] = useState<{ date: string; start: number; duration: number } | null>(null)
   const weeks = weekStarts(range.formal_start_date, range.eval_date)
@@ -128,6 +131,7 @@ export function WeekView({
         conflictIds={conflictIds}
         onResize={onResize}
         onCreate={onCreate && songs?.length ? (date, start, duration) => setCreating({ date, start, duration }) : undefined}
+        awayAt={awayAt}
       />
       <div className="legend">
         {order.map((code) => (

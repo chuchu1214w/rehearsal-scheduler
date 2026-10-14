@@ -293,8 +293,10 @@ def reoptimize_version(version_id: int, db: DB, admin: AdminUser, settings: Sett
     result = reoptimize(
         version_problem(event, version),
         [to_solver_session(event, s) for s in rows],
-        time_limit=10.0,
+        time_limit=8.0,
         workers=settings.solver_workers or 2,
+        # 与写入时自动记缺席一致:已提交空闲的成员才判断有没有空
+        submitted={p.member.display_name for p in event.participants if p.availability_submitted_at is not None},
     )
     plan = [{"op": "move", "uid": rows[m.index].uid, "date": m.date.isoformat(), "start_slot": m.start} for m in result.moves]
     # 求解要十几秒,期间别处改过这一版:提案已不对应当前排练表
