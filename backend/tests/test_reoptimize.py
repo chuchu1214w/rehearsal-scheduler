@@ -244,3 +244,59 @@ def test_prefers_a_slot_where_everyone_can_come():
     ]
     r = reoptimize(p, ss, time_limit=5)
     assert r.status == "ok" and len(r.moves) == 1 and r.moves[0].date != D5, r
+
+
+# ---------- 部署后复查(回归):一场解决不了不影响其他场次 ----------
+def _songs4():
+    return (
+        Song("s1", "一", "一般", ("A", "B"), (2,)),
+        Song("s2", "二", "一般", ("B", "C"), (2,)),
+        Song("s3", "三", "一般", ("D", "E"), (2,)),
+        Song("s4", "四", "一般", ("E", "F"), (2,)),
+    )
+
+
+def test_session_overlapping_a_locked_one_is_kept_and_others_still_fixed():
+    p = _problem({"A": {d: ([0, 1] if d == D4 else []) for d in CFG.all_dates}}, songs=_songs4())
+    ss = [
+        Session(KIND_FORMAL, D4, 0, 2, "s1", 1),  # 与锁定的第二首让 B 重叠,A 只有这时有空 → 挪不开
+        Session(KIND_FORMAL, D4, 1, 2, "s2", 1, locked=True),
+        Session(KIND_FORMAL, D6, 0, 2, "s3", 1),
+        Session(KIND_FORMAL, D6, 1, 2, "s4", 1),  # 与第三首让 E 重叠 → 挪一场就好
+    ]
+    r = reoptimize(p, ss, time_limit=5)
+    assert r.status == "ok" and len(r.moves) == 1 and r.moves[0].index in (2, 3) and "原样保留" in r.message, r
+    assert _apply(p, ss, r) == []
+
+
+def test_impossible_session_does_not_freeze_a_fixable_one():
+    songs = (Song("s1", "一", "一般", ("A", "B"), (2,)), Song("s3", "三", "一般", ("D", "E"), (2,)))
+    p = _problem({"A": {d: [] for d in CFG.all_dates}, "D": {D6: [2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]}}, songs=songs)
+    ss = [Session(KIND_FORMAL, D4, 0, 2, "s1", 1), Session(KIND_FORMAL, D6, 0, 2, "s3", 1)]
+    r = reoptimize(p, ss, time_limit=5)
+    assert r.status == "ok" and [m.index for m in r.moves] == [1], r
+    assert _apply(p, ss, r) == []
+
+
+def test_leftover_attendance_rule_for_a_non_member_does_not_block():
+    p = _problem({}, Rules(member_song_max_attendance={("C", "s1"): 1}))  # C 不在第一首(规则遗留)
+    ss = [Session(KIND_FORMAL, D4, 0, 2, "s1", 1), Session(KIND_FORMAL, D6, 0, 2, "s1", 2), Session(KIND_FORMAL, D4, 1, 2, "s2", 1)]
+    r = reoptimize(p, ss, time_limit=5)
+    assert r.status == "ok" and len(r.moves) == 1, r
+    assert not [e for e in _errors(p, ss, r) if e.startswith("V-04")]
+
+
+def test_extra_sessions_on_a_crowded_song_do_not_freeze_the_rest():
+    cfg = EventConfig(performance_date=date(2026, 9, 8), formal_start_date=D4)
+    songs = (Song("s1", "一", "一般", ("A",), (1, 1, 1, 1)), Song("s2", "二", "一般", ("A", "B"), (2,)))
+    p = _problem({}, songs=songs, cfg=cfg)
+    ss = [
+        Session(KIND_FORMAL, D4, 0, 1, "s1", 1),
+        Session(KIND_FORMAL, D4, 5, 1, "s1", 2),
+        Session(KIND_FORMAL, D5, 0, 1, "s1", 3),
+        Session(KIND_FORMAL, D6, 0, 1, "s1", 4),
+        Session(KIND_FORMAL, D6, 0, 2, "s2", 1, locked=True),  # 与第一首#4 让 A 重叠
+    ]
+    r = reoptimize(p, ss, time_limit=5)
+    assert r.status == "ok" and any(m.index == 3 for m in r.moves), r
+    assert not [e for e in _errors(p, ss, r) if e.startswith("V-04")]

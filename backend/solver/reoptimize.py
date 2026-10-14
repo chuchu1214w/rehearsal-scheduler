@@ -1,26 +1,30 @@
 """少改动重排(开发文档 §4.8 EDIT-11):在现有排练表上,只挪动必要的场次来消除冲突。
 
-- 每一场未锁定、可挪动的正规排练是一个任务:时长不变,只换时间。缺席与拖动时的规则一致(EDIT-14):
-  放到哪个时段,参演成员里那段时间没空的就缺席(「最多参加 N 场」计划内缺席的保留,未提交空闲的不算);
-  留在原位时保持现在记录的缺席。缺席按演出设置允许的规则检查(一场最多缺 1 人、缺席比例、每首至少几场全员到齐等);
-- 锁定的场次、满足「固定场次」要求的场次(每条要求留一场)、无法挪动的场次(比单日上限还长、找不到任何可行时段、
-  同曲场次比排练日还多时多出来的)原样保留,照样占用成员的时间、计入各项缺席上限(它们自身的冲突留给管理员处理);
-  曲目已删除的场次只占当天的场次数;评估场不参与;
-- 其余硬约束与校验器一致(时段允许、不重叠、单日上限、同曲不同天、指定日期场次上限);
-- 目标依次为:被挪动的场数最少 → 挪动幅度最小(换天比同一天内挪时间代价大)。
+专用的 CP-SAT 模型(不用求解排程的 build_model),约束与校验器逐条对应:
+- 每一场未锁定的正规排练可以挪到别的时段(时长不变),也可以留在原位。挪过去时,参演成员里那段时间没空的缺席
+  (「最多参加 N 场」计划内缺席保留,未提交空闲的不算,与写入时自动记缺席一致,EDIT-14),最多缺 1 人;
+- 留在原位有两种:原样没问题(照常检查),或「原样保留」——它本身的冲突先不管(怎么挪都解决不了时),
+  但别的场次不能挪进来和它冲突;
+- 锁定的、满足「固定场次」要求的(每条要求留一场)场次不动,照样占用成员的时间;曲目已删除的场次只占当天的场次数;
+  不在排练日内的场次只计入各项计数;评估场不参与;
+- 硬约束:成员不重叠、单日小时上限、同曲不同天、指定日期场次上限、缺席规则(演出设置允许的那层:缺席场次比例、
+  每首至少几场全员到齐、每人每首最多缺几次;「最多参加 / 允许缺席」要求);时段允许与到场成员有空由候选保证。
+  现有排练表已经超出、挪动解决不了的,只要求不更糟;
+- 目标依次为:「原样保留」(仍有冲突)的场次最少 → 超出上限的量最少 → 挪动的场数最少 →
+  少让人新缺席、挪动幅度最小(换天比同一天内挪时间代价大)。
 - 结果只是“提案”(每场的新时间),由调用方预览、确认后再写入(写入时按新时段重算缺席,与这里一致)。
 """
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field, replace
+from collections import defaultdict
+from dataclasses import dataclass, field
 from datetime import date
 
 from ortools.sat.python import cp_model
 
-from .model import Blocker, build_model
 from .timegrid import block_allowed
-from .types import KIND_FORMAL, Candidate, Problem, Session, Task
+from .types import KIND_FORMAL, Problem, Session
 
 
 @dataclass
@@ -38,39 +42,17 @@ class ReoptResult:
     optimal: bool = False
 
 
-def _free(problem: Problem, member: str, d: date, start: int, duration: int, submitted: set[str]) -> bool:
-    """还没提交空闲的成员不知道有没有空:不当作没空(与拖动时自动记缺席一致)。"""
-    return member not in submitted or all(problem.availability.is_available(member, d, h) for h in range(start, start + duration))
+@dataclass
+class _Option:
+    """一场排练的一种放法:日期下标、开始格、缺席成员。"""
+
+    day: int
+    start: int
+    absent: tuple[str, ...]
 
 
-def _slots(problem: Problem, s: Session, dates: list[date], submitted: set[str]) -> tuple[list[Candidate], bool]:
-    """这一场(时长不变)可以放的时段与缺席:那段时间没空的参演成员缺席,计划内缺席(出勤上限)保留;最多缺 1 人。
-    原位保持现在记录的缺席。返回(候选, 原位是否成立)。"""
-    config, rules = problem.config, problem.rules
-    code = s.song_code or ""
-    members = problem.song(code).members
-    planned = {m for m in s.absent_members if rules.attendance_cap(m, code) is not None}
-    out: list[Candidate] = []
-    here_ok = False
-    for di, d in enumerate(dates):
-        for start in range(0, config.slots_per_day - s.duration + 1):
-            if not block_allowed(config, rules, d, start, s.duration):
-                continue
-            if (d, start) == (s.date, s.start):
-                absent = set(s.absent_members)  # 留在原位:缺席照旧
-                attending = [m for m in members if m not in absent]
-                if len(absent) <= 1 and all(_free(problem, m, d, start, s.duration, submitted) for m in attending):
-                    here_ok = True
-                else:
-                    continue
-            else:
-                busy = {m for m in members if m not in planned and not _free(problem, m, d, start, s.duration, submitted)}
-                absent = planned | busy
-                if len(absent) > 1:
-                    continue
-            who = next(iter(absent), None)
-            out.append(Candidate(di, start, s.duration, who, excused=who is not None and rules.attendance_cap(who, code) is not None))
-    return out, here_ok
+# 新增一位计划外缺席的代价(放在挪动幅度目标里,远大于任何挪动距离):同样挪动场数时优先挪到大家都能来的时段
+_NEW_ABSENCE_COST = 1000
 
 
 def reoptimize(
@@ -82,231 +64,271 @@ def reoptimize(
     seed: int = 42,
     submitted: set[str] | None = None,
 ) -> ReoptResult:
-    """sessions:当前版本的全部场次(含评估场、锁定场次)。只挪动未锁定、可建模的正规排练。
+    """sessions:当前版本的全部场次(含评估场、锁定场次)。
     submitted:已提交空闲的成员(与写入时自动记缺席一致);不给时按空闲表里有记录的成员。"""
-    config = problem.config
+    config, rules = problem.config, problem.rules
     dates = list(config.formal_dates)
+    day_of = {d: i for i, d in enumerate(dates)}
     known = {s.code for s in problem.songs}
     submitted = set(problem.availability.members()) if submitted is None else set(submitted)
-    blockers: list[Blocker] = []
-    stuck_locked: list[Session] = []
+    level = problem.ladder[-1]  # 演出设置允许的缺席规则,与校验器一致
 
-    def key(s: Session) -> tuple:
-        absent = s.absent_members[0] if len(s.absent_members) == 1 else tuple(s.absent_members) or None
-        return (s.song_code, s.date, s.start, s.duration, absent)
+    def members_of(code: str | None) -> tuple[str, ...]:
+        return tuple(problem.song(code).members) if code in known else ()
 
-    formal_all = [i for i, s in enumerate(sessions) if s.kind == KIND_FORMAL]
-    formal = [i for i in formal_all if sessions[i].date in dates]
-    # 「固定场次」要求:每条留一场原样不动(已有锁定的就用锁定的),其余同样的场次照常可挪
+    def free(m: str, d: date, start: int, duration: int) -> bool:
+        return m not in submitted or all(problem.availability.is_available(m, d, h) for h in range(start, start + duration))
+
+    def unplanned(m: str, code: str) -> bool:
+        return not rules.planned_absence(m, code)
+
+    formal = [i for i, s in enumerate(sessions) if s.kind == KIND_FORMAL]
+
+    # 「固定场次」要求:每条留一场原样不动(已有锁定的就用锁定的)
     pinned: set[int] = set()
-    for f in problem.rules.fixed_sessions:
-        want = (f.song_code, f.date, f.start, f.duration, f.absent_member)
-        match = [i for i in formal if sessions[i].song_code in known and key(sessions[i]) == want]
+    for f in rules.fixed_sessions:
+        want_absent = (f.absent_member,) if f.absent_member else ()
+        match = [
+            i
+            for i in formal
+            if (sessions[i].song_code, sessions[i].date, sessions[i].start, sessions[i].duration)
+            == (f.song_code, f.date, f.start, f.duration)
+            and tuple(sessions[i].absent_members) == want_absent
+        ]
         match.sort(key=lambda i: not sessions[i].locked)
         if match and not sessions[match[0]].locked:
             pinned.add(match[0])
-    movable: list[tuple[int, list[Candidate]]] = []
-    for i in formal_all:
+
+    # 要排的场次(可挪 / 留原位)与不动的场次
+    tasks: list[int] = []
+    fixed: list[int] = []
+    for i in formal:
         s = sessions[i]
-        code = s.song_code or ""
-        members = tuple(problem.song(code).members) if code in known else ()
-        if s.date not in dates:
-            # 不在正规排练日(如演出日期改过):不参与挪动、不占时段,但缺席 / 出勤照常计入各项上限(与校验器一致)
-            blockers.append(Blocker(code, members, -1, s.start, s.duration, tuple(s.absent_members)))
-            continue
-        di = dates.index(s.date)
-        if code not in known:
-            # 曲目已删除:只占当天的场次数;缺席照常计入缺席场次总数
-            blockers.append(Blocker(code, (), di, s.start, s.duration, tuple(s.absent_members)))
-            continue
-        planned = [m for m in s.absent_members if problem.rules.attendance_cap(m, code) is not None]
-        ok = len(planned) <= 1 and s.duration <= config.hard_daily_limit
-        slots, here_ok = _slots(problem, s, dates, submitted) if ok else ([], False)
-        if s.locked or i in pinned or not slots:
-            blockers.append(Blocker(code, members, di, s.start, s.duration, tuple(s.absent_members)))
-            if s.locked and not here_ok:
-                stuck_locked.append(s)
-            continue
-        movable.append((i, slots))
-    # 同曲不同天:一首曲目可挪的场次比剩下的排练日还多时,逐场原样保留多出来的——
-    # 优先留在这首曲目已经占用的日子上的(不再多占一天),否则留最晚的;每留一场,它那天也算占用
-    if config.same_song_different_days:
-        for code in sorted({sessions[i].song_code or "" for i, _ in movable}):
-            mine = [m for m in movable if sessions[m[0]].song_code == code]
-            mine.sort(key=lambda m: (sessions[m[0]].date, sessions[m[0]].start))
-            taken = {b.date_idx for b in blockers if b.song_code == code and b.date_idx >= 0}
-            while mine and len(mine) > len(dates) - len(taken):
-                pick = next((m for m in reversed(mine) if dates.index(sessions[m[0]].date) in taken), mine[-1])
-                s = sessions[pick[0]]
-                mine.remove(pick)
-                movable.remove(pick)
-                blockers.append(
-                    Blocker(code, tuple(problem.song(code).members), dates.index(s.date), s.start, s.duration, tuple(s.absent_members))
-                )
-                taken.add(dates.index(s.date))
-    if not movable:
+        if s.date in day_of and s.song_code in known and not s.locked and i not in pinned:
+            tasks.append(i)
+        else:
+            fixed.append(i)
+    stuck_locked = [sessions[i] for i in fixed if sessions[i].locked and not _valid_here(problem, sessions[i], free)]
+    if not tasks:
         return _nothing(problem, stuck_locked, "没有可以挪动的场次")
 
-    # 现有排练表的各项缺席计数(与校验器一样按全部正规场次):已经超出、挪动解决不了的,只要求不更糟
-    baseline: dict[tuple, int] = {}
-
-    def bump(k: tuple) -> None:
-        baseline[k] = baseline.get(k, 0) + 1
-
-    for s in (sessions[i] for i in formal_all):
+    # 每场的放法:挪过去时按「谁没空谁缺席」;原位(本身成立时)保持现在的缺席
+    options: dict[int, list[_Option]] = {}
+    here_opt: dict[int, int | None] = {}
+    for i in tasks:
+        s = sessions[i]
         code = s.song_code or ""
-        unexcused = [m for m in s.absent_members if not problem.rules.planned_absence(m, code)]
-        if unexcused:
-            bump(("cap",))
-        if code not in known:
+        planned = tuple(m for m in s.absent_members if rules.attendance_cap(m, code) is not None)
+        opts: list[_Option] = []
+        here = None
+        if _valid_here(problem, s, free):
+            here = 0
+            opts.append(_Option(day_of[s.date], s.start, tuple(s.absent_members)))
+        if len(planned) <= 1 and s.duration <= config.hard_daily_limit:
+            for di, d in enumerate(dates):
+                for start in range(0, config.slots_per_day - s.duration + 1):
+                    if (d, start) == (s.date, s.start) or not block_allowed(config, rules, d, start, s.duration):
+                        continue
+                    busy = {m for m in members_of(code) if m not in planned and not free(m, d, start, s.duration)}
+                    absent = tuple(sorted(set(planned) | busy))
+                    if len(absent) <= 1:
+                        opts.append(_Option(di, start, absent))
+        options[i] = opts
+        here_opt[i] = here
+
+    model = cp_model.CpModel()
+    x: dict[tuple[int, int], cp_model.IntVar] = {}
+    keep: dict[int, cp_model.IntVar] = {}  # 原样保留(它本身的冲突先不管)
+    for i in tasks:
+        for k in range(len(options[i])):
+            x[(i, k)] = model.new_bool_var(f"x_{i}_{k}")
+        keep[i] = model.new_bool_var(f"keep_{i}")
+        model.add_exactly_one([*(x[(i, k)] for k in range(len(options[i]))), keep[i]])
+
+    def x_terms(i: int) -> list[tuple[cp_model.IntVar, _Option]]:
+        return [(x[(i, k)], o) for k, o in enumerate(options[i])]
+
+    # ---- 成员不重叠(与校验器一样,缺席成员也算占用)----
+    cover: dict[tuple[str, int, int], list] = defaultdict(list)  # 放上去(含原位没问题)的
+    keep_cover: dict[tuple[str, int, int], list] = defaultdict(list)  # 原样保留的
+    fixed_cover: set[tuple[str, int, int]] = set()
+    for i in tasks:
+        s = sessions[i]
+        ms = members_of(s.song_code)
+        for v, o in x_terms(i):
+            for m in ms:
+                for h in range(o.start, o.start + s.duration):
+                    cover[(m, o.day, h)].append(v)
+        for m in ms:
+            for h in range(s.start, s.end):
+                keep_cover[(m, day_of[s.date], h)].append(keep[i])
+    for i in fixed:
+        s = sessions[i]
+        if s.date in day_of:
+            for m in members_of(s.song_code):
+                for h in range(s.start, s.end):
+                    fixed_cover.add((m, day_of[s.date], h))
+    for cell, vs in cover.items():
+        model.add(sum(vs) <= (0 if cell in fixed_cover else 1))
+        for kv in keep_cover.get(cell, []):
+            model.add(sum(vs) + kv <= 1)
+
+    # ---- 单日小时上限(按场次时长累加,与校验器一致):这一天有放上去的场次时,连同不动 / 原样保留的不能超 ----
+    for m in sorted({m for i in formal for m in members_of(sessions[i].song_code)}):
+        mine = [i for i in tasks if m in members_of(sessions[i].song_code)]
+        for di in range(len(dates)):
+            placed = [(v, sessions[i].duration) for i in mine for v, o in x_terms(i) if o.day == di]
+            if not placed:
+                continue
+            fixed_h = sum(
+                sessions[i].duration
+                for i in fixed
+                if sessions[i].date in day_of and day_of[sessions[i].date] == di and m in members_of(sessions[i].song_code)
+            )
+            kept_h = sum(sessions[i].duration * keep[i] for i in mine if day_of[sessions[i].date] == di)
+            used = model.new_bool_var(f"used_{m}_{di}")
+            total = sum(d * v for v, d in placed)
+            model.add(total <= config.slots_per_day * used)
+            model.add(total + kept_h + fixed_h <= config.hard_daily_limit).only_enforce_if(used)
+
+    # ---- 同曲不同天 ----
+    if config.same_song_different_days:
+        for code in sorted(known):
+            mine = [i for i in tasks if sessions[i].song_code == code]
+            if not mine:
+                continue
+            fixed_days = {day_of[sessions[i].date] for i in fixed if sessions[i].song_code == code and sessions[i].date in day_of}
+            for di in range(len(dates)):
+                on = [v for i in mine for v, o in x_terms(i) if o.day == di]
+                if not on:
+                    continue
+                model.add(sum(on) <= (0 if di in fixed_days else 1))
+                for i in mine:
+                    if day_of[sessions[i].date] == di:
+                        model.add(sum(on) + keep[i] <= 1)
+
+    excess: list = []  # 超出上限的量(先尽量减到最少)
+
+    def capped(expr, const: int, limit: int, current: int, name: str) -> None:  # noqa: ANN001
+        """expr(要排的场次)+ const(不动的场次)≤ limit;现在已超出的只要求不更糟,超出量另计。"""
+        model.add(expr + const <= max(limit, current))
+        ex = model.new_int_var(0, len(formal) + 1, f"excess_{name}")
+        model.add(ex >= expr + const - limit)
+        excess.append(ex)
+
+    # ---- 指定日期最多场次 ----
+    for d, limit in rules.max_sessions_per_date.items():
+        if d not in day_of:
             continue
-        if unexcused:
-            bump(("song", code))
-        for m in unexcused:
-            bump(("member", code, m))
-        for m in s.absent_members:
-            bump(("allow", m, code))
-        for m in problem.song(code).members:
-            if m not in s.absent_members:
-                bump(("attend", m, code))
+        di = day_of[d]
+        placed = [v for i in tasks for v, o in x_terms(i) if o.day == di]
+        kept = [keep[i] for i in tasks if sessions[i].date == d]
+        const = sum(1 for i in fixed if sessions[i].date == d)
+        capped(sum(placed) + sum(kept), const, limit, sum(1 for i in formal if sessions[i].date == d), f"date_{di}")
 
-    def here_of(i: int, slots: list[Candidate]) -> int | None:
-        s = sessions[i]
-        return next((k for k, c in enumerate(slots) if dates[c.date_idx] == s.date and c.start == s.start), None)
+    # ---- 缺席规则(按全部正规场次计,与校验器一致)----
+    def count(pred) -> tuple:  # noqa: ANN001
+        """要排的场次里满足 pred(缺席成员, 曲目) 的放法之和、不动的场次里满足的个数、现在的个数。"""
+        terms = []
+        for i in tasks:
+            code = sessions[i].song_code or ""
+            terms += [v for v, o in x_terms(i) if pred(o.absent, code)]
+            if pred(tuple(sessions[i].absent_members), code):
+                terms.append(keep[i])
+        const = sum(1 for i in fixed if pred(tuple(sessions[i].absent_members), sessions[i].song_code or ""))
+        now = sum(1 for i in formal if pred(tuple(sessions[i].absent_members), sessions[i].song_code or ""))
+        return sum(terms), const, now
 
-    result = _solve(problem, sessions, dates, movable, blockers, baseline, here_of, time_limit, workers, seed)
-    if result.status == "infeasible" and result.message.startswith(_NO_WAY):
-        # 有的场次怎么挪都不行(如只有让人缺席才放得下,而缺席已到上限):它们原样保留,其余的照样解决
-        stuck = [(i, slots) for i, slots in movable if here_of(i, slots) is None]
-        if stuck:
-            rest = [m for m in movable if m not in stuck]
-            kept = [_keep(problem, dates, sessions[i]) for i, _ in stuck]
-            if rest:
-                retry = _solve(problem, sessions, dates, rest, blockers + kept, baseline, here_of, time_limit, workers, seed)
-                if retry.status == "ok":
-                    retry.message += f";另有 {len(stuck)} 场怎么挪都解决不了,原样保留"
-                    return retry
-    if result.status == "unchanged":
-        return _nothing(problem, stuck_locked, result.message, optimal=result.optimal)
-    return result
+    e, c, now = count(lambda ab, cd: any(unplanned(m, cd) for m in ab))
+    capped(e, c, level.max_absent_sessions(len(formal)), now, "cap")
+    for code in sorted(known):
+        n = sum(1 for i in formal if sessions[i].song_code == code)
+        if not n:
+            continue
+        min_full = n if level.per_song_min_full is None else min(level.per_song_min_full, n)
+        e, c, now = count(lambda ab, cd, code=code: cd == code and any(unplanned(m, cd) for m in ab))
+        capped(e, c, n - min_full, now, f"song_{code}")
+        for m in members_of(code):
+            e, c, now = count(lambda ab, cd, code=code, m=m: cd == code and m in ab and unplanned(m, cd))
+            capped(e, c, level.per_member_per_song_max_absent, now, f"member_{code}_{m}")
+    for (m, code), n in rules.member_song_max_absent.items():
+        e, c, now = count(lambda ab, cd, code=code, m=m: cd == code and m in ab)
+        capped(e, c, n, now, f"allow_{m}_{code}")
+    for (m, code), cap in rules.member_song_max_attendance.items():
+        e, c, now = count(lambda ab, cd, code=code, m=m: cd == code and m not in ab)
+        capped(e, c, cap, now, f"attend_{m}_{code}")
 
-
-_NO_WAY = "只靠挪动未锁定的场次无法消除冲突"
-
-
-def _keep(problem: Problem, dates: list[date], s: Session) -> Blocker:
-    code = s.song_code or ""
-    return Blocker(code, tuple(problem.song(code).members), dates.index(s.date), s.start, s.duration, tuple(s.absent_members))
-
-
-# 新增一位计划外缺席的代价(放在挪动幅度目标里,远大于任何挪动距离):同样挪动场数时优先挪到大家都能来的时段
-_NEW_ABSENCE_COST = 1000
-
-
-def _solve(
-    problem: Problem,
-    sessions: list[Session],
-    dates: list[date],
-    movable: list[tuple[int, list[Candidate]]],
-    blockers: list[Blocker],
-    baseline: dict[tuple, int],
-    here_of,  # noqa: ANN001
-    time_limit: float,
-    workers: int,
-    seed: int,
-) -> ReoptResult:
-    tasks: list[Task] = []
-    candidates: dict[str, list[Candidate]] = {}
-    task_index: dict[str, int] = {}
-    for i, slots in movable:
-        s = sessions[i]
-        task = Task(f"{s.song_code}#{i}", s.song_code or "", len(tasks) + 1, s.duration)
-        tasks.append(task)
-        task_index[task.task_id] = i
-        candidates[task.task_id] = slots
-    # 缺席按演出设置允许的规则(阶梯最宽松的一层)检查,与校验器一致;固定场次要求已作为原样保留的场次处理
-    level = problem.ladder[-1]
-    p = replace(problem, rules=replace(problem.rules, fixed_sessions=()))
-    bundle = build_model(p, tasks, candidates, level, symmetry=False, blockers=tuple(blockers), absence_baseline=baseline)
-    model, x = bundle.model, bundle.x
-    moved_terms = []
+    # ---- 目标 ----
+    kept_sum = sum(keep.values())
+    moved_sum = sum(x[(i, k)] for i in tasks for k in range(len(options[i])) if k != here_opt[i])
     dist_terms = []
-    for t in tasks:
-        i = task_index[t.task_id]
+    for i in tasks:
         s = sessions[i]
-        here = here_of(i, candidates[t.task_id])
-        moved_terms.append(1 - x[(t.task_id, here)] if here is not None else 1)
-        for k, c in enumerate(candidates[t.task_id]):
-            day_gap = abs((dates[c.date_idx] - s.date).days)
-            cost = (100 + 10 * day_gap if day_gap else 0) + abs(c.start - s.start)
-            if k != here and c.absent_member is not None and not problem.rules.planned_absence(c.absent_member, t.song_code):
+        code = s.song_code or ""
+        for k, o in enumerate(options[i]):
+            if k == here_opt[i]:
+                continue
+            day_gap = abs((dates[o.day] - s.date).days)
+            cost = (100 + 10 * day_gap if day_gap else 0) + abs(o.start - s.start)
+            if any(unplanned(m, code) for m in o.absent):
                 cost += _NEW_ABSENCE_COST
-            if cost:
-                dist_terms.append(cost * x[(t.task_id, k)])
-            if k == here:
-                model.add_hint(x[(t.task_id, k)], 1)
-    moved = sum(moved_terms)
-    dist = sum(dist_terms)
+            dist_terms.append(cost * x[(i, k)])
+        # 起始提示:原位没问题就留原位,否则原样保留(总是可行)
+        model.add_hint(x[(i, here_opt[i])] if here_opt[i] is not None else keep[i], 1)
 
-    def run() -> tuple[cp_model.CpSolver, int]:
-        solver = cp_model.CpSolver()
-        solver.parameters.max_time_in_seconds = float(time_limit)
-        solver.parameters.num_workers = int(workers)
-        solver.parameters.random_seed = int(seed)
-        return solver, solver.solve(model)
-
-    def failed(status: int) -> ReoptResult:
-        if status == cp_model.UNKNOWN:
-            return ReoptResult("infeasible", "在时间限制内没找到办法(不一定真的无解),可以再试一次或先手动调整几场")
-        return ReoptResult("infeasible", _NO_WAY + ";可以解锁部分场次、调整缺席,或用 AI 调度员找其他办法")
-
-    def keep_hints(solver: cp_model.CpSolver) -> None:
-        model.clear_hints()
-        for t in tasks:
-            for k in range(len(candidates[t.task_id])):
-                model.add_hint(x[(t.task_id, k)], solver.value(x[(t.task_id, k)]))
-
-    # 第一步:缺席超出上限的量尽量减到最少(拖到有人没空的时段造成的缺席超出,挪开就能解决)
-    excess = bundle.objective_terms["absence_excess"]
     optimal = True
-    if excess.count:
-        model.minimize(excess.expr)
-        solver, status = run()
+    solver: cp_model.CpSolver | None = None
+    for objective in (kept_sum, sum(excess), moved_sum, sum(dist_terms)):
+        model.minimize(objective)
+        attempt = cp_model.CpSolver()
+        attempt.parameters.max_time_in_seconds = float(time_limit)
+        attempt.parameters.num_workers = int(workers)
+        attempt.parameters.random_seed = int(seed)
+        status = attempt.solve(model)
         if status not in (cp_model.OPTIMAL, cp_model.FEASIBLE):
-            return failed(status)
-        optimal = status == cp_model.OPTIMAL
-        model.add(excess.expr <= int(round(solver.objective_value)))
-        keep_hints(solver)
-    # 第二步:被挪动的场数最少
-    model.minimize(moved)
-    solver, status = run()
-    if status not in (cp_model.OPTIMAL, cp_model.FEASIBLE):
-        return failed(status)
-    optimal = optimal and status == cp_model.OPTIMAL
-    model.add(moved == int(round(solver.objective_value)))
-    keep_hints(solver)
-    # 第三步:少让人缺席,再让挪动幅度最小
-    model.minimize(dist)
-    solver2, status2 = run()
-    if status2 in (cp_model.OPTIMAL, cp_model.FEASIBLE):
-        solver, optimal = solver2, optimal and status2 == cp_model.OPTIMAL
-    moves = []
-    for t in tasks:
-        i = task_index[t.task_id]
-        for k, c in enumerate(candidates[t.task_id]):
-            if solver.value(x[(t.task_id, k)]):
-                d = dates[c.date_idx]
-                if (d, c.start) != (sessions[i].date, sessions[i].start):
-                    moves.append(Move(i, d, c.start))
-                break
+            if solver is None:  # 全部原样保留总是可行;第一步就没结果只可能是时间不够
+                return ReoptResult("infeasible", "在时间限制内没找到办法,可以再试一次或先手动调整几场")
+            optimal = False
+            break
+        solver = attempt
+        optimal = optimal and status == cp_model.OPTIMAL
+        model.add(objective <= int(round(solver.objective_value)))
+        model.clear_hints()
+        for v in [*x.values(), *keep.values()]:
+            model.add_hint(v, solver.value(v))
+
+    assert solver is not None
+    moves = [
+        Move(i, dates[o.day], o.start) for i in tasks for k, o in enumerate(options[i]) if k != here_opt[i] and solver.value(x[(i, k)])
+    ]
+    left = sum(1 for i in tasks if solver.value(keep[i]))
     if not moves:
-        return ReoptResult("unchanged", "现在的排练表已经没有可以靠挪动解决的冲突", optimal=optimal)
-    return ReoptResult("ok", f"建议挪动 {len(moves)} 场", moves=moves, optimal=optimal)
+        if left:
+            msg = f"有 {left} 场的冲突靠挪动解决不了;可以解锁部分场次、调整缺席,或用 AI 调度员找其他办法"
+            return _nothing(problem, stuck_locked, msg, optimal=optimal, status="infeasible")
+        return _nothing(problem, stuck_locked, "现在的排练表已经没有可以靠挪动解决的冲突", optimal=optimal)
+    msg = f"建议挪动 {len(moves)} 场" + (f";另有 {left} 场怎么挪都解决不了,原样保留" if left else "")
+    return ReoptResult("ok", msg, moves=moves, optimal=optimal)
 
 
-def _nothing(problem: Problem, stuck_locked: list[Session], message: str, *, optimal: bool = False) -> ReoptResult:
+def _valid_here(problem: Problem, s: Session, free) -> bool:  # noqa: ANN001
+    """这一场留在原位、按现在的缺席,本身成立吗:正规排练日、时段允许、最多缺 1 人、到场成员都有空、不超过单日上限。"""
+    config = problem.config
+    code = s.song_code or ""
+    if code not in {x.code for x in problem.songs} or s.date not in config.formal_dates:
+        return False
+    if len(s.absent_members) > 1 or s.duration > config.hard_daily_limit:
+        return False
+    if not block_allowed(config, problem.rules, s.date, s.start, s.duration):
+        return False
+    return all(free(m, s.date, s.start, s.duration) for m in problem.song(code).members if m not in s.absent_members)
+
+
+def _nothing(
+    problem: Problem, stuck_locked: list[Session], message: str, *, optimal: bool = False, status: str = "unchanged"
+) -> ReoptResult:
     """没有可挪的:锁定的场次本身有冲突时说清楚是哪几场。"""
     if stuck_locked:
-        names = "、".join(f"{problem.song(s.song_code).name} {s.date.month}/{s.date.day}" for s in stuck_locked[:3])
+        names = "、".join(f"{problem.song(s.song_code).name} {s.date.month}/{s.date.day}" for s in stuck_locked[:3] if s.song_code)
         return ReoptResult("locked_conflict", f"锁定的 {names} 本身有冲突(有成员没空或落在禁排时段),挪动其他场次解决不了;请先解锁或调整它")
-    return ReoptResult("unchanged", message, optimal=optimal)
+    return ReoptResult(status, message, optimal=optimal)
