@@ -293,7 +293,7 @@ def reoptimize_version(version_id: int, db: DB, admin: AdminUser, settings: Sett
     result = reoptimize(
         version_problem(event, version),
         [to_solver_session(event, s) for s in rows],
-        time_limit=8.0,
+        time_limit=12.0,  # 四步合计的上限
         workers=settings.solver_workers or 2,
         # 与写入时自动记缺席一致:已提交空闲的成员才判断有没有空
         submitted={p.member.display_name for p in event.participants if p.availability_submitted_at is not None},

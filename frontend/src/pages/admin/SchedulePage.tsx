@@ -405,7 +405,7 @@ export function SchedulePage() {
                   少改动解决冲突
                 </Button>
                 <span className="muted" style={{ fontSize: 11 }}>
-                  {reoptimize.isPending ? '正在找挪动最少的办法,最多约 30 秒…' : '锁定的场次不动,只挪必要的几场;先给你看,确认后才改'}
+                  {reoptimize.isPending ? '正在找挪动最少的办法,最多约 15 秒…' : '锁定的场次不动,只挪必要的几场;先给你看,确认后才改'}
                 </span>
               </div>
             )}

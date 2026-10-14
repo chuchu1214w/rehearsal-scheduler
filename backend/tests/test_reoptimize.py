@@ -300,3 +300,57 @@ def test_extra_sessions_on_a_crowded_song_do_not_freeze_the_rest():
     r = reoptimize(p, ss, time_limit=5)
     assert r.status == "ok" and any(m.index == 3 for m in r.moves), r
     assert not [e for e in _errors(p, ss, r) if e.startswith("V-04")]
+
+
+# ---------- 专用模型复查(回归) ----------
+def test_strict_settings_do_not_trade_an_absence_into_another_session():
+    from solver.types import LadderLevel
+
+    p = replace(_problem({"A": {d: ([] if d != D4 else ALL) for d in CFG.all_dates}}), ladder=(LadderLevel(0),))
+    ss = [
+        Session(KIND_FORMAL, D4, 0, 2, "s1", 1, absent_members=("A",)),  # 记着 A 缺席(其实 A 有空)
+        Session(KIND_FORMAL, D6, 0, 2, "s1", 2),  # A 没空
+        Session(KIND_FORMAL, D8, 0, 2, "s2", 1),
+    ]
+    r = reoptimize(p, ss, time_limit=5)
+    assert _apply(p, ss, r) == [], r
+
+
+def test_days_already_over_a_limit_still_allow_a_fix_that_does_not_worsen_them():
+    cfg = EventConfig(performance_date=date(2026, 9, 7), formal_start_date=D4)  # 排练日只有 9/4、9/5
+    songs = (Song("s1", "一", "一般", ("A",), (1, 2)), Song("s2", "二", "一般", ("A",), (1,)))
+    p = _problem({"A": {D5: []}}, songs=songs, cfg=cfg)
+    ss = [
+        Session(KIND_FORMAL, D4, 0, 1, "s1", 1, locked=True),
+        Session(KIND_FORMAL, D4, 2, 2, "s1", 2),  # 与第一首#1 同一天(已有,挪不开);与第二首重叠 → 挪到 9/4 1 点可解
+        Session(KIND_FORMAL, D4, 3, 1, "s2", 1, locked=True),
+    ]
+    r = reoptimize(p, ss, time_limit=5)
+    assert r.status == "ok" and [m.index for m in r.moves] == [1], r
+    assert not [e for e in _errors(p, ss, r) if e.startswith("V-04")]
+
+
+def test_an_unsatisfied_fixed_rule_is_restored_by_a_move():
+    p = _problem({}, Rules(fixed_sessions=(FixedSession("s1", D5, 0, 2, None),)))
+    ss = [Session(KIND_FORMAL, D4, 0, 2, "s1", 1), Session(KIND_FORMAL, D6, 0, 2, "s1", 2), Session(KIND_FORMAL, D8, 0, 2, "s2", 1)]
+    r = reoptimize(p, ss, time_limit=5)
+    assert r.status == "ok" and len(r.moves) == 1 and (r.moves[0].date, r.moves[0].start) == (D5, 0), r
+    assert _errors(p, ss, r) == []
+
+
+def test_over_long_and_out_of_range_sessions_can_be_moved_to_fix_other_problems():
+    cfg = EventConfig(performance_date=date(2026, 9, 12), formal_start_date=D4, soft_daily_limit=2, hard_daily_limit=2)
+    p = _problem({"A": {D4: [0, 1, 2, 3]}}, cfg=cfg)
+    long_one = [Session(KIND_FORMAL, D4, 4, 3, "s1", 1), Session(KIND_FORMAL, D6, 0, 2, "s1", 2), Session(KIND_FORMAL, D8, 0, 2, "s2", 1)]
+    r = reoptimize(p, long_one, time_limit=5)
+    assert r.status == "ok" and r.moves and r.moves[0].index == 0, r  # A 在 9/4 4 点后没空:挪到能来的时候(超长本身照旧)
+    assert not [e for e in _errors(p, long_one, r) if e.startswith("V-02")]
+    p = _problem({})
+    outside = [
+        Session(KIND_FORMAL, date(2026, 9, 3), 0, 2, "s1", 1),
+        Session(KIND_FORMAL, D6, 0, 2, "s1", 2),
+        Session(KIND_FORMAL, D8, 0, 2, "s2", 1),
+    ]
+    r = reoptimize(p, outside, time_limit=5)
+    assert r.status == "ok" and [m.index for m in r.moves] == [0], r
+    assert _errors(p, outside, r) == []

@@ -17,6 +17,7 @@
 
 from __future__ import annotations
 
+import time
 from collections import defaultdict
 from dataclasses import dataclass, field
 from datetime import date
@@ -104,8 +105,8 @@ def reoptimize(
     fixed: list[int] = []
     for i in formal:
         s = sessions[i]
-        if s.date in day_of and s.song_code in known and not s.locked and i not in pinned:
-            tasks.append(i)
+        if s.song_code in known and not s.locked and i not in pinned:
+            tasks.append(i)  # 不在排练日内的也算(只能挪回来或原样保留)
         else:
             fixed.append(i)
     stuck_locked = [sessions[i] for i in fixed if sessions[i].locked and not _valid_here(problem, sessions[i], free)]
@@ -124,14 +125,15 @@ def reoptimize(
         if _valid_here(problem, s, free):
             here = 0
             opts.append(_Option(day_of[s.date], s.start, tuple(s.absent_members)))
-        if len(planned) <= 1 and s.duration <= config.hard_daily_limit:
+        if len(planned) <= 1:
             for di, d in enumerate(dates):
                 for start in range(0, config.slots_per_day - s.duration + 1):
                     if (d, start) == (s.date, s.start) or not block_allowed(config, rules, d, start, s.duration):
                         continue
                     busy = {m for m in members_of(code) if m not in planned and not free(m, d, start, s.duration)}
                     absent = tuple(sorted(set(planned) | busy))
-                    if len(absent) <= 1:
+                    # 演出设置不允许缺席时,挪过去不能产生计划外缺席(否则只是把冲突换成「不允许缺席」)
+                    if len(absent) <= 1 and not (level.strict and any(unplanned(m, code) for m in absent)):
                         opts.append(_Option(di, start, absent))
         options[i] = opts
         here_opt[i] = here
@@ -159,9 +161,10 @@ def reoptimize(
             for m in ms:
                 for h in range(o.start, o.start + s.duration):
                     cover[(m, o.day, h)].append(v)
-        for m in ms:
-            for h in range(s.start, s.end):
-                keep_cover[(m, day_of[s.date], h)].append(keep[i])
+        if s.date in day_of:
+            for m in ms:
+                for h in range(s.start, s.end):
+                    keep_cover[(m, day_of[s.date], h)].append(keep[i])
     for i in fixed:
         s = sessions[i]
         if s.date in day_of:
@@ -173,48 +176,67 @@ def reoptimize(
         for kv in keep_cover.get(cell, []):
             model.add(sum(vs) + kv <= 1)
 
-    # ---- 单日小时上限(按场次时长累加,与校验器一致):这一天有放上去的场次时,连同不动 / 原样保留的不能超 ----
-    for m in sorted({m for i in formal for m in members_of(sessions[i].song_code)}):
-        mine = [i for i in tasks if m in members_of(sessions[i].song_code)]
-        for di in range(len(dates)):
-            placed = [(v, sessions[i].duration) for i in mine for v, o in x_terms(i) if o.day == di]
-            if not placed:
-                continue
-            fixed_h = sum(
-                sessions[i].duration
-                for i in fixed
-                if sessions[i].date in day_of and day_of[sessions[i].date] == di and m in members_of(sessions[i].song_code)
-            )
-            kept_h = sum(sessions[i].duration * keep[i] for i in mine if day_of[sessions[i].date] == di)
-            used = model.new_bool_var(f"used_{m}_{di}")
-            total = sum(d * v for v, d in placed)
-            model.add(total <= config.slots_per_day * used)
-            model.add(total + kept_h + fixed_h <= config.hard_daily_limit).only_enforce_if(used)
-
-    # ---- 同曲不同天 ----
-    if config.same_song_different_days:
-        for code in sorted(known):
-            mine = [i for i in tasks if sessions[i].song_code == code]
-            if not mine:
-                continue
-            fixed_days = {day_of[sessions[i].date] for i in fixed if sessions[i].song_code == code and sessions[i].date in day_of}
-            for di in range(len(dates)):
-                on = [v for i in mine for v, o in x_terms(i) if o.day == di]
-                if not on:
-                    continue
-                model.add(sum(on) <= (0 if di in fixed_days else 1))
-                for i in mine:
-                    if day_of[sessions[i].date] == di:
-                        model.add(sum(on) + keep[i] <= 1)
-
     excess: list = []  # 超出上限的量(先尽量减到最少)
 
     def capped(expr, const: int, limit: int, current: int, name: str) -> None:  # noqa: ANN001
         """expr(要排的场次)+ const(不动的场次)≤ limit;现在已超出的只要求不更糟,超出量另计。"""
         model.add(expr + const <= max(limit, current))
-        ex = model.new_int_var(0, len(formal) + 1, f"excess_{name}")
+        ex = model.new_int_var(0, 100_000, f"excess_{name}")
         model.add(ex >= expr + const - limit)
         excess.append(ex)
+
+    def on_day(i: int, di: int) -> bool:
+        return sessions[i].date == dates[di]
+
+    # ---- 单日小时上限(按场次时长累加,与校验器一致);已超出的一天只要求不更糟 ----
+    hard = config.hard_daily_limit
+    for m in sorted({m for i in formal for m in members_of(sessions[i].song_code)}):
+        mine = [i for i in tasks if m in members_of(sessions[i].song_code)]
+        overlong = max((sessions[i].duration for i in mine if sessions[i].duration > hard), default=0)  # 本身就超长的场次
+        for di in range(len(dates)):
+            placed = [sessions[i].duration * v for i in mine for v, o in x_terms(i) if o.day == di]
+            if not placed:
+                continue
+            fixed_h = sum(sessions[i].duration for i in fixed if on_day(i, di) and m in members_of(sessions[i].song_code))
+            kept_h = sum(sessions[i].duration * keep[i] for i in mine if on_day(i, di))
+            now_h = sum(sessions[i].duration for i in formal if on_day(i, di) and m in members_of(sessions[i].song_code))
+            capped(sum(placed) + kept_h, fixed_h, hard, max(now_h, overlong), f"hours_{m}_{di}")
+
+    # ---- 同曲不同天;已在同一天的只要求不更糟 ----
+    if config.same_song_different_days:
+        for code in sorted(known):
+            mine = [i for i in tasks if sessions[i].song_code == code]
+            for di in range(len(dates)):
+                placed = [v for i in mine for v, o in x_terms(i) if o.day == di]
+                if not placed:
+                    continue
+                kept = [keep[i] for i in mine if on_day(i, di)]
+                const = sum(1 for i in fixed if sessions[i].song_code == code and on_day(i, di))
+                now = sum(1 for i in formal if sessions[i].song_code == code and on_day(i, di))
+                capped(sum(placed) + sum(kept), const, 1, now, f"day_{code}_{di}")
+
+    # ---- 「固定场次」要求还没满足的:尽量挪一场过去补上(计入超出量)----
+    for f in rules.fixed_sessions:
+        if f.date not in day_of or f.song_code not in known:
+            continue
+        want = (f.absent_member,) if f.absent_member else ()
+        if any(
+            (sessions[i].song_code, sessions[i].date, sessions[i].start, sessions[i].duration) == (f.song_code, f.date, f.start, f.duration)
+            and tuple(sessions[i].absent_members) == want
+            for i in fixed
+        ):
+            continue
+        match = [
+            v
+            for i in tasks
+            if sessions[i].song_code == f.song_code and sessions[i].duration == f.duration
+            for v, o in x_terms(i)
+            if o.day == day_of[f.date] and o.start == f.start and o.absent == want
+        ]
+        if match:
+            ex = model.new_int_var(0, 1, f"fixedrule_{len(excess)}")
+            model.add(ex >= 1 - sum(match))
+            excess.append(ex)
 
     # ---- 指定日期最多场次 ----
     for d, limit in rules.max_sessions_per_date.items():
@@ -278,10 +300,15 @@ def reoptimize(
 
     optimal = True
     solver: cp_model.CpSolver | None = None
-    for objective in (kept_sum, sum(excess), moved_sum, sum(dist_terms)):
+    deadline = time.monotonic() + float(time_limit)  # 四步共用一个时间上限,按比例分给每一步(保证「挪动最少」一定会跑到)
+    for objective, share in ((kept_sum, 0.35), (sum(excess), 0.2), (moved_sum, 0.3), (sum(dist_terms), 1.0)):
+        left_time = deadline - time.monotonic()
+        if solver is not None and left_time < 0.3:
+            optimal = False  # 时间用完:用已有的结果
+            break
         model.minimize(objective)
         attempt = cp_model.CpSolver()
-        attempt.parameters.max_time_in_seconds = float(time_limit)
+        attempt.parameters.max_time_in_seconds = max(min(left_time, share * float(time_limit)), 0.5)
         attempt.parameters.num_workers = int(workers)
         attempt.parameters.random_seed = int(seed)
         status = attempt.solve(model)
@@ -312,12 +339,12 @@ def reoptimize(
 
 
 def _valid_here(problem: Problem, s: Session, free) -> bool:  # noqa: ANN001
-    """这一场留在原位、按现在的缺席,本身成立吗:正规排练日、时段允许、最多缺 1 人、到场成员都有空、不超过单日上限。"""
+    """这一场留在原位、按现在的缺席,本身成立吗:正规排练日、时段允许、最多缺 1 人、到场成员都有空。"""
     config = problem.config
     code = s.song_code or ""
     if code not in {x.code for x in problem.songs} or s.date not in config.formal_dates:
         return False
-    if len(s.absent_members) > 1 or s.duration > config.hard_daily_limit:
+    if len(s.absent_members) > 1:  # 比单日上限还长不算:那是它自己的时长问题,挪到哪都一样(单日上限另有容忍)
         return False
     if not block_allowed(config, problem.rules, s.date, s.start, s.duration):
         return False
